@@ -1,0 +1,36 @@
+{
+  "elder_rowan": {
+    "id": "elder_rowan",
+    "name": "Elder Rowan",
+    "color": "#d4b17c",
+    "type": "quest_giver",
+    "defaultDialog": "The forest road must stay open for trade.",
+    "questIds": ["wolf_cull", "boar_menace"]
+  },
+  "captain_brenn": {
+    "id": "captain_brenn",
+    "name": "Captain Brenn",
+    "color": "#7a9ecf",
+    "type": "quest_giver",
+    "defaultDialog": "Bandits watch these woods. Keep your steel close.",
+    "questIds": ["bandit_scouts"]
+  },
+  "innkeeper_lora": {
+    "id": "innkeeper_lora",
+    "name": "Innkeeper Lora",
+    "color": "#c9a3c7",
+    "type": "vendor",
+    "defaultDialog": "Rest a while. Need supplies? I keep a stock of potions and remedies.",
+    "questIds": [],
+    "shop": ["minorHealingPotion", "healingPotion", "greaterHealingPotion", "minorManaPotion", "manaPotion", "antidote"]
+  },
+  "blacksmith_kael": {
+    "id": "blacksmith_kael",
+    "name": "Blacksmith Kael",
+    "color": "#cf8a5e",
+    "type": "vendor",
+    "defaultDialog": "Need something forged? I've got good steel.",
+    "questIds": [],
+    "shop": ["noviceBlade", "forestBow", "steelLongsword", "stitchedVest", "ironShield", "hardLeatherTunic", "chainmailVest", "amberCharm", "darkwoodTalisman"]
+  }
+}

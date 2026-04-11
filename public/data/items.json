@@ -1,0 +1,305 @@
+{
+  "wolfPelt": {
+    "id": "wolfPelt",
+    "name": "Rough Wolf Pelt",
+    "type": "junk",
+    "icon": "wolfPelt",
+    "value": 4,
+    "description": "A coarse wolf hide. Merchants will buy it."
+  },
+  "boarTusk": {
+    "id": "boarTusk",
+    "name": "Boar Tusk",
+    "type": "junk",
+    "icon": "boarTusk",
+    "value": 6,
+    "description": "A sharp boar tusk. Has some trade value."
+  },
+  "banditBadge": {
+    "id": "banditBadge",
+    "name": "Bandit Badge",
+    "type": "junk",
+    "icon": "banditBadge",
+    "value": 10,
+    "description": "A crudely stamped metal badge worn by bandit scouts."
+  },
+  "wolfFang": {
+    "id": "wolfFang",
+    "name": "Wolf Fang",
+    "type": "junk",
+    "icon": "wolfFang",
+    "value": 3,
+    "description": "A yellowed canine tooth. Alchemists may want it."
+  },
+  "boarHide": {
+    "id": "boarHide",
+    "name": "Thick Boar Hide",
+    "type": "junk",
+    "icon": "boarHide",
+    "value": 8,
+    "description": "A tough, leathery hide suitable for crafting."
+  },
+  "banditCoin": {
+    "id": "banditCoin",
+    "name": "Bandit Coin",
+    "type": "junk",
+    "icon": "banditCoin",
+    "value": 14,
+    "description": "Stolen currency. Spend it quickly before questions arise."
+  },
+  "banditMap": {
+    "id": "banditMap",
+    "name": "Tattered Map",
+    "type": "junk",
+    "icon": "banditMap",
+    "value": 18,
+    "description": "A hand-drawn map of trade routes. The guard might want this."
+  },
+
+  "rustySword": {
+    "id": "rustySword",
+    "name": "Rusty Shortsword",
+    "type": "weapon",
+    "icon": "rustySword",
+    "attackBonus": 2,
+    "value": 8,
+    "description": "Dull and pitted, but still sharp enough to cut."
+  },
+  "noviceBlade": {
+    "id": "noviceBlade",
+    "name": "Novice Ironblade",
+    "type": "weapon",
+    "icon": "noviceBlade",
+    "attackBonus": 5,
+    "value": 20,
+    "description": "A sturdy blade forged for new adventurers."
+  },
+  "forestBow": {
+    "id": "forestBow",
+    "name": "Forest Shortbow",
+    "type": "weapon",
+    "icon": "forestBow",
+    "attackBonus": 8,
+    "value": 32,
+    "description": "Crafted from flexible yew. Quick and accurate."
+  },
+  "darkwoodStaff": {
+    "id": "darkwoodStaff",
+    "name": "Darkwood Staff",
+    "type": "weapon",
+    "icon": "darkwoodStaff",
+    "attackBonus": 10,
+    "value": 40,
+    "description": "Dense darkwood humming with faint energy."
+  },
+  "steelLongsword": {
+    "id": "steelLongsword",
+    "name": "Steel Longsword",
+    "type": "weapon",
+    "icon": "steelLongsword",
+    "attackBonus": 14,
+    "value": 65,
+    "description": "Balanced steel with a keen edge. A warrior's companion."
+  },
+  "huntersBow": {
+    "id": "huntersBow",
+    "name": "Hunter's Longbow",
+    "type": "weapon",
+    "icon": "huntersBow",
+    "attackBonus": 12,
+    "value": 55,
+    "description": "A powerful bow favored by veteran hunters."
+  },
+  "banditDagger": {
+    "id": "banditDagger",
+    "name": "Bandit's Dagger",
+    "type": "weapon",
+    "icon": "banditDagger",
+    "attackBonus": 7,
+    "value": 28,
+    "description": "A jagged blade taken from a bandit. Fast but cruel."
+  },
+  "eldenwoodStaff": {
+    "id": "eldenwoodStaff",
+    "name": "Eldenwood Staff",
+    "type": "weapon",
+    "icon": "eldenwoodStaff",
+    "attackBonus": 16,
+    "value": 80,
+    "description": "Ancient wood that amplifies arcane power."
+  },
+
+  "tornShirt": {
+    "id": "tornShirt",
+    "name": "Torn Linen Shirt",
+    "type": "armor",
+    "icon": "tornShirt",
+    "hpBonus": 8,
+    "value": 5,
+    "description": "Better than nothing. Barely."
+  },
+  "stitchedVest": {
+    "id": "stitchedVest",
+    "name": "Stitched Leather Vest",
+    "type": "armor",
+    "icon": "stitchedVest",
+    "hpBonus": 20,
+    "value": 22,
+    "description": "Rough leather stitched together. Offers basic protection."
+  },
+  "ironShield": {
+    "id": "ironShield",
+    "name": "Iron Buckler",
+    "type": "armor",
+    "icon": "ironShield",
+    "hpBonus": 30,
+    "value": 35,
+    "description": "A small but sturdy iron shield."
+  },
+  "hardLeatherTunic": {
+    "id": "hardLeatherTunic",
+    "name": "Hardened Leather Tunic",
+    "type": "armor",
+    "icon": "hardLeatherTunic",
+    "hpBonus": 40,
+    "value": 52,
+    "description": "Boiled leather panels riveted together."
+  },
+  "chainmailVest": {
+    "id": "chainmailVest",
+    "name": "Chainmail Vest",
+    "type": "armor",
+    "icon": "chainmailVest",
+    "hpBonus": 55,
+    "value": 75,
+    "description": "Interlocking iron rings. Heavy but reliable."
+  },
+  "forestCloak": {
+    "id": "forestCloak",
+    "name": "Warden's Cloak",
+    "type": "armor",
+    "icon": "forestCloak",
+    "hpBonus": 35,
+    "value": 45,
+    "description": "A green cloak that blends with the forest."
+  },
+
+  "amberCharm": {
+    "id": "amberCharm",
+    "name": "Amber Charm",
+    "type": "trinket",
+    "icon": "amberCharm",
+    "manaBonus": 18,
+    "value": 18,
+    "description": "A warm amber bead that steadies the mind."
+  },
+  "wolftoothNecklace": {
+    "id": "wolftoothNecklace",
+    "name": "Wolftooth Necklace",
+    "type": "trinket",
+    "icon": "wolftoothNecklace",
+    "manaBonus": 10,
+    "value": 12,
+    "description": "Strung wolf teeth. Said to ward off bad luck."
+  },
+  "mossAgate": {
+    "id": "mossAgate",
+    "name": "Moss Agate Ring",
+    "type": "trinket",
+    "icon": "mossAgate",
+    "manaBonus": 25,
+    "value": 30,
+    "description": "A green-banded stone that pulses with energy."
+  },
+  "darkwoodTalisman": {
+    "id": "darkwoodTalisman",
+    "name": "Darkwood Talisman",
+    "type": "trinket",
+    "icon": "darkwoodTalisman",
+    "manaBonus": 35,
+    "value": 48,
+    "description": "A carved talisman from the heart of the Darkwood."
+  },
+  "captainsMedal": {
+    "id": "captainsMedal",
+    "name": "Captain's Medal",
+    "type": "trinket",
+    "icon": "captainsMedal",
+    "manaBonus": 45,
+    "value": 70,
+    "description": "Awarded for valor. It hums with resilient energy."
+  },
+
+  "minorHealingPotion": {
+    "id": "minorHealingPotion",
+    "name": "Minor Healing Potion",
+    "type": "consumable",
+    "icon": "minorHealingPotion",
+    "effect": "healHp",
+    "power": 40,
+    "value": 8,
+    "description": "Restores 40 HP when used."
+  },
+  "healingPotion": {
+    "id": "healingPotion",
+    "name": "Healing Potion",
+    "type": "consumable",
+    "icon": "healingPotion",
+    "effect": "healHp",
+    "power": 80,
+    "value": 18,
+    "description": "Restores 80 HP when used."
+  },
+  "greaterHealingPotion": {
+    "id": "greaterHealingPotion",
+    "name": "Greater Healing Potion",
+    "type": "consumable",
+    "icon": "greaterHealingPotion",
+    "effect": "healHp",
+    "power": 150,
+    "value": 35,
+    "description": "Restores 150 HP when used."
+  },
+  "minorManaPotion": {
+    "id": "minorManaPotion",
+    "name": "Minor Mana Potion",
+    "type": "consumable",
+    "icon": "minorManaPotion",
+    "effect": "healMana",
+    "power": 30,
+    "value": 8,
+    "description": "Restores 30 mana when used."
+  },
+  "manaPotion": {
+    "id": "manaPotion",
+    "name": "Mana Potion",
+    "type": "consumable",
+    "icon": "manaPotion",
+    "effect": "healMana",
+    "power": 60,
+    "value": 18,
+    "description": "Restores 60 mana when used."
+  },
+  "antidote": {
+    "id": "antidote",
+    "name": "Herbal Antidote",
+    "type": "consumable",
+    "icon": "antidote",
+    "effect": "healHp",
+    "power": 25,
+    "value": 6,
+    "description": "A bitter brew that cures ailments and restores 25 HP."
+  },
+
+  "hearthstone": {
+    "id": "hearthstone",
+    "name": "Hearthstone",
+    "type": "hearthstone",
+    "icon": "hearthstone",
+    "value": 0,
+    "permanent": true,
+    "castTime": 8,
+    "cooldown": 180,
+    "description": "A warm stone that can return you to an attuned statue. Attune at any waystone statue."
+  }
+}

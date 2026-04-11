@@ -1,0 +1,125 @@
+{
+  "wolf_cull": {
+    "id": "wolf_cull",
+    "name": "Thin The Wolves",
+    "giver": "elder_rowan",
+    "description": "Cull the Timber Wolves threatening the road.",
+    "level": 1,
+    "prerequisiteQuests": [],
+    "objectives": [
+      { "type": "kill", "target": "wolf", "count": 5, "label": "Timber Wolves slain" }
+    ],
+    "rewards": {
+      "xp": 150,
+      "gold": 38,
+      "items": ["noviceBlade", "minorHealingPotion"]
+    },
+    "dialog": {
+      "not_started": {
+        "text": "The Timber Wolves have grown bold, threatening travelers on the forest road. We need someone brave enough to thin their numbers.",
+        "options": [
+          { "label": "Accept Quest", "action": "accept" },
+          { "label": "Not now", "action": "close" }
+        ]
+      },
+      "active": {
+        "text": "Wolves slain {progress}. Keep at it, the road must be safe.",
+        "options": [
+          { "label": "I'll get it done", "action": "close" }
+        ]
+      },
+      "ready_to_turn_in": {
+        "text": "You've done it! The road is safer now. Here is your reward.",
+        "options": [
+          { "label": "Complete Quest", "action": "complete" }
+        ]
+      },
+      "completed": {
+        "text": "The road is safer thanks to you.",
+        "options": []
+      }
+    }
+  },
+  "boar_menace": {
+    "id": "boar_menace",
+    "name": "The Boar Menace",
+    "giver": "elder_rowan",
+    "description": "The wild boars in the deeper woods are destroying crops. Hunt them down.",
+    "level": 2,
+    "prerequisiteQuests": ["wolf_cull"],
+    "objectives": [
+      { "type": "kill", "target": "boar", "count": 4, "label": "Wild Boars slain" }
+    ],
+    "rewards": {
+      "xp": 220,
+      "gold": 55,
+      "items": ["stitchedVest", "mossAgate"]
+    },
+    "dialog": {
+      "not_started": {
+        "text": "You proved yourself against the wolves. Now I need your help with a bigger problem. Wild boars from the Darkwood are destroying our crops and injuring farmers.",
+        "options": [
+          { "label": "I'll handle it", "action": "accept" },
+          { "label": "Maybe later", "action": "close" }
+        ]
+      },
+      "active": {
+        "text": "Boars slain {progress}. The farmers will be grateful.",
+        "options": [
+          { "label": "I'm working on it", "action": "close" }
+        ]
+      },
+      "ready_to_turn_in": {
+        "text": "The farmers can rest easy now. You've earned this.",
+        "options": [
+          { "label": "Complete Quest", "action": "complete" }
+        ]
+      },
+      "completed": {
+        "text": "The crops are safe. You've been a great help to Eldengrove.",
+        "options": []
+      }
+    }
+  },
+  "bandit_scouts": {
+    "id": "bandit_scouts",
+    "name": "Bandit Scouts",
+    "giver": "captain_brenn",
+    "description": "Deal with the bandit scouts lurking in the Darkwood.",
+    "level": 3,
+    "prerequisiteQuests": ["wolf_cull"],
+    "objectives": [
+      { "type": "kill", "target": "bandit", "count": 3, "label": "Bandit Scouts eliminated" }
+    ],
+    "rewards": {
+      "xp": 300,
+      "gold": 80,
+      "items": ["forestCloak", "captainsMedal"]
+    },
+    "dialog": {
+      "not_started": {
+        "text": "Our scouts report bandit activity deep in the Darkwood. They're watching our trade routes. Find them and put an end to their reconnaissance.",
+        "options": [
+          { "label": "Consider it done", "action": "accept" },
+          { "label": "Not right now", "action": "close" }
+        ]
+      },
+      "active": {
+        "text": "Bandits eliminated {progress}. Every one less is a safer road.",
+        "options": [
+          { "label": "I'll find the rest", "action": "close" }
+        ]
+      },
+      "ready_to_turn_in": {
+        "text": "Excellent work. Those scouts won't be reporting back. Take this as thanks from the guard.",
+        "options": [
+          { "label": "Complete Quest", "action": "complete" }
+        ]
+      },
+      "completed": {
+        "text": "The roads are quiet for now, but stay vigilant.",
+        "options": []
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "wolf": {
+    "name": "Timber Wolf",
+    "maxHp": 60,
+    "damage": 9,
+    "speed": 105,
+    "xp": 20,
+    "goldMin": 2,
+    "goldMax": 5,
+    "respawnSeconds": 9,
+    "color": "#9c8a74",
+    "radius": 15,
+    "aggroRange": 210,
+    "attackRange": 34,
+    "attackCooldown": 1.35,
+    "loot": [
+      { "itemId": "wolfPelt", "chance": 0.52 },
+      { "itemId": "wolfFang", "chance": 0.30 },
+      { "itemId": "wolftoothNecklace", "chance": 0.06 },
+      { "itemId": "minorHealingPotion", "chance": 0.10 }
+    ]
+  },
+  "boar": {
+    "name": "Wild Boar",
+    "maxHp": 74,
+    "damage": 11,
+    "speed": 95,
+    "xp": 24,
+    "goldMin": 3,
+    "goldMax": 6,
+    "respawnSeconds": 11,
+    "color": "#6f5a41",
+    "radius": 15,
+    "aggroRange": 210,
+    "attackRange": 34,
+    "attackCooldown": 1.35,
+    "loot": [
+      { "itemId": "boarTusk", "chance": 0.48 },
+      { "itemId": "boarHide", "chance": 0.25 },
+      { "itemId": "tornShirt", "chance": 0.05 },
+      { "itemId": "minorHealingPotion", "chance": 0.12 },
+      { "itemId": "rustySword", "chance": 0.04 }
+    ]
+  },
+  "bandit": {
+    "name": "Bandit Scout",
+    "maxHp": 90,
+    "damage": 14,
+    "speed": 100,
+    "xp": 35,
+    "goldMin": 5,
+    "goldMax": 12,
+    "respawnSeconds": 14,
+    "color": "#7a4a3a",
+    "radius": 15,
+    "aggroRange": 240,
+    "attackRange": 36,
+    "attackCooldown": 1.2,
+    "loot": [
+      { "itemId": "banditBadge", "chance": 0.40 },
+      { "itemId": "banditCoin", "chance": 0.30 },
+      { "itemId": "banditDagger", "chance": 0.08 },
+      { "itemId": "banditMap", "chance": 0.05 },
+      { "itemId": "healingPotion", "chance": 0.10 },
+      { "itemId": "hardLeatherTunic", "chance": 0.03 }
+    ]
+  }
+}

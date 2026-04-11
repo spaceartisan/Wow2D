@@ -1,0 +1,28 @@
+{
+  "spaceartisan": {
+    "hash": "eda256d7a989723d2da93d99a1f1c586e0439669a0a9d2b971e57d6a0ea8924612fef67e4148bbd637cdc651002d1a379c9337df3b918035c58ef6748756c8fd",
+    "salt": "2d080067921f2712a8136868b82965d0",
+    "characters": [
+      {
+        "name": "Spacey",
+        "charClass": "mage",
+        "level": 1,
+        "createdAt": 1775792954235
+      }
+    ],
+    "createdAt": 1775792943267
+  },
+  "fatdick": {
+    "hash": "65bcb4b30cf3da86f9ce9da52fb97f369899e67c3017d8a638e1952d24197f0425f6bd9b00dab3f54eb89328f4ccb9592e5bf83f342757cd9705f9181c24fd0b",
+    "salt": "e15d41ef51e1c3834f0ed7781e0a5e95",
+    "characters": [
+      {
+        "name": "Asdf",
+        "charClass": "rogue",
+        "level": 1,
+        "createdAt": 1775793045874
+      }
+    ],
+    "createdAt": 1775793040686
+  }
+}

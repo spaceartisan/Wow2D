@@ -1,0 +1,8 @@
+{
+  "moveSpeed": 205,
+  "attackRange": 52,
+  "attackCooldown": 0.82,
+  "maxHp": 120,
+  "maxMana": 80,
+  "damage": 16
+}
