@@ -149,7 +149,7 @@ export class NetworkSystem {
     }
     this.lastSentX = player.x;
     this.lastSentY = player.y;
-    this.send({ type: "move", x: player.x, y: player.y, level: player.level });
+    this.send({ type: "move", x: player.x, y: player.y, level: player.level, floor: this.game.world.currentFloor });
   }
 
   sendAttack(enemyId) {

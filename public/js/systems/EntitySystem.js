@@ -63,7 +63,8 @@ export class EntitySystem {
         dialog: def.defaultDialog,
         questIds: def.questIds || [],
         type: def.type || "generic",
-        shop: def.shop || null
+        shop: def.shop || null,
+        floor: placement.floor ?? 0
       });
     }
 
@@ -200,12 +201,13 @@ export class EntitySystem {
     );
   }
 
-  getClosestNpcInRange(range = 92) {
+  getClosestNpcInRange(range = 60) {
     const player = this.player;
     let closest = null;
     let bestDist = Infinity;
 
     for (const npc of this.npcs) {
+      if (npc.floor !== this.game.world.currentFloor) continue;
       const dist = distance(player.x, player.y, npc.x, npc.y);
       if (dist < range && dist < bestDist) {
         closest = npc;
@@ -314,6 +316,7 @@ export class EntitySystem {
     }
 
     for (const npc of this.npcs) {
+      if (npc.floor !== this.game.world.currentFloor) continue;
       const x = npc.x - camera.x;
       const y = npc.y - camera.y;
 

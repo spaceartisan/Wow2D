@@ -258,10 +258,15 @@ export class Game {
     const player = this.entities.player;
     const result = this.world.checkStairs(player.x, player.y, dt);
     if (result) {
-      if (result.action === "up") {
-        this.ui.addMessage(`Climbed to floor ${result.floor + 1} of ${result.building}.`);
-      } else {
+      // Teleport player to the partner stairs on the destination floor
+      if (result.teleport) {
+        player.x = result.teleport.x;
+        player.y = result.teleport.y;
+      }
+      if (result.floor === 0) {
         this.ui.addMessage(`Returned to ground floor of ${result.building}.`);
+      } else {
+        this.ui.addMessage(`${result.action === "up" ? "Climbed" : "Descended"} to floor ${result.floor + 1} of ${result.building}.`);
       }
     }
   }

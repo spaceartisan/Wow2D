@@ -10,6 +10,7 @@
   "houseWall":   { "color": [102, 82, 52],  "blocked": true },
   "houseFloor":  { "color": [140, 110, 70], "blocked": false },
   "stairs":      { "color": [130, 105, 75], "blocked": false },
+  "stairsDown":  { "color": [110, 90, 65],  "blocked": false },
   "bedHead":     { "color": [160, 50, 50],  "blocked": true },
   "bedFoot":     { "color": [140, 45, 45],  "blocked": true },
   "cliff":       { "color": [63, 66, 62],   "blocked": true },

@@ -209,17 +209,28 @@ export class WorldSystem {
 
   /**
    * Check if the player is standing on stairs and handle floor transitions.
+   * "stairs" tiles go UP one floor, "stairsDown" tiles go DOWN one floor.
    * Requires the player to step off and back on to use stairs again.
    * Call this each frame from Game.update().
    */
   checkStairs(worldX, worldY, _dt) {
     const tile = this.worldToTile(worldX, worldY);
-    const idx = this.terrain[tile.y]?.[tile.x] ?? 0;
-    const tileName = this.tilePalette[idx]?.name;
-    const onStairs = tileName === "stairs";
+
+    // Determine which tile the player is on — check upper floor grid first
+    let tileName;
+    if (this.currentFloor > 0 && this.insideBuilding) {
+      const upperTile = this._getUpperFloorTile(tile.x, tile.y);
+      tileName = upperTile ? upperTile.name : null;
+    } else {
+      const idx = this.terrain[tile.y]?.[tile.x] ?? 0;
+      tileName = this.tilePalette[idx]?.name;
+    }
+
+    const onStairsUp = tileName === "stairs";
+    const onStairsDown = tileName === "stairsDown";
 
     // Require stepping off before triggering again
-    if (!onStairs) {
+    if (!onStairsUp && !onStairsDown) {
       this._onStairs = false;
       return null;
     }
@@ -232,21 +243,21 @@ export class WorldSystem {
       const localY = tile.y - bld.oy;
       if (localX < 0 || localY < 0 || localX >= bld.cols || localY >= bld.rows) continue;
 
-      // Toggle floor
-      if (this.currentFloor === 0) {
-        // Go up — check there's an upper floor
-        if (bld.upperFloors.length > 0) {
-          this.currentFloor = 1;
-          this.insideBuilding = bld;
-          this._onStairs = true;
-          return { action: "up", floor: this.currentFloor, building: bld.name };
-        }
-      } else {
-        // Come back down
-        this.currentFloor = 0;
-        this.insideBuilding = null;
+      if (onStairsUp && this.currentFloor < bld.upperFloors.length) {
+        // Go up one floor
+        this.currentFloor++;
+        this.insideBuilding = bld;
         this._onStairs = true;
-        return { action: "down", floor: 0, building: bld.name };
+        const dest = this._findPartnerStairs(bld, this.currentFloor, "stairsDown");
+        return { action: "up", floor: this.currentFloor, building: bld.name, teleport: dest };
+      } else if (onStairsDown && this.currentFloor > 0) {
+        // Go down one floor
+        this.currentFloor--;
+        if (this.currentFloor === 0) this.insideBuilding = null;
+        else this.insideBuilding = bld;
+        this._onStairs = true;
+        const dest = this._findPartnerStairs(bld, this.currentFloor, "stairs");
+        return { action: "down", floor: this.currentFloor, building: bld.name, teleport: dest };
       }
     }
     return null;
@@ -266,6 +277,42 @@ export class WorldSystem {
     const idx = floorGrid[ly][lx];
     if (idx < 0) return null; // skip tile (void)
     return this.tilePalette[idx] || null;
+  }
+
+  /**
+   * Find the partner stairs tile on a given floor within a building.
+   * Returns { x, y } in world pixels, or null if not found.
+   * @param {object} bld - the building object
+   * @param {number} floor - the destination floor (0 = ground)
+   * @param {string} targetTile - tile name to look for ("stairs" or "stairsDown")
+   */
+  _findPartnerStairs(bld, floor, targetTile) {
+    const ts = this.tileSize;
+    if (floor === 0) {
+      // Search ground-level terrain inside the building
+      for (let r = 0; r < bld.rows; r++) {
+        for (let c = 0; c < bld.cols; c++) {
+          const wx = bld.ox + c;
+          const wy = bld.oy + r;
+          const idx = this.terrain[wy]?.[wx] ?? 0;
+          if (this.tilePalette[idx]?.name === targetTile) {
+            return { x: wx * ts + ts / 2, y: wy * ts + ts / 2 };
+          }
+        }
+      }
+    } else {
+      // Search the upper floor grid
+      const grid = bld.upperFloors[floor - 1];
+      if (!grid) return null;
+      for (let r = 0; r < grid.length; r++) {
+        for (let c = 0; c < (grid[r]?.length || 0); c++) {
+          if (this.tilePalette[grid[r][c]]?.name === targetTile) {
+            return { x: (bld.ox + c) * ts + ts / 2, y: (bld.oy + r) * ts + ts / 2 };
+          }
+        }
+      }
+    }
+    return null;
   }
 
   drawTerrain(ctx, camera, canvas, sprites) {

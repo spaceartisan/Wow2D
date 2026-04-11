@@ -87,6 +87,17 @@ class CollisionMap {
       y2: (sz.y + sz.h) * this.tileSize
     }));
 
+    // Store building data for upper-floor collision
+    this.buildings = (mapData.buildings || []).map(b => ({
+      ox: b.x,
+      oy: b.y,
+      cols: b.w,
+      rows: b.h,
+      floors: b.floors || 1,
+      upperFloors: b.upperFloors || []
+    }));
+    this.tilePalette = mapData.tilePalette || [];
+
     this.buildFromMapData(mapData);
   }
 
@@ -122,7 +133,7 @@ class CollisionMap {
     }
   }
 
-  isBlocked(worldX, worldY, radius = 15) {
+  isBlocked(worldX, worldY, radius = 15, floor = 0) {
     const checks = [
       [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
       [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7],
@@ -132,9 +143,33 @@ class CollisionMap {
       const tx = Math.floor((worldX + dx) / this.tileSize);
       const ty = Math.floor((worldY + dy) / this.tileSize);
       if (tx < 0 || ty < 0 || tx >= this.mapWidth || ty >= this.mapHeight) return true;
-      if (this.blocked.has(tileKey(tx, ty))) return true;
+
+      if (floor > 0) {
+        // Check upper-floor grid collision
+        const tile = this._getUpperFloorTile(tx, ty, floor);
+        if (!tile) return true;       // out of building / void = blocked
+        if (tile.blocked) return true;
+      } else {
+        if (this.blocked.has(tileKey(tx, ty))) return true;
+      }
     }
     return false;
+  }
+
+  _getUpperFloorTile(tileX, tileY, floor) {
+    for (const bld of this.buildings) {
+      if (bld.floors <= 1) continue;
+      const lx = tileX - bld.ox;
+      const ly = tileY - bld.oy;
+      if (lx < 0 || ly < 0 || lx >= bld.cols || ly >= bld.rows) continue;
+      const grid = bld.upperFloors[floor - 1];
+      if (!grid) return null;
+      if (ly >= grid.length || lx >= (grid[ly]?.length || 0)) return null;
+      const idx = grid[ly][lx];
+      if (idx < 0) return null;
+      return this.tilePalette[idx] || null;
+    }
+    return null;  // not inside any building
   }
 
   isSafeZone(wx, wy) {
@@ -225,6 +260,7 @@ class ServerWorld {
       gold,
       x: mapEntry.collision.spawnPoint.x,
       y: mapEntry.collision.spawnPoint.y,
+      floor: 0,
       hp: clamp(Number(charData.hp) || maxHp, 1, maxHp),
       maxHp,
       mana: clamp(Number(charData.mana) || maxMana, 0, maxMana),
@@ -396,16 +432,20 @@ class ServerWorld {
 
     const x = Number(msg.x);
     const y = Number(msg.y);
+    const floor = Math.max(0, Math.min(10, Number(msg.floor) || 0));
 
     // basic validation: don't teleport too far per tick
+    // Allow larger jump when floor changes (stair teleport to partner stairs)
+    const maxDist = (floor !== player.floor) ? 300 : 80;
     const d = dist(player.x, player.y, x, y);
-    if (d > 80) return; // ~205 speed * ~0.33s max jitter tolerance
+    if (d > maxDist) return;
 
     // Don't allow moving into blocked tiles (use player's current map)
     const mapEntry = this.maps.get(player.mapId);
-    if (mapEntry && !mapEntry.collision.isBlocked(x, y, 16)) {
+    if (mapEntry && !mapEntry.collision.isBlocked(x, y, 16, floor)) {
       player.x = x;
       player.y = y;
+      player.floor = floor;
     }
   }
 
@@ -440,6 +480,7 @@ class ServerWorld {
     player.mapId = targetMapId;
     player.x = targetX;
     player.y = targetY;
+    player.floor = 0;
 
     // Send fresh state for new map
     this.send(player.ws, {
@@ -659,7 +700,7 @@ class ServerWorld {
       if (!npcDef || !npcDef.shop || npcDef.shop.length === 0) return false;
       const npcX = npcPlacement.tx * tileSize;
       const npcY = npcPlacement.ty * tileSize;
-      return dist(player.x, player.y, npcX, npcY) < tileSize * 6;
+      return dist(player.x, player.y, npcX, npcY) < tileSize * 1.5;
     });
     if (!nearVendor) {
       this.send(player.ws, { type: "sell_item_result", ok: false, reason: "too_far" });
@@ -712,7 +753,7 @@ class ServerWorld {
     if (!npcPlacement) return;
     const npcX = npcPlacement.tx * tileSize;
     const npcY = npcPlacement.ty * tileSize;
-    if (dist(player.x, player.y, npcX, npcY) >= tileSize * 6) {
+    if (dist(player.x, player.y, npcX, npcY) >= tileSize * 1.5) {
       this.send(player.ws, { type: "buy_item_result", ok: false, reason: "too_far" });
       return;
     }
@@ -971,6 +1012,7 @@ class ServerWorld {
       player.mapId = targetMapId;
       player.x = targetX;
       player.y = targetY;
+      player.floor = 0;
 
       this.send(player.ws, {
         type: "hearthstone_teleport",
@@ -986,6 +1028,7 @@ class ServerWorld {
       // Same-map teleport
       player.x = targetX;
       player.y = targetY;
+      player.floor = 0;
 
       this.send(player.ws, {
         type: "hearthstone_teleport",
@@ -1374,6 +1417,7 @@ class ServerWorld {
       player.mana = player.maxMana;
       player.x = spawn.x;
       player.y = spawn.y;
+      player.floor = 0;
 
       this.send(player.ws, {
         type: "you_respawned",

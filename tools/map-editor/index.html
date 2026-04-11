@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azerfall Map Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <!-- ── Top Bar ─────────────────────────────── -->
+  <header id="topbar">
+    <div class="topbar-group">
+      <button id="btnNew" title="New Map">New</button>
+      <button id="btnLoad" title="Load Map">Load</button>
+      <button id="btnSave" title="Save Map">Save</button>
+      <button id="btnExport" title="Export JSON to clipboard">Export</button>
+      <button id="btnResetView" title="Reset zoom and pan (Home)">Reset View</button>
+    </div>
+    <div class="topbar-group">
+      <label>ID: <input id="mapId" type="text" placeholder="my_map" class="input-sm"></label>
+      <label>Name: <input id="mapName" type="text" placeholder="My Map" class="input-md"></label>
+      <label>W: <input id="mapWidth" type="number" value="80" min="10" max="256" class="input-xs"></label>
+      <label>H: <input id="mapHeight" type="number" value="80" min="10" max="256" class="input-xs"></label>
+      <label>BGM: <input id="mapBgm" type="text" placeholder="" class="input-sm"></label>
+      <label>Spawn: <input id="spawnX" type="number" value="5" min="0" class="input-xs">,<input id="spawnY" type="number" value="5" min="0" class="input-xs"></label>
+    </div>
+    <div class="topbar-group">
+      <span id="cursorInfo">0, 0</span>
+      <span id="zoomInfo">100%</span>
+    </div>
+  </header>
+
+  <div id="main">
+    <!-- ── Left Panel ──────────────────────────── -->
+    <aside id="leftPanel">
+      <!-- Tools -->
+      <section class="panel-section">
+        <h3>Tools</h3>
+        <div id="toolButtons">
+          <button class="tool-btn active" data-tool="paint" title="Paint terrain (B)">🖌 Paint</button>
+          <button class="tool-btn" data-tool="erase" title="Erase to index 0 (E)">🧹 Erase</button>
+          <button class="tool-btn" data-tool="fill" title="Flood fill (G)">🪣 Fill</button>
+          <button class="tool-btn" data-tool="pick" title="Pick tile (Alt+click)">💉 Pick</button>
+        </div>
+        <div>
+          <label>Brush: <select id="brushSize">
+            <option value="1">1×1</option>
+            <option value="2">2×2</option>
+            <option value="3">3×3</option>
+            <option value="5">5×5</option>
+          </select></label>
+        </div>
+      </section>
+
+      <!-- Palette -->
+      <section class="panel-section">
+        <h3>Palette <button id="btnEditPalette" class="btn-sm">Edit</button></h3>
+        <div id="paletteGrid"></div>
+        <div id="selectedTileInfo">--</div>
+      </section>
+
+      <!-- Object tools -->
+      <section class="panel-section">
+        <h3>Objects</h3>
+        <div id="objectButtons">
+          <button class="obj-btn" data-obj="portal">Portal</button>
+          <button class="obj-btn" data-obj="enemy">Enemy</button>
+          <button class="obj-btn" data-obj="npc">NPC</button>
+          <button class="obj-btn" data-obj="tree">Tree</button>
+          <button class="obj-btn" data-obj="prop">Prop</button>
+          <button class="obj-btn" data-obj="building">Building</button>
+          <button class="obj-btn" data-obj="statue">Waystone</button>
+          <button class="obj-btn" data-obj="safezone">Safe Zone</button>
+          <button class="obj-btn" data-obj="blocked">Blocked</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- ── Canvas ──────────────────────────────── -->
+    <div id="canvasWrap">
+      <canvas id="mapCanvas"></canvas>
+    </div>
+
+    <!-- ── Right Panel ─────────────────────────── -->
+    <aside id="rightPanel">
+      <!-- Object properties (context-dependent) -->
+      <section class="panel-section">
+        <h3>Properties</h3>
+        <div id="propsPanel">
+          <p class="muted">Select a tool or object to see options.</p>
+        </div>
+      </section>
+
+      <!-- Object list -->
+      <section class="panel-section">
+        <h3>Objects <button id="btnClearObj" class="btn-sm" title="Delete selected">🗑</button></h3>
+        <div id="objectList"></div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ── Dialogs ──────────────────────────────── -->
+  <div id="modalOverlay" class="hidden">
+    <div id="modalContent"></div>
+  </div>
+
+  <script src="editor.js"></script>
+</body>
+</html>

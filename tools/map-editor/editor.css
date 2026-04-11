@@ -1,0 +1,143 @@
+/* ── Reset & Base ───────────────────────────── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; background: #1e1e2e; color: #cdd6f4; }
+
+/* ── Top Bar ───────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; gap: 16px;
+  height: 40px; padding: 0 12px;
+  background: #181825; border-bottom: 1px solid #313244;
+}
+.topbar-group { display: flex; align-items: center; gap: 8px; }
+.topbar-group label { display: flex; align-items: center; gap: 3px; white-space: nowrap; color: #a6adc8; }
+#topbar button {
+  padding: 4px 10px; border: 1px solid #45475a; border-radius: 4px;
+  background: #313244; color: #cdd6f4; cursor: pointer; font-size: 12px;
+}
+#topbar button:hover { background: #45475a; }
+.input-xs { width: 48px; }
+.input-sm { width: 90px; }
+.input-md { width: 140px; }
+#topbar input, #topbar select {
+  padding: 2px 5px; border: 1px solid #45475a; border-radius: 3px;
+  background: #313244; color: #cdd6f4; font-size: 12px;
+}
+#cursorInfo, #zoomInfo { color: #6c7086; font-size: 11px; font-family: monospace; }
+
+/* ── Main Layout ───────────────────────────── */
+#main {
+  display: flex; height: calc(100% - 40px);
+}
+#leftPanel, #rightPanel {
+  width: 220px; min-width: 220px; overflow-y: auto;
+  background: #1e1e2e; border-right: 1px solid #313244;
+  padding: 8px;
+}
+#rightPanel { border-right: none; border-left: 1px solid #313244; }
+
+/* ── Canvas ────────────────────────────────── */
+#canvasWrap {
+  flex: 1; overflow: hidden; position: relative; cursor: crosshair;
+  background: #11111b;
+}
+#mapCanvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; }
+
+/* ── Panel Sections ────────────────────────── */
+.panel-section { margin-bottom: 12px; }
+.panel-section h3 {
+  font-size: 11px; text-transform: uppercase; color: #a6adc8;
+  margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid #313244; padding-bottom: 3px;
+}
+.btn-sm {
+  font-size: 10px; padding: 1px 6px; border: 1px solid #45475a;
+  border-radius: 3px; background: #313244; color: #cdd6f4; cursor: pointer;
+}
+.btn-sm:hover { background: #45475a; }
+
+/* ── Tool Buttons ──────────────────────────── */
+#toolButtons, #objectButtons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.tool-btn, .obj-btn {
+  padding: 4px 8px; border: 1px solid #45475a; border-radius: 4px;
+  background: #313244; color: #cdd6f4; cursor: pointer; font-size: 11px;
+}
+.tool-btn:hover, .obj-btn:hover { background: #45475a; }
+.tool-btn.active { background: #89b4fa; color: #1e1e2e; border-color: #89b4fa; }
+.obj-btn.active { background: #a6e3a1; color: #1e1e2e; border-color: #a6e3a1; }
+
+/* ── Palette Grid ──────────────────────────── */
+#paletteGrid {
+  display: grid; grid-template-columns: repeat(auto-fill, 28px);
+  gap: 2px; margin-bottom: 4px;
+}
+.palette-swatch {
+  width: 28px; height: 28px; border: 2px solid transparent;
+  border-radius: 3px; cursor: pointer; position: relative;
+}
+.palette-swatch:hover { border-color: #cdd6f4; }
+.palette-swatch.selected { border-color: #f9e2af; box-shadow: 0 0 4px #f9e2af; }
+.palette-swatch .idx {
+  position: absolute; bottom: 0; right: 1px;
+  font-size: 8px; color: #fff; text-shadow: 0 0 2px #000;
+}
+#selectedTileInfo { font-size: 11px; color: #6c7086; }
+
+/* ── Properties Panel ──────────────────────── */
+#propsPanel { font-size: 12px; }
+#propsPanel label { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; color: #a6adc8; }
+#propsPanel input, #propsPanel select {
+  padding: 2px 5px; border: 1px solid #45475a; border-radius: 3px;
+  background: #313244; color: #cdd6f4; font-size: 12px; flex: 1;
+}
+#propsPanel .prop-row { display: flex; gap: 4px; margin-bottom: 4px; }
+.muted { color: #585b70; font-style: italic; font-size: 11px; }
+
+/* ── Object List ───────────────────────────── */
+#objectList { font-size: 11px; max-height: 300px; overflow-y: auto; }
+.obj-item {
+  padding: 3px 6px; border-radius: 3px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.obj-item:hover { background: #313244; }
+.obj-item.selected { background: #45475a; }
+.obj-item .obj-del { color: #f38ba8; cursor: pointer; font-size: 10px; }
+
+/* ── Modal ─────────────────────────────────── */
+#modalOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+#modalOverlay.hidden { display: none; }
+#modalContent {
+  background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+  padding: 16px; min-width: 360px; max-width: 600px; max-height: 80vh; overflow-y: auto;
+}
+#modalContent h2 { font-size: 14px; margin-bottom: 10px; color: #cdd6f4; }
+#modalContent button {
+  padding: 4px 12px; border: 1px solid #45475a; border-radius: 4px;
+  background: #313244; color: #cdd6f4; cursor: pointer; margin-right: 6px;
+}
+#modalContent button.primary { background: #89b4fa; color: #1e1e2e; border-color: #89b4fa; }
+#modalContent button:hover { opacity: 0.85; }
+#modalContent label { display: block; margin-bottom: 6px; color: #a6adc8; font-size: 12px; }
+#modalContent input, #modalContent select {
+  padding: 3px 6px; border: 1px solid #45475a; border-radius: 3px;
+  background: #313244; color: #cdd6f4; font-size: 12px; width: 100%; margin-top: 2px;
+}
+#modalContent .modal-row { display: flex; gap: 8px; margin-bottom: 6px; }
+#modalContent .modal-row label { flex: 1; }
+
+/* ── Palette Editor in modal ───────────────── */
+.palette-editor-row {
+  display: flex; align-items: center; gap: 6px; padding: 3px 0;
+  border-bottom: 1px solid #313244;
+}
+.palette-editor-row .pe-swatch { width: 20px; height: 20px; border-radius: 3px; border: 1px solid #45475a; }
+.palette-editor-row .pe-name { font-size: 12px; flex: 1; }
+.palette-editor-row .pe-idx { font-size: 10px; color: #6c7086; width: 20px; }
+.palette-editor-row button { font-size: 10px; padding: 1px 6px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #181825; }
+::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }

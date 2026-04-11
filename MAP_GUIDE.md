@@ -171,13 +171,14 @@ NPC placements reference definitions in `public/data/npcs.json`.
 
 ```json
 "npcs": [
-  { "npcId": "elder_rowan", "tx": 26, "ty": 24 },
-  { "npcId": "blacksmith_kael", "tx": 30, "ty": 34 }
+  { "npcId": "elder_rowan", "tx": 26, "ty": 24, "floor": 0 },
+  { "npcId": "blacksmith_kael", "tx": 30, "ty": 34, "floor": 0 }
 ]
 ```
 
 - `npcId` — Must match a key in `npcs.json`
 - `tx`, `ty` — Tile position
+- `floor` — Which floor the NPC is on (`0` = ground, `1` = 2nd floor, etc.). NPCs are only visible and interactable when the player is on the same floor. Defaults to `0` if omitted.
 
 The NPC's dialogue, quest assignments, shop inventory, and appearance are all defined in `npcs.json`, not in the map file.
 
@@ -222,30 +223,51 @@ Buildings define enclosed interior spaces. The terrain grid already contains the
 To make a building multi-story:
 
 1. Set `floors` to 2 (or more).
-2. Place a `stairs` tile (palette index for "stairs") inside the building on the ground-floor terrain grid.
+2. Place a `stairs` tile (goes **up**) inside the building on the ground-floor terrain grid.
 3. Add an `upperFloors` array with one 2D grid per additional floor.
+4. On each upper floor, place `stairsDown` at the **same local position** as the `stairs` tile on the floor below (this is where the player arrives).
+5. If the upper floor also has stairs going further up, place a `stairs` tile at a **different** local position. The next floor above must have `stairsDown` at that position.
+
+**Stair tiles are directional:**
+- `stairs` — Goes **up** one floor only. Sprite: upward-pointing arrows.
+- `stairsDown` — Goes **down** one floor only. Sprite: downward-pointing arrows.
+
+When the player uses stairs, they are teleported to the partner stairs on the destination floor (the matching `stairsDown` when going up, or the matching `stairs` when going down).
+
+**Example: 3-floor Inn**
 
 ```json
 {
-  "x": 27, "y": 18, "w": 6, "h": 5,
-  "name": "Town Hall",
-  "floors": 2,
+  "x": 17, "y": 28, "w": 5, "h": 5,
+  "name": "Inn",
+  "floors": 3,
   "upperFloors": [
     [
-      [8, 8, 8, 8, 8, 8],
-      [8, 10, 10, 10, 11, 8],
-      [8, 10, 12, 13, 10, 8],
-      [8, 10, 10, 10, 10, 8],
-      [8, 8, 8, 8, 8, 8]
+      [8, 8, 8, 8, 8],
+      [8, 11, 10, 14, 8],
+      [8, 12, 13, 10, 8],
+      [8, 12, 13, 10, 8],
+      [8, 8, 8, 8, 8]
+    ],
+    [
+      [8, 8, 8, 8, 8],
+      [8, 14, 10, 10, 8],
+      [8, 10, 10, 10, 8],
+      [8, 10, 12, 13, 8],
+      [8, 8, 8, 8, 8]
     ]
   ]
 }
 ```
 
-- Each grid is `h` rows × `w` columns of **palette indices** (same palette as the ground floor).
-- The stairs tile must appear at the same local position on both the ground floor terrain and the upper floor grid so the player can go up and come back down.
-- Use `-1` for void/transparent tiles (areas outside the building on upper floors).
-- Common palette indices: `8` = houseWall, `10` = houseFloor, `11` = stairs, `12` = bedHead, `13` = bedFoot.
+Stair chain for this example:
+- **Ground floor:** `stairs` at local(3,1) → player goes up to Floor 2
+- **Floor 2:** `stairsDown` at local(3,1) (partner of ground stairs) + `stairs` at local(1,1) → player can go down or further up
+- **Floor 3:** `stairsDown` at local(1,1) (partner of Floor 2 stairs up) → player can only go down
+
+Common palette indices: `8` = houseWall, `10` = houseFloor, `11` = stairs (up), `12` = bedHead, `13` = bedFoot, `14` = stairsDown.
+
+**Server collision:** The server validates movement on upper floors using the `upperFloors` grids — blocked/unblocked tiles work the same as on the ground floor. The client sends the current floor with every move message.
 
 ## Safe Zones
 
