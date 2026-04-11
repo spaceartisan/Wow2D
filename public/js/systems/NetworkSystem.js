@@ -200,6 +200,22 @@ export class NetworkSystem {
     this.send({ type: "cancel_hearthstone" });
   }
 
+  sendBankDeposit(invIndex) {
+    this.send({ type: "bank_deposit", invIndex });
+  }
+
+  sendBankWithdraw(bankIndex) {
+    this.send({ type: "bank_withdraw", bankIndex });
+  }
+
+  sendHotbarUpdate(hotbar) {
+    this.send({ type: "hotbar_update", hotbar });
+  }
+
+  sendSwapItems(from, to, fromContainer, toContainer) {
+    this.send({ type: "swap_items", from, to, fromContainer, toContainer });
+  }
+
   /* ── message dispatcher ────────────────────────────── */
 
   onMessage(msg) {
@@ -279,6 +295,15 @@ export class NetworkSystem {
       case "hearthstone_teleport":
         this.onHearthstoneTeleport(msg);
         break;
+      case "bank_result":
+        this.onBankResult(msg);
+        break;
+      case "hotbar_result":
+        this.onHotbarResult(msg);
+        break;
+      case "swap_result":
+        this.onSwapResult(msg);
+        break;
       case "auth_error":
         this._intentionalClose = true;
         this.game.ui.addMessage(`[System] ${msg.error}`);
@@ -345,6 +370,23 @@ export class NetworkSystem {
     // Load hearthstone attunement data
     if (msg.hearthstone !== undefined) {
       this.game.entities.player.hearthstone = msg.hearthstone;
+    }
+
+    // Load bank
+    if (msg.bank) {
+      const bank = this.game.entities.player.bank;
+      for (let i = 0; i < 48; i++) {
+        bank[i] = msg.bank[i] || null;
+      }
+    }
+
+    // Load hotbar
+    if (msg.hotbar) {
+      const hotbar = this.game.entities.player.hotbar;
+      for (let i = 0; i < 10; i++) {
+        hotbar[i] = msg.hotbar[i] || null;
+      }
+      if (this.game.ui) this.game.ui._hotbarDirty = true;
     }
 
     this.game.ui.addMessage("Connected to server.");
@@ -469,9 +511,11 @@ export class NetworkSystem {
       this.game.audio.play("pickup");
     }
     if (msg.item && msg.index >= 0) {
-      player.inventorySlots[msg.index] = { ...msg.item };
+      // Use server-authoritative slot state (includes stack qty)
+      player.inventorySlots[msg.index] = msg.slotItem ? { ...msg.slotItem } : { ...msg.item };
       this.game.ui.addMessage(`Loot: ${msg.item.name}`);
       this.game.ui._inventoryDirty = true;
+      this.game.ui._hotbarDirty = true;
     } else if (msg.item) {
       this.game.ui.addMessage("Inventory full: dropped item was lost.");
     }
@@ -558,12 +602,14 @@ export class NetworkSystem {
       return;
     }
     const player = this.game.entities.player;
-    player.inventorySlots[msg.index] = null;
+    // Server sends remainingItem (null if consumed, or item with reduced qty)
+    player.inventorySlots[msg.index] = msg.remainingItem || null;
     player.hp = msg.hp;
     player.maxHp = msg.maxHp;
     player.mana = msg.mana;
     player.maxMana = msg.maxMana;
     this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
 
     if (msg.effect === "healHp") {
       this.game.ui.addMessage(`Potion restores ${msg.amount} HP.`);
@@ -576,9 +622,10 @@ export class NetworkSystem {
   onSellItemResult(msg) {
     if (!msg.ok) return;
     const player = this.game.entities.player;
-    player.inventorySlots[msg.index] = null;
+    player.inventorySlots[msg.index] = msg.remainingItem || null;
     player.gold = msg.gold;
     this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
     this.game.ui.addMessage(`Sold ${msg.soldName} for ${msg.sellPrice} gold.`);
     this.game.audio.play("pickup");
   }
@@ -595,9 +642,10 @@ export class NetworkSystem {
       return;
     }
     const player = this.game.entities.player;
-    player.inventorySlots[msg.index] = { ...msg.item };
+    player.inventorySlots[msg.index] = { ...msg.item }; // includes qty from server
     player.gold = msg.gold;
     this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
     this.game.ui.addMessage(`Bought ${msg.item.name} for ${msg.buyPrice} gold.`);
     this.game.audio.play("pickup");
     // Refresh shop if open
@@ -623,6 +671,7 @@ export class NetworkSystem {
     player.damage = msg.damage;
     this.game.ui._inventoryDirty = true;
     this.game.ui._equipmentDirty = true;
+    this.game.ui._hotbarDirty = true;
   }
 
   onQuestCompleteResult(msg) {
@@ -645,6 +694,7 @@ export class NetworkSystem {
 
     this.game.ui._inventoryDirty = true;
     this.game.ui._equipmentDirty = true;
+    this.game.ui._hotbarDirty = true;
     this.game.entities.recalculateDerivedStats();
   }
 
@@ -706,6 +756,59 @@ export class NetworkSystem {
     player.x = msg.x;
     player.y = msg.y;
     this.game.ui.addChatMessage("system", "You have been teleported home.");
+  }
+
+  /* ── Bank / Hotbar / Swap handlers ─────────────────── */
+
+  onBankResult(msg) {
+    if (!msg.ok) {
+      const reasons = {
+        too_far: "You need to be near a banker.",
+        bank_full: "Bank is full.",
+        inventory_full: "Inventory is full.",
+        permanent: "That item cannot be banked."
+      };
+      this.game.ui.addMessage(reasons[msg.reason] || "Bank action failed.");
+      return;
+    }
+    const player = this.game.entities.player;
+    // Full authoritative state from server
+    if (msg.inventory) {
+      for (let i = 0; i < 20; i++) player.inventorySlots[i] = msg.inventory[i] || null;
+    }
+    if (msg.bank) {
+      for (let i = 0; i < 48; i++) player.bank[i] = msg.bank[i] || null;
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._bankDirty = true;
+    this.game.ui._hotbarDirty = true;
+    const verb = msg.action === "deposit" ? "deposited" : "withdrew";
+    this.game.ui.addMessage(`Item ${verb}.`);
+    this.game.audio.play("pickup");
+  }
+
+  onHotbarResult(msg) {
+    if (!msg.ok) return;
+    const player = this.game.entities.player;
+    for (let i = 0; i < 10; i++) player.hotbar[i] = msg.hotbar[i] || null;
+    this.game.ui._hotbarDirty = true;
+  }
+
+  onSwapResult(msg) {
+    if (!msg.ok) {
+      this.game.ui.addMessage("Cannot move that item.");
+      return;
+    }
+    const player = this.game.entities.player;
+    if (msg.inventory) {
+      for (let i = 0; i < 20; i++) player.inventorySlots[i] = msg.inventory[i] || null;
+    }
+    if (msg.bank) {
+      for (let i = 0; i < 48; i++) player.bank[i] = msg.bank[i] || null;
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._bankDirty = true;
+    this.game.ui._hotbarDirty = true;
   }
 
   /* ═══════════════════════════════════════════════════════

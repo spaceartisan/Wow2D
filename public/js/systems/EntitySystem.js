@@ -36,6 +36,12 @@ export class EntitySystem {
       dead: false,
       deathUntil: 0,
       inventorySlots: Array(20).fill(null),
+      bank: Array(48).fill(null),
+      hotbar: [
+        { type: "skill", skillId: "attack" },
+        { type: "skill", skillId: "heal" },
+        null, null, null, null, null, null, null, null
+      ],
       equipment: {
         weapon: null,
         armor: null,
@@ -242,9 +248,24 @@ export class EntitySystem {
 
   addItemToInventory(item) {
     const slots = this.player.inventorySlots;
+    const itemDefs = this.game.data?.items || {};
+    const template = itemDefs[item.id];
+    const maxStack = (template && template.stackSize) || 1;
+
+    // Try stacking first
+    if (maxStack > 1) {
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i] && slots[i].id === item.id && (slots[i].qty || 1) < maxStack) {
+          slots[i].qty = (slots[i].qty || 1) + (item.qty || 1);
+          return true;
+        }
+      }
+    }
+
+    // Find empty slot
     for (let i = 0; i < slots.length; i += 1) {
       if (!slots[i]) {
-        slots[i] = item;
+        slots[i] = { ...item, qty: item.qty || 1 };
         return true;
       }
     }

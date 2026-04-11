@@ -5,6 +5,7 @@
     "type": "junk",
     "icon": "wolfPelt",
     "value": 4,
+    "stackSize": 99,
     "description": "A coarse wolf hide. Merchants will buy it."
   },
   "boarTusk": {
@@ -13,6 +14,7 @@
     "type": "junk",
     "icon": "boarTusk",
     "value": 6,
+    "stackSize": 99,
     "description": "A sharp boar tusk. Has some trade value."
   },
   "banditBadge": {
@@ -21,6 +23,7 @@
     "type": "junk",
     "icon": "banditBadge",
     "value": 10,
+    "stackSize": 99,
     "description": "A crudely stamped metal badge worn by bandit scouts."
   },
   "wolfFang": {
@@ -29,6 +32,7 @@
     "type": "junk",
     "icon": "wolfFang",
     "value": 3,
+    "stackSize": 99,
     "description": "A yellowed canine tooth. Alchemists may want it."
   },
   "boarHide": {
@@ -37,6 +41,7 @@
     "type": "junk",
     "icon": "boarHide",
     "value": 8,
+    "stackSize": 99,
     "description": "A tough, leathery hide suitable for crafting."
   },
   "banditCoin": {
@@ -45,6 +50,7 @@
     "type": "junk",
     "icon": "banditCoin",
     "value": 14,
+    "stackSize": 99,
     "description": "Stolen currency. Spend it quickly before questions arise."
   },
   "banditMap": {
@@ -53,6 +59,7 @@
     "type": "junk",
     "icon": "banditMap",
     "value": 18,
+    "stackSize": 99,
     "description": "A hand-drawn map of trade routes. The guard might want this."
   },
 
@@ -238,6 +245,7 @@
     "effect": "healHp",
     "power": 40,
     "value": 8,
+    "stackSize": 20,
     "description": "Restores 40 HP when used."
   },
   "healingPotion": {
@@ -248,6 +256,7 @@
     "effect": "healHp",
     "power": 80,
     "value": 18,
+    "stackSize": 20,
     "description": "Restores 80 HP when used."
   },
   "greaterHealingPotion": {
@@ -258,6 +267,7 @@
     "effect": "healHp",
     "power": 150,
     "value": 35,
+    "stackSize": 20,
     "description": "Restores 150 HP when used."
   },
   "minorManaPotion": {
@@ -268,6 +278,7 @@
     "effect": "healMana",
     "power": 30,
     "value": 8,
+    "stackSize": 20,
     "description": "Restores 30 mana when used."
   },
   "manaPotion": {
@@ -278,6 +289,7 @@
     "effect": "healMana",
     "power": 60,
     "value": 18,
+    "stackSize": 20,
     "description": "Restores 60 mana when used."
   },
   "antidote": {
@@ -288,6 +300,7 @@
     "effect": "healHp",
     "power": 25,
     "value": 6,
+    "stackSize": 20,
     "description": "A bitter brew that cures ailments and restores 25 HP."
   },
 

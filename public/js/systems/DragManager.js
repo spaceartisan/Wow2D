@@ -42,6 +42,10 @@ export class DragManager {
       // Don't start drag on buttons, inputs, sliders, close buttons
       if (e.target.closest("button, input, select, textarea, .panel-close")) return;
 
+      // Check if this panel is locked
+      const entry = this._panels.find(p => p.panel === panel);
+      if (entry && entry._locked) return;
+
       e.preventDefault();
 
       // Bring to front
@@ -100,6 +104,18 @@ export class DragManager {
 
   _onMouseUp() {
     this._active = null;
+  }
+
+  /** Prevent a panel from being dragged */
+  lockPanel(panel) {
+    const entry = this._panels.find(p => p.panel === panel);
+    if (entry) entry._locked = true;
+  }
+
+  /** Allow a panel to be dragged again */
+  unlockPanel(panel) {
+    const entry = this._panels.find(p => p.panel === panel);
+    if (entry) entry._locked = false;
   }
 
   destroy() {

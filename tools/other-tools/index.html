@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azerfall Tools</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Azerfall Tools</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="connectionBadge" class="badge muted">Server offline</span>
+        <span id="dirtyBadge" class="badge">Saved</span>
+        <button id="loadButton" class="button secondary">Load</button>
+        <button id="saveButton" class="button primary">Save</button>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="Tool tabs">
+      <button class="tab active" data-tab="tilePalette">Tile Palette</button>
+      <button class="tab" data-tab="items">Items</button>
+      <button class="tab" data-tab="enemies">Enemies</button>
+      <button class="tab" data-tab="npcs">NPCs</button>
+      <button class="tab" data-tab="quests">Quests</button>
+      <button class="tab" data-tab="playerBase">Player Base</button>
+    </nav>
+
+    <main class="workspace tool-workspace">
+      <section class="tool-view active" data-view="tilePalette">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Tiles</h2>
+            <div class="inline-actions">
+              <button id="addTileButton" class="button secondary small">Add</button>
+              <button id="duplicateTileButton" class="button secondary small">Duplicate</button>
+              <button id="deleteTileButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="searchInput" type="text" placeholder="Find tile id" />
+            </label>
+
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="entryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Blocked</span>
+                <strong id="blockedCount">0</strong>
+              </div>
+            </div>
+
+            <div id="tileList" class="tile-list" role="listbox" aria-label="Tile palette entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Tile Palette Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/tilePalette.json</code> with sprite-aware previews from <code>public/assets/sprites/tiles</code></p>
+            </div>
+            <div class="inline-actions">
+              <button id="scanTilesButton" class="button secondary">Scan Tiles Folder</button>
+              <button id="validateButton" class="button secondary">Validate</button>
+              <button id="reloadButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Tile</h3>
+                <span id="selectedTileLabel" class="mono subtle">Nothing selected</span>
+              </div>
+
+              <div id="emptyState" class="empty-state">
+                <p>Select a tile entry from the list to begin editing.</p>
+              </div>
+
+              <form id="tileForm" class="editor-form hidden" autocomplete="off">
+                <label class="field">
+                  <span>Tile ID</span>
+                  <input id="tileIdInput" type="text" />
+                </label>
+
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="sprite-preview-frame sprite-preview-frame--sm">
+                      <img id="spritePreviewImage" class="sprite-preview-image hidden" alt="Selected tile sprite preview" />
+                      <div id="spritePreviewFallback" class="sprite-fallback sprite-fallback--sm">
+                        <div id="colorPreview" class="color-preview sprite-fallback-color-sm"></div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Sprite Preview</span>
+                        <span id="spriteStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="spritePathLabel">public/assets/sprites/tiles/&lt;id&gt;.png</code></div>
+                        <div><span class="subtle">Fallback color used when sprite PNG is missing.</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <label class="field checkbox-field">
+                  <input id="tileBlockedInput" type="checkbox" />
+                  <span>Blocked / non-walkable</span>
+                </label>
+
+                <div class="color-row">
+                  <label class="field color-picker-field">
+                    <span>Fallback Color</span>
+                    <input id="tileColorPicker" class="color-picker color-picker-sm" type="color" />
+                  </label>
+                  <label class="field">
+                    <span>R</span>
+                    <input id="tileRInput" type="number" min="0" max="255" />
+                  </label>
+                  <label class="field">
+                    <span>G</span>
+                    <input id="tileGInput" type="number" min="0" max="255" />
+                  </label>
+                  <label class="field">
+                    <span>B</span>
+                    <input id="tileBInput" type="number" min="0" max="255" />
+                  </label>
+                </div>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="entryJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="validationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="diagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="items">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Items</h2>
+            <div class="inline-actions">
+              <button id="addItemButton" class="button secondary small">Add</button>
+              <button id="duplicateItemButton" class="button secondary small">Duplicate</button>
+              <button id="deleteItemButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="itemSearchInput" type="text" placeholder="Find item id, name, or type" />
+            </label>
+
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="itemEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Types</span>
+                <strong id="itemTypeCount">0</strong>
+              </div>
+            </div>
+
+            <div id="itemList" class="tile-list" role="listbox" aria-label="Item entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Items Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/items.json</code> with icon previews from <code>public/assets/sprites/icons</code></p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateItemsButton" class="button secondary">Validate</button>
+              <button id="reloadItemsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Item</h3>
+                <span id="selectedItemLabel" class="mono subtle">Nothing selected</span>
+              </div>
+
+              <div id="itemEmptyState" class="empty-state">
+                <p>Select an item entry from the list to begin editing.</p>
+              </div>
+
+              <form id="itemForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Item ID</span>
+                    <input id="itemIdInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="itemNameInput" type="text" />
+                  </label>
+                </div>
+
+                <div class="split-grid four-columns">
+                  <label class="field">
+                    <span>Type</span>
+                    <select id="itemTypeInput">
+                      <option value="weapon">weapon</option>
+                      <option value="armor">armor</option>
+                      <option value="trinket">trinket</option>
+                      <option value="consumable">consumable</option>
+                      <option value="junk">junk</option>
+                      <option value="hearthstone">hearthstone</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Icon</span>
+                    <input id="itemIconInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Value</span>
+                    <input id="itemValueInput" type="number" step="1" />
+                  </label>
+                  <label class="field">
+                    <span>Stack Size</span>
+                    <input id="itemStackSizeInput" type="number" step="1" min="1" placeholder="Optional" />
+                  </label>
+                </div>
+
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="icon-preview-frame icon-preview-frame--sm">
+                      <img id="itemIconPreviewImage" class="item-icon-preview-image hidden" alt="Selected item icon preview" />
+                      <div id="itemIconPreviewFallback">
+                        <div class="missing-icon-glyph">?</div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Icon Preview</span>
+                        <span id="itemIconStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="itemIconPathLabel">public/assets/sprites/icons/&lt;icon&gt;.png</code></div>
+                        <div><span class="subtle">Usually matches the item id.</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <label class="field">
+                  <span>Description</span>
+                  <textarea id="itemDescriptionInput" rows="3"></textarea>
+                </label>
+
+                <section class="field-group">
+                  <div class="inline-json-header">
+                    <h4>Type-Specific Fields</h4>
+                    <span id="itemTypeHint" class="subtle">Fields update based on item type.</span>
+                  </div>
+                  <div class="split-grid three-columns">
+                    <label class="field type-field" data-type-field="attackBonus">
+                      <span>Attack Bonus</span>
+                      <input id="itemAttackBonusInput" type="number" step="1" />
+                    </label>
+                    <label class="field type-field" data-type-field="hpBonus">
+                      <span>HP Bonus</span>
+                      <input id="itemHpBonusInput" type="number" step="1" />
+                    </label>
+                    <label class="field type-field" data-type-field="manaBonus">
+                      <span>Mana Bonus</span>
+                      <input id="itemManaBonusInput" type="number" step="1" />
+                    </label>
+                  </div>
+                  <div class="split-grid four-columns">
+                    <label class="field type-field" data-type-field="effect">
+                      <span>Effect</span>
+                      <select id="itemEffectInput">
+                        <option value="">(none)</option>
+                        <option value="healHp">healHp</option>
+                        <option value="healMana">healMana</option>
+                      </select>
+                    </label>
+                    <label class="field type-field" data-type-field="power">
+                      <span>Power</span>
+                      <input id="itemPowerInput" type="number" step="1" />
+                    </label>
+                    <label class="field type-field" data-type-field="castTime">
+                      <span>Cast Time</span>
+                      <input id="itemCastTimeInput" type="number" step="0.1" />
+                    </label>
+                    <label class="field type-field" data-type-field="cooldown">
+                      <span>Cooldown</span>
+                      <input id="itemCooldownInput" type="number" step="0.1" />
+                    </label>
+                  </div>
+                  <label class="field checkbox-field type-field" data-type-field="permanent">
+                    <input id="itemPermanentInput" type="checkbox" />
+                    <span>Permanent</span>
+                  </label>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="itemJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="itemValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="itemDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+    
+
+      <section class="tool-view" data-view="enemies">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Enemies</h2>
+            <div class="inline-actions">
+              <button id="addEnemyButton" class="button secondary small">Add</button>
+              <button id="duplicateEnemyButton" class="button secondary small">Duplicate</button>
+              <button id="deleteEnemyButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="enemySearchInput" type="text" placeholder="Find enemy id or name" />
+            </label>
+
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="enemyEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Loot refs</span>
+                <strong id="enemyLootRefCount">0</strong>
+              </div>
+            </div>
+
+            <div id="enemyList" class="tile-list" role="listbox" aria-label="Enemy entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Enemies Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/enemies.json</code> with sprite previews from <code>public/assets/sprites/entities</code></p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateEnemiesButton" class="button secondary">Validate</button>
+              <button id="reloadEnemiesButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Enemy</h3>
+                <span id="selectedEnemyLabel" class="mono subtle">Nothing selected</span>
+              </div>
+
+              <div id="enemyEmptyState" class="empty-state">
+                <p>Select an enemy entry from the list to begin editing.</p>
+              </div>
+
+              <form id="enemyForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Enemy ID</span>
+                    <input id="enemyIdInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="enemyNameInput" type="text" />
+                  </label>
+                </div>
+
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="sprite-preview-frame sprite-preview-frame--sm">
+                      <img id="enemyPreviewImage" class="sprite-preview-image hidden" alt="Selected enemy sprite preview" />
+                      <div id="enemyPreviewFallback" class="sprite-fallback sprite-fallback--sm">
+                        <div id="enemyColorPreview" class="color-preview sprite-fallback-color-sm"></div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Entity Sprite</span>
+                        <span id="enemySpriteStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="enemySpritePathLabel">public/assets/sprites/entities/&lt;enemyId&gt;.png</code></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <div class="split-grid five-columns">
+                  <label class="field"><span>Max HP</span><input id="enemyMaxHpInput" type="number" step="1" /></label>
+                  <label class="field"><span>Damage</span><input id="enemyDamageInput" type="number" step="1" /></label>
+                  <label class="field"><span>Speed</span><input id="enemySpeedInput" type="number" step="1" /></label>
+                  <label class="field"><span>XP</span><input id="enemyXpInput" type="number" step="1" /></label>
+                  <label class="field"><span>Respawn (s)</span><input id="enemyRespawnSecondsInput" type="number" step="0.1" /></label>
+                </div>
+
+                <div class="split-grid five-columns">
+                  <label class="field"><span>Gold Min</span><input id="enemyGoldMinInput" type="number" step="1" /></label>
+                  <label class="field"><span>Gold Max</span><input id="enemyGoldMaxInput" type="number" step="1" /></label>
+                  <label class="field"><span>Radius</span><input id="enemyRadiusInput" type="number" step="1" /></label>
+                  <label class="field"><span>Aggro Range</span><input id="enemyAggroRangeInput" type="number" step="1" /></label>
+                  <label class="field color-picker-field"><span>Color</span><input id="enemyColorInput" class="color-picker color-picker-sm" type="color" /></label>
+                </div>
+
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Attack Range</span><input id="enemyAttackRangeInput" type="number" step="1" /></label>
+                  <label class="field"><span>Attack Cooldown (s)</span><input id="enemyAttackCooldownInput" type="number" step="0.01" /></label>
+                </div>
+
+                <section class="field-group loot-editor-group">
+                  <div class="inline-json-header">
+                    <h4>Loot Table</h4>
+                    <button id="enemyLootAddButton" class="button secondary small" type="button">Add Loot Entry</button>
+                  </div>
+                  <div id="enemyLootEditor" class="loot-editor"></div>
+                  <div id="enemyLootEmptyState" class="subtle">No loot entries yet.</div>
+                  <span class="subtle">Select items directly from <code>items.json</code>, then set the drop chance from 0 to 1.</span>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="enemyJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="enemyValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="enemyDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+    
+      <section class="tool-view" data-view="npcs">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>NPCs</h2>
+            <div class="inline-actions">
+              <button id="addNpcButton" class="button secondary small">Add</button>
+              <button id="duplicateNpcButton" class="button secondary small">Duplicate</button>
+              <button id="deleteNpcButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="npcSearchInput" type="text" placeholder="Find npc id or name" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="npcEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Vendors</span>
+                <strong id="npcVendorCount">0</strong>
+              </div>
+            </div>
+            <div id="npcList" class="tile-list" role="listbox" aria-label="NPC entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>NPC Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/npcs.json</code> with sprite previews from <code>public/assets/sprites/entities</code></p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateNpcsButton" class="button secondary">Validate</button>
+              <button id="reloadNpcsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected NPC</h3>
+                <span id="selectedNpcLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="npcEmptyState" class="empty-state">
+                <p>Select an NPC entry from the list to begin editing.</p>
+              </div>
+              <form id="npcForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>NPC ID</span>
+                    <input id="npcIdInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="npcNameInput" type="text" />
+                  </label>
+                </div>
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Type</span>
+                    <select id="npcTypeInput">
+                      <option value="quest_giver">quest_giver</option>
+                      <option value="vendor">vendor</option>
+                      <option value="banker">banker</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Fallback Color</span>
+                    <input id="npcColorInput" type="text" placeholder="#C8B060" />
+                  </label>
+                </div>
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="sprite-preview-frame sprite-preview-frame--sm">
+                      <img id="npcPreviewImage" class="sprite-preview-image hidden" alt="Selected NPC sprite preview" />
+                      <div id="npcPreviewFallback" class="sprite-fallback sprite-fallback--sm">
+                        <div id="npcColorPreview" class="color-preview sprite-fallback-color-sm"></div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Sprite Preview</span>
+                        <span id="npcSpriteStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="npcSpritePathLabel">public/assets/sprites/entities/&lt;npcId&gt;.png</code></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <label class="field">
+                  <span>Default Dialog</span>
+                  <textarea id="npcDefaultDialogInput" rows="3"></textarea>
+                </label>
+                <section class="field-group" data-npc-field="questIds">
+                  <div class="inline-json-header row-between">
+                    <h4>Quest IDs</h4>
+                    <button id="npcQuestAddButton" type="button" class="button secondary small">Add Quest</button>
+                  </div>
+                  <div id="npcQuestEditor" class="linked-list-editor"></div>
+                  <p id="npcQuestEmptyState" class="subtle linked-empty">No linked quests.</p>
+                </section>
+                <section class="field-group" data-npc-field="shop">
+                  <div class="inline-json-header row-between">
+                    <h4>Shop Inventory</h4>
+                    <button id="npcShopAddButton" type="button" class="button secondary small">Add Item</button>
+                  </div>
+                  <div id="npcShopEditor" class="linked-list-editor"></div>
+                  <p id="npcShopEmptyState" class="subtle linked-empty">No linked shop items.</p>
+                </section>
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="npcJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="npcValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="npcDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+
+      <section class="tool-view" data-view="quests">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Quests</h2>
+            <div class="inline-actions">
+              <button id="addQuestButton" class="button secondary small">Add</button>
+              <button id="duplicateQuestButton" class="button secondary small">Duplicate</button>
+              <button id="deleteQuestButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="questSearchInput" type="text" placeholder="Find quest id or name" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="questEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Kill Objectives</span>
+                <strong id="questObjectiveCount">0</strong>
+              </div>
+            </div>
+            <div id="questList" class="tile-list" role="listbox" aria-label="Quest entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Quest Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/quests.json</code> with linked NPC, enemy, and item references</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateQuestsButton" class="button secondary">Validate</button>
+              <button id="reloadQuestsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Quest</h3>
+                <span id="selectedQuestLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="questEmptyState" class="empty-state">
+                <p>Select a quest entry from the list to begin editing.</p>
+              </div>
+              <form id="questForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Quest ID</span>
+                    <input id="questIdInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="questNameInput" type="text" />
+                  </label>
+                </div>
+
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Giver NPC</span>
+                    <select id="questGiverInput"></select>
+                  </label>
+                  <label class="field">
+                    <span>Recommended Level</span>
+                    <input id="questLevelInput" type="number" step="1" />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>Description</span>
+                  <textarea id="questDescriptionInput" rows="3"></textarea>
+                </label>
+
+                <section class="field-group">
+                  <div class="inline-json-header row-between">
+                    <h4>Prerequisite Quests</h4>
+                    <button id="questPrereqAddButton" type="button" class="button secondary small">Add Prerequisite</button>
+                  </div>
+                  <div id="questPrereqEditor" class="linked-list-editor"></div>
+                  <p id="questPrereqEmptyState" class="subtle linked-empty">No prerequisite quests.</p>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header row-between">
+                    <h4>Objectives</h4>
+                    <button id="questObjectiveAddButton" type="button" class="button secondary small">Add Objective</button>
+                  </div>
+                  <div id="questObjectivesEditor" class="linked-list-editor"></div>
+                  <p id="questObjectivesEmptyState" class="subtle linked-empty">No objectives yet.</p>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header">
+                    <h4>Rewards</h4>
+                  </div>
+                  <div class="split-grid two-columns">
+                    <label class="field">
+                      <span>XP</span>
+                      <input id="questRewardXpInput" type="number" step="1" />
+                    </label>
+                    <label class="field">
+                      <span>Gold</span>
+                      <input id="questRewardGoldInput" type="number" step="1" />
+                    </label>
+                  </div>
+                  <div class="inline-json-header row-between">
+                    <h4>Reward Items</h4>
+                    <button id="questRewardItemAddButton" type="button" class="button secondary small">Add Item</button>
+                  </div>
+                  <div id="questRewardItemsEditor" class="linked-list-editor"></div>
+                  <p id="questRewardItemsEmptyState" class="subtle linked-empty">No reward items.</p>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header">
+                    <h4>Dialog States</h4>
+                  </div>
+                  <div class="dialog-state-stack">
+                    <div class="dialog-state-card">
+                      <div class="inline-json-header row-between"><h4>not_started</h4><button id="questDialogNotStartedAddButton" type="button" class="button secondary small">Add Option</button></div>
+                      <label class="field"><span>Text</span><textarea id="questDialogNotStartedTextInput" rows="2"></textarea></label>
+                      <div id="questDialogNotStartedOptionsEditor" class="dialog-options-editor"></div>
+                      <p id="questDialogNotStartedOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
+                    </div>
+                    <div class="dialog-state-card">
+                      <div class="inline-json-header row-between"><h4>active</h4><button id="questDialogActiveAddButton" type="button" class="button secondary small">Add Option</button></div>
+                      <label class="field"><span>Text</span><textarea id="questDialogActiveTextInput" rows="2"></textarea></label>
+                      <div id="questDialogActiveOptionsEditor" class="dialog-options-editor"></div>
+                      <p id="questDialogActiveOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
+                    </div>
+                    <div class="dialog-state-card">
+                      <div class="inline-json-header row-between"><h4>ready_to_turn_in</h4><button id="questDialogReadyAddButton" type="button" class="button secondary small">Add Option</button></div>
+                      <label class="field"><span>Text</span><textarea id="questDialogReadyTextInput" rows="2"></textarea></label>
+                      <div id="questDialogReadyOptionsEditor" class="dialog-options-editor"></div>
+                      <p id="questDialogReadyOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
+                    </div>
+                    <div class="dialog-state-card">
+                      <div class="inline-json-header row-between"><h4>completed</h4><button id="questDialogCompletedAddButton" type="button" class="button secondary small">Add Option</button></div>
+                      <label class="field"><span>Text</span><textarea id="questDialogCompletedTextInput" rows="2"></textarea></label>
+                      <div id="questDialogCompletedOptionsEditor" class="dialog-options-editor"></div>
+                      <p id="questDialogCompletedOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="questJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="questValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="questDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view tool-view--full" data-view="playerBase">
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Player Base Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/playerBase.json</code> — base stats before equipment bonuses apply</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validatePlayerBaseButton" class="button secondary">Validate</button>
+              <button id="reloadPlayerBaseButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body playerbase-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Base Stats</h3>
+                <span class="mono subtle">Equipment bonuses stack on top</span>
+              </div>
+
+              <form id="playerBaseForm" class="editor-form" autocomplete="off">
+                <div class="playerbase-stat-group">
+                  <div class="playerbase-stat-label">Combat</div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Max HP</span>
+                      <input id="pbMaxHpInput" type="number" step="1" min="1" />
+                    </label>
+                    <label class="field">
+                      <span>Max Mana</span>
+                      <input id="pbMaxManaInput" type="number" step="1" min="0" />
+                    </label>
+                    <label class="field">
+                      <span>Damage</span>
+                      <input id="pbDamageInput" type="number" step="1" min="0" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="playerbase-stat-group">
+                  <div class="playerbase-stat-label">Movement & Attack</div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Move Speed <span class="subtle">(px/s)</span></span>
+                      <input id="pbMoveSpeedInput" type="number" step="1" min="1" />
+                    </label>
+                    <label class="field">
+                      <span>Attack Range <span class="subtle">(px)</span></span>
+                      <input id="pbAttackRangeInput" type="number" step="1" min="1" />
+                    </label>
+                    <label class="field">
+                      <span>Attack Cooldown <span class="subtle">(s)</span></span>
+                      <input id="pbAttackCooldownInput" type="number" step="0.01" min="0.01" />
+                    </label>
+                  </div>
+                </div>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="playerBaseJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="playerBaseValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="playerBaseDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+    </main>
+  </div>
+
+  <template id="tileListItemTemplate">
+    <button class="tile-list-item" type="button">
+      <span class="swatch"></span>
+      <span class="tile-text">
+        <strong class="tile-name"></strong>
+        <span class="tile-meta"></span>
+      </span>
+    </button>
+  </template>
+
+  <template id="itemListItemTemplate">
+    <button class="tile-list-item" type="button">
+      <span class="swatch item-icon-thumb"></span>
+      <span class="tile-text">
+        <strong class="tile-name"></strong>
+        <span class="tile-meta"></span>
+      </span>
+    </button>
+  </template>
+
+  <template id="enemyListItemTemplate">
+    <button class="tile-list-item" type="button">
+      <span class="swatch item-icon-thumb"></span>
+      <span class="tile-text">
+        <strong class="tile-name"></strong>
+        <span class="tile-meta"></span>
+      </span>
+    </button>
+  </template>
+
+  <div id="scanModal" class="modal-overlay hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="scanModalTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="scanModalTitle">Add tiles from sprite folder</h3>
+          <p id="scanModalSubtitle" class="subtle">Review additions before applying them to the in-memory palette.</p>
+        </div>
+        <button id="scanModalCloseButton" class="icon-button" type="button" aria-label="Close confirmation window">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-stats">
+          <div class="stat-box">
+            <span class="stat-label">New tile IDs</span>
+            <strong id="scanNewCount">0</strong>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Already in palette</span>
+            <strong id="scanExistingCount">0</strong>
+          </div>
+        </div>
+        <div class="field">
+          <span>Sprite folder</span>
+          <code id="scanSpriteDirLabel">public/assets/sprites/tiles</code>
+        </div>
+        <div class="field">
+          <span>Tile IDs to add</span>
+          <div id="scanTileIdList" class="pill-list"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="scanCancelButton" class="button secondary" type="button">Cancel</button>
+        <button id="scanConfirmButton" class="button primary" type="button">Add to palette</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,3 +1,5 @@
 node_modules/
 *.log
 data/*.db*
+public/assets/bgm/*
+public/assets/sfx/*

@@ -27095,6 +27095,12 @@
       "tx": 30,
       "ty": 34,
       "floor": 0
+    },
+    {
+      "npcId": "banker_tomas",
+      "tx": 24,
+      "ty": 31,
+      "floor": 0
     }
   ],
   "statues": [

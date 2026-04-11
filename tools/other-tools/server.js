@@ -1,0 +1,356 @@
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const url = require('url');
+
+const PORT = 5127;
+const TOOL_ROOT = __dirname;
+
+const TILE_PALETTE_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/tilePalette.json'),
+  path.resolve(process.cwd(), '../../public/data/tilePalette.json'),
+  path.resolve(process.cwd(), 'public/data/tilePalette.json'),
+  path.resolve(process.cwd(), '../public/data/tilePalette.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/tilePalette.json'),
+];
+const ITEMS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/items.json'),
+  path.resolve(process.cwd(), '../../public/data/items.json'),
+  path.resolve(process.cwd(), 'public/data/items.json'),
+  path.resolve(process.cwd(), '../public/data/items.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/items.json'),
+];
+const ENEMIES_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/enemies.json'),
+  path.resolve(process.cwd(), '../../public/data/enemies.json'),
+  path.resolve(process.cwd(), 'public/data/enemies.json'),
+  path.resolve(process.cwd(), '../public/data/enemies.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/enemies.json'),
+];
+const NPCS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/npcs.json'),
+  path.resolve(process.cwd(), '../../public/data/npcs.json'),
+  path.resolve(process.cwd(), 'public/data/npcs.json'),
+  path.resolve(process.cwd(), '../public/data/npcs.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/npcs.json'),
+];
+const QUESTS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/quests.json'),
+  path.resolve(process.cwd(), '../../public/data/quests.json'),
+  path.resolve(process.cwd(), 'public/data/quests.json'),
+  path.resolve(process.cwd(), '../public/data/quests.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/quests.json'),
+];
+const PLAYER_BASE_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/playerBase.json'),
+  path.resolve(process.cwd(), '../../public/data/playerBase.json'),
+  path.resolve(process.cwd(), 'public/data/playerBase.json'),
+  path.resolve(process.cwd(), '../public/data/playerBase.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/playerBase.json'),
+];
+const TILE_SPRITE_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sprites/tiles'),
+  path.resolve(process.cwd(), '../../public/assets/sprites/tiles'),
+  path.resolve(process.cwd(), 'public/assets/sprites/tiles'),
+  path.resolve(process.cwd(), '../public/assets/sprites/tiles'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/tiles'),
+];
+const ENTITY_SPRITE_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sprites/entities'),
+  path.resolve(process.cwd(), '../../public/assets/sprites/entities'),
+  path.resolve(process.cwd(), 'public/assets/sprites/entities'),
+  path.resolve(process.cwd(), '../public/assets/sprites/entities'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/entities'),
+];
+const ITEM_ICON_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sprites/icons'),
+  path.resolve(process.cwd(), '../../public/assets/sprites/icons'),
+  path.resolve(process.cwd(), 'public/assets/sprites/icons'),
+  path.resolve(process.cwd(), '../public/assets/sprites/icons'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/icons'),
+];
+
+function firstExisting(candidates) {
+  for (const candidate of candidates) if (fs.existsSync(candidate)) return candidate;
+  return candidates[0];
+}
+function resolveExistingTilePalettePath() { return firstExisting(TILE_PALETTE_CANDIDATES); }
+function resolveExistingItemsPath() { return firstExisting(ITEMS_CANDIDATES); }
+function resolveExistingEnemiesPath() { return firstExisting(ENEMIES_CANDIDATES); }
+function resolveExistingNpcsPath() { return firstExisting(NPCS_CANDIDATES); }
+function resolveExistingQuestsPath() { return firstExisting(QUESTS_CANDIDATES); }
+function resolveExistingPlayerBasePath() { return firstExisting(PLAYER_BASE_CANDIDATES); }
+function resolveExistingTileSpriteDir() { return firstExisting(TILE_SPRITE_DIR_CANDIDATES); }
+function resolveExistingEntitySpriteDir() { return firstExisting(ENTITY_SPRITE_DIR_CANDIDATES); }
+function resolveExistingItemIconDir() { return firstExisting(ITEM_ICON_DIR_CANDIDATES); }
+
+function listTileSpriteIds() {
+  const dir = resolveExistingTileSpriteDir();
+  if (!fs.existsSync(dir)) throw new Error(`Tile sprite directory not found: ${dir}`);
+  const ids = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile() && path.extname(e.name).toLowerCase() === '.png').map(e => path.basename(e.name, '.png')).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  return { dir, ids };
+}
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+};
+function sendJson(res, statusCode, payload) { res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(payload, null, 2)); }
+function sendText(res, statusCode, text) { res.writeHead(statusCode, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(text); }
+function serveFile(res, filePath) {
+  fs.readFile(filePath, (err, data) => {
+    if (err) return sendText(res, 404, 'Not found');
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+}
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; if (raw.length > 5 * 1024 * 1024) { reject(new Error('Request body too large')); req.destroy(); } });
+    req.on('end', () => resolve(raw));
+    req.on('error', reject);
+  });
+}
+function validateTilePalette(tilePalette) {
+  if (!tilePalette || typeof tilePalette !== 'object' || Array.isArray(tilePalette)) return 'tilePalette must be an object keyed by tile id.';
+  for (const [key, entry] of Object.entries(tilePalette)) {
+    if (!key.trim()) return 'Tile ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    if (!Array.isArray(entry.color) || entry.color.length !== 3) return `Entry for "${key}" must contain color: [r, g, b].`;
+    for (const channel of entry.color) if (!Number.isInteger(channel) || channel < 0 || channel > 255) return `Entry for "${key}" has a color channel outside 0-255.`;
+    if (typeof entry.blocked !== 'boolean') return `Entry for "${key}" must contain blocked: boolean.`;
+  }
+  return null;
+}
+function validateEnemies(enemies) {
+  if (!enemies || typeof enemies !== 'object' || Array.isArray(enemies)) return 'enemies must be an object keyed by enemy id.';
+  for (const [key, entry] of Object.entries(enemies)) {
+    if (!key.trim()) return 'Enemy ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    for (const field of ['name','color']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    for (const field of ['maxHp','damage','speed','xp','goldMin','goldMax','respawnSeconds','radius','aggroRange','attackRange','attackCooldown']) if (typeof entry[field] !== 'number' || Number.isNaN(entry[field])) return `Entry for "${key}" must contain ${field}: number.`;
+    if (!Array.isArray(entry.loot)) return `Entry for "${key}" must contain loot: array.`;
+    for (const lootEntry of entry.loot) {
+      if (!lootEntry || typeof lootEntry !== 'object' || Array.isArray(lootEntry)) return `Entry for "${key}" has invalid loot entry.`;
+      if (typeof lootEntry.itemId !== 'string') return `Entry for "${key}" loot.itemId must be a string.`;
+      if (typeof lootEntry.chance !== 'number' || Number.isNaN(lootEntry.chance)) return `Entry for "${key}" loot.chance must be a number.`;
+    }
+  }
+  return null;
+}
+function validateItems(items) {
+  const validTypes = new Set(['weapon','armor','trinket','consumable','junk','hearthstone']);
+  if (!items || typeof items !== 'object' || Array.isArray(items)) return 'items must be an object keyed by item id.';
+  for (const [key, entry] of Object.entries(items)) {
+    if (!key.trim()) return 'Item ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    for (const field of ['id','name','type','icon','description']) {
+      if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    }
+    if (!validTypes.has(entry.type)) return `Entry for "${key}" has invalid type "${entry.type}".`;
+    if (typeof entry.value !== 'number' || Number.isNaN(entry.value)) return `Entry for "${key}" must contain value: number.`;
+  }
+  return null;
+}
+function validateNpcs(npcs) {
+  const validTypes = new Set(['quest_giver','vendor','banker']);
+  if (!npcs || typeof npcs !== 'object' || Array.isArray(npcs)) return 'npcs must be an object keyed by npc id.';
+  for (const [key, entry] of Object.entries(npcs)) {
+    if (!key.trim()) return 'NPC ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    for (const field of ['id','name','color','type','defaultDialog']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    if (!validTypes.has(entry.type)) return `Entry for "${key}" has invalid type "${entry.type}".`;
+    if (entry.type === 'quest_giver' && entry.questIds && !Array.isArray(entry.questIds)) return `Entry for "${key}" questIds must be an array.`;
+    if (entry.type === 'vendor' && entry.shop && !Array.isArray(entry.shop)) return `Entry for "${key}" shop must be an array.`;
+  }
+  return null;
+}
+
+
+function validateQuests(quests) {
+  if (!quests || typeof quests !== 'object' || Array.isArray(quests)) return 'quests must be an object keyed by quest id.';
+  for (const [key, entry] of Object.entries(quests)) {
+    if (!key.trim()) return 'Quest ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    for (const field of ['id','name','giver','description']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    if (typeof entry.level !== 'number' || Number.isNaN(entry.level)) return `Entry for "${key}" must contain level: number.`;
+    if (!Array.isArray(entry.prerequisiteQuests)) return `Entry for "${key}" prerequisiteQuests must be an array.`;
+    if (!Array.isArray(entry.objectives)) return `Entry for "${key}" objectives must be an array.`;
+    for (const obj of entry.objectives) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return `Entry for "${key}" has invalid objective.`;
+      for (const field of ['type','target','label']) if (typeof obj[field] !== 'string') return `Entry for "${key}" objective must contain ${field}: string.`;
+      if (typeof obj.count !== 'number' || Number.isNaN(obj.count)) return `Entry for "${key}" objective.count must be a number.`;
+    }
+    if (!entry.rewards || typeof entry.rewards !== 'object' || Array.isArray(entry.rewards)) return `Entry for "${key}" rewards must be an object.`;
+    for (const field of ['xp','gold']) if (typeof entry.rewards[field] !== 'number' || Number.isNaN(entry.rewards[field])) return `Entry for "${key}" rewards.${field} must be a number.`;
+    if (!Array.isArray(entry.rewards.items)) return `Entry for "${key}" rewards.items must be an array.`;
+    if (!entry.dialog || typeof entry.dialog !== 'object' || Array.isArray(entry.dialog)) return `Entry for "${key}" dialog must be an object.`;
+    for (const state of ['not_started','active','ready_to_turn_in','completed']) {
+      const d = entry.dialog[state];
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return `Entry for "${key}" dialog.${state} must be an object.`;
+      if (typeof d.text !== 'string') return `Entry for "${key}" dialog.${state}.text must be a string.`;
+      if (!Array.isArray(d.options)) return `Entry for "${key}" dialog.${state}.options must be an array.`;
+    }
+  }
+  return null;
+}
+
+function validatePlayerBase(pb) {
+  if (!pb || typeof pb !== 'object' || Array.isArray(pb)) return 'playerBase must be a flat object.';
+  for (const field of ['moveSpeed','attackRange','attackCooldown','maxHp','maxMana','damage']) {
+    if (typeof pb[field] !== 'number' || Number.isNaN(pb[field])) return `playerBase must contain ${field}: number.`;
+  }
+  return null;
+}
+
+function safeAssetPath(root, basename) {
+  const filePath = path.join(root, `${basename}.png`);
+  const normalized = path.normalize(filePath);
+  const normalizedRoot = path.normalize(root);
+  if (!normalized.startsWith(normalizedRoot)) return null;
+  return normalized;
+}
+
+const server = http.createServer(async (req, res) => {
+  const parsed = url.parse(req.url, true);
+  const pathname = decodeURIComponent(parsed.pathname || '/');
+
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname === '/api/player-base' && req.method === 'GET') {
+    try { return sendJson(res, 200, { playerBase: JSON.parse(await fs.promises.readFile(resolveExistingPlayerBasePath(), 'utf8')), path: resolveExistingPlayerBasePath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingPlayerBasePath() }); }
+  }
+  if (pathname === '/api/player-base' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validatePlayerBase(body.playerBase);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingPlayerBasePath();
+      await fs.promises.writeFile(p, JSON.stringify(body.playerBase, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingPlayerBasePath() }); }
+  }
+
+  if (pathname === '/api/tile-palette' && req.method === 'GET') {
+    try { return sendJson(res, 200, { tilePalette: JSON.parse(await fs.promises.readFile(resolveExistingTilePalettePath(), 'utf8')), path: resolveExistingTilePalettePath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingTilePalettePath() }); }
+  }
+  if (pathname === '/api/items' && req.method === 'GET') {
+    try { return sendJson(res, 200, { items: JSON.parse(await fs.promises.readFile(resolveExistingItemsPath(), 'utf8')), path: resolveExistingItemsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingItemsPath() }); }
+  }
+  if (pathname === '/api/enemies' && req.method === 'GET') {
+    try { return sendJson(res, 200, { enemies: JSON.parse(await fs.promises.readFile(resolveExistingEnemiesPath(), 'utf8')), path: resolveExistingEnemiesPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingEnemiesPath() }); }
+  }
+  if (pathname === '/api/npcs' && req.method === 'GET') {
+    try { return sendJson(res, 200, { npcs: JSON.parse(await fs.promises.readFile(resolveExistingNpcsPath(), 'utf8')), path: resolveExistingNpcsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingNpcsPath() }); }
+  }
+  if (pathname === '/api/quests' && req.method === 'GET') {
+    try { return sendJson(res, 200, { quests: JSON.parse(await fs.promises.readFile(resolveExistingQuestsPath(), 'utf8')), path: resolveExistingQuestsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingQuestsPath() }); }
+  }
+  if (pathname.startsWith('/api/tile-sprite/') && req.method === 'GET') {
+    try {
+      const tileId = pathname.replace('/api/tile-sprite/', '').trim(); if (!tileId) return sendText(res, 400, 'Missing tile id');
+      const spritePath = safeAssetPath(resolveExistingTileSpriteDir(), tileId); if (!spritePath) return sendText(res, 403, 'Forbidden');
+      return serveFile(res, spritePath);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname.startsWith('/api/entity-sprite/') && req.method === 'GET') {
+    try {
+      const entityId = pathname.replace('/api/entity-sprite/', '').trim(); if (!entityId) return sendText(res, 400, 'Missing entity id');
+      const entityPath = safeAssetPath(resolveExistingEntitySpriteDir(), entityId); if (!entityPath) return sendText(res, 403, 'Forbidden');
+      return serveFile(res, entityPath);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname.startsWith('/api/item-icon/') && req.method === 'GET') {
+    try {
+      const iconId = pathname.replace('/api/item-icon/', '').trim(); if (!iconId) return sendText(res, 400, 'Missing icon id');
+      const iconPath = safeAssetPath(resolveExistingItemIconDir(), iconId); if (!iconPath) return sendText(res, 403, 'Forbidden');
+      return serveFile(res, iconPath);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname === '/api/tile-sprites/scan' && req.method === 'GET') {
+    try {
+      const { dir, ids } = listTileSpriteIds();
+      let tilePalette = {};
+      const tilePalettePath = resolveExistingTilePalettePath();
+      if (fs.existsSync(tilePalettePath)) tilePalette = JSON.parse(await fs.promises.readFile(tilePalettePath, 'utf8'));
+      const existingIds = new Set(Object.keys(tilePalette || {}));
+      return sendJson(res, 200, { spriteDir: dir, tilePalettePath, totalSprites: ids.length, totalPaletteEntries: existingIds.size, newIds: ids.filter(id => !existingIds.has(id)), existingSpriteIds: ids.filter(id => existingIds.has(id)) });
+    } catch (error) { return sendJson(res, 500, { error: error.message, spriteDir: resolveExistingTileSpriteDir() }); }
+  }
+  if (pathname === '/api/tile-palette' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateTilePalette(body.tilePalette);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingTilePalettePath();
+      await fs.promises.writeFile(p, JSON.stringify(body.tilePalette, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingTilePalettePath() }); }
+  }
+  if (pathname === '/api/items' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateItems(body.items);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingItemsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.items, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingItemsPath() }); }
+  }
+  if (pathname === '/api/enemies' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateEnemies(body.enemies);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingEnemiesPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.enemies, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingEnemiesPath() }); }
+  }
+  if (pathname === '/api/npcs' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateNpcs(body.npcs);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingNpcsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.npcs, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingNpcsPath() }); }
+  }
+  if (pathname === '/api/quests' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateQuests(body.quests);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingQuestsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.quests, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingQuestsPath() }); }
+  }
+
+  let filePath = path.join(TOOL_ROOT, pathname === '/' ? 'index.html' : pathname.replace(/^\//, ''));
+  filePath = path.normalize(filePath);
+  if (!filePath.startsWith(TOOL_ROOT)) return sendText(res, 403, 'Forbidden');
+  fs.stat(filePath, (err, stat) => { if (!err && stat.isFile()) return serveFile(res, filePath); sendText(res, 404, 'Not found'); });
+});
+
+server.listen(PORT, () => {
+  console.log(`Azerfall Tools server running at http://localhost:${PORT}`);
+  console.log(`Tile palette target: ${resolveExistingTilePalettePath()}`);
+  console.log(`Items target: ${resolveExistingItemsPath()}`);
+  console.log(`Enemies target: ${resolveExistingEnemiesPath()}`);
+  console.log(`NPCs target: ${resolveExistingNpcsPath()}`);
+  console.log(`Quests target: ${resolveExistingQuestsPath()}`);
+  console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);
+  console.log(`Tile sprite dir: ${resolveExistingTileSpriteDir()}`);
+  console.log(`Entity sprite dir: ${resolveExistingEntitySpriteDir()}`);
+  console.log(`Item icon dir: ${resolveExistingItemIconDir()}`);
+});

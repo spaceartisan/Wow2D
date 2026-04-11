@@ -91,7 +91,7 @@ export class Game {
     this.ui.addMessage("Welcome to Azerfall, a frontier of old roads and deep woods.");
     this.ui.addMessage("WASD to move. Click an enemy to target. E to interact.");
     this.ui.addMessage("I inventory, C equipment, L quest log, P character, K skills.");
-    this.ui.addMessage("1 attack, 2 heal. Enter to chat. Esc for menu.");
+    this.ui.addMessage("1 attack, 2 heal, 3-0 hotbar. Drag items to hotbar/bank. Enter to chat.");
 
     this._rafId = requestAnimationFrame(this._boundLoop = (t) => this.loop(t));
   }
@@ -202,11 +202,43 @@ export class Game {
     }
 
     if (this.input.wasPressed("1")) {
-      this.combat.useAttackAbility();
+      this.ui.activateHotbarSlot(0);
     }
 
     if (this.input.wasPressed("2")) {
-      this.combat.useMinorHeal();
+      this.ui.activateHotbarSlot(1);
+    }
+
+    if (this.input.wasPressed("3")) {
+      this.ui.activateHotbarSlot(2);
+    }
+
+    if (this.input.wasPressed("4")) {
+      this.ui.activateHotbarSlot(3);
+    }
+
+    if (this.input.wasPressed("5")) {
+      this.ui.activateHotbarSlot(4);
+    }
+
+    if (this.input.wasPressed("6")) {
+      this.ui.activateHotbarSlot(5);
+    }
+
+    if (this.input.wasPressed("7")) {
+      this.ui.activateHotbarSlot(6);
+    }
+
+    if (this.input.wasPressed("8")) {
+      this.ui.activateHotbarSlot(7);
+    }
+
+    if (this.input.wasPressed("9")) {
+      this.ui.activateHotbarSlot(8);
+    }
+
+    if (this.input.wasPressed("0")) {
+      this.ui.activateHotbarSlot(9);
     }
 
     if (this.input.wasPressed("e")) {
@@ -227,7 +259,9 @@ export class Game {
 
     if (this.input.wasPressed("escape")) {
       // Close any open panels first, otherwise toggle game menu
-      if (this.ui.shopOpen) {
+      if (this.ui.bankOpen) {
+        this.ui.closeBank();
+      } else if (this.ui.shopOpen) {
         this.ui.closeShop();
       } else if (this.ui.npcDialogOpen) {
         this.ui.closeNpcDialog();

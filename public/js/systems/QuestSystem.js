@@ -124,7 +124,7 @@ export class QuestSystem {
       }
     }
 
-    // Non-quest NPC dialog (or vendor with no quests)
+    // Non-quest NPC dialog (or vendor/banker with no quests)
     const actions = [];
     if (npc.shop && npc.shop.length > 0) {
       actions.push({
@@ -132,6 +132,16 @@ export class QuestSystem {
         callback: () => {
           this.game.ui.closeNpcDialog();
           this.game.ui.openShop(npc.id, npc.shop);
+        },
+        closesDialog: false
+      });
+    }
+    if (npc.type === "banker") {
+      actions.push({
+        label: "Open Bank",
+        callback: () => {
+          this.game.ui.closeNpcDialog();
+          this.game.ui.openBank();
         },
         closesDialog: false
       });

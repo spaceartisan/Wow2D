@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azerfall Admin</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <!-- Login overlay -->
+  <div id="login-overlay" class="overlay">
+    <div class="login-box">
+      <h1>Azerfall Admin</h1>
+      <input type="password" id="admin-key" placeholder="Admin Key" autofocus>
+      <button id="login-btn">Login</button>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div id="app" class="hidden">
+    <nav id="sidebar">
+      <div class="logo">Azerfall<br><span>Admin Panel</span></div>
+      <ul>
+        <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
+        <li><a href="#" data-tab="players">Online Players</a></li>
+        <li><a href="#" data-tab="accounts">Accounts</a></li>
+        <li><a href="#" data-tab="characters">Characters</a></li>
+        <li><a href="#" data-tab="maps">Maps</a></li>
+        <li><a href="#" data-tab="tools">Tools</a></li>
+      </ul>
+    </nav>
+
+    <main id="content">
+      <!-- Dashboard -->
+      <section id="tab-dashboard" class="tab active">
+        <h2>Dashboard</h2>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="stat-online">-</div>
+            <div class="stat-label">Online Players</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-accounts">-</div>
+            <div class="stat-label">Total Accounts</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-characters">-</div>
+            <div class="stat-label">Total Characters</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-sessions">-</div>
+            <div class="stat-label">Active Sessions</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-gold">-</div>
+            <div class="stat-label">Total Gold (Economy)</div>
+          </div>
+        </div>
+        <div class="dashboard-row">
+          <div class="panel">
+            <h3>Class Distribution</h3>
+            <div id="class-dist"></div>
+          </div>
+          <div class="panel">
+            <h3>Map Population</h3>
+            <div id="map-pop"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Online Players -->
+      <section id="tab-players" class="tab">
+        <h2>Online Players <button class="btn-sm" onclick="loadPlayers()">Refresh</button></h2>
+        <table id="players-table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Class</th><th>Level</th><th>Map</th><th>X, Y</th>
+              <th>HP</th><th>Mana</th><th>Gold</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="players-empty" class="empty-msg hidden">No players online.</p>
+      </section>
+
+      <!-- Accounts -->
+      <section id="tab-accounts" class="tab">
+        <h2>Accounts <button class="btn-sm" onclick="loadAccounts()">Refresh</button></h2>
+        <table id="accounts-table">
+          <thead>
+            <tr><th>Username</th><th>Created</th><th>Actions</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- Characters -->
+      <section id="tab-characters" class="tab">
+        <h2>All Characters <button class="btn-sm" onclick="loadCharacters()">Refresh</button></h2>
+        <table id="characters-table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Name</th><th>Class</th><th>Level</th>
+              <th>Gold</th><th>Account</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- Maps -->
+      <section id="tab-maps" class="tab">
+        <h2>Maps</h2>
+        <div id="maps-list" class="card-grid"></div>
+      </section>
+
+      <!-- Tools -->
+      <section id="tab-tools" class="tab">
+        <h2>Server Tools</h2>
+        <div class="tools-grid">
+          <div class="panel">
+            <h3>Broadcast Message</h3>
+            <input type="text" id="broadcast-msg" placeholder="System message..." maxlength="500">
+            <button class="btn" onclick="broadcastMessage()">Send to All</button>
+          </div>
+          <div class="panel">
+            <h3>Save All Players</h3>
+            <p>Force-save all connected players to the database.</p>
+            <button class="btn" onclick="saveAll()">Save All</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal-overlay" class="overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title"></h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-container"></div>
+
+  <script src="/admin/admin.js"></script>
+</body>
+</html>

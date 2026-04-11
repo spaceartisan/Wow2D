@@ -281,6 +281,24 @@ class ServerWorld {
       equipment: (charData.equipment && typeof charData.equipment === "object") ? charData.equipment : {},
       quests: (charData.quests && typeof charData.quests === "object") ? charData.quests : {},
       hearthstone: (charData.hearthstone && typeof charData.hearthstone === "object") ? charData.hearthstone : null,
+      bank: (() => {
+        const raw = Array.isArray(charData.bank) ? charData.bank : [];
+        const slots = new Array(48).fill(null);
+        for (let i = 0; i < Math.min(raw.length, 48); i++) slots[i] = raw[i] || null;
+        return slots;
+      })(),
+      hotbar: (() => {
+        const raw = Array.isArray(charData.hotbar) ? charData.hotbar : [];
+        const slots = new Array(10).fill(null);
+        // Default: slot 0 = attack, slot 1 = heal
+        const defaults = [
+          { type: "skill", skillId: "attack" },
+          { type: "skill", skillId: "heal" },
+          null, null, null, null, null, null, null, null
+        ];
+        for (let i = 0; i < 10; i++) slots[i] = raw[i] || defaults[i] || null;
+        return slots;
+      })(),
       casting: null    // { type, startedAt, duration, data }
     };
 
@@ -315,6 +333,8 @@ class ServerWorld {
       gold: state.gold,
       quests: state.quests,
       hearthstone: state.hearthstone,
+      bank: state.bank,
+      hotbar: state.hotbar,
       hp: state.hp,
       maxHp: state.maxHp,
       mana: state.mana,
@@ -348,7 +368,9 @@ class ServerWorld {
           inventory: p.inventory || [],
           equipment: p.equipment || {},
           quests: p.quests || {},
-          hearthstone: p.hearthstone || null
+          hearthstone: p.hearthstone || null,
+          bank: p.bank || [],
+          hotbar: p.hotbar || []
         });
       } catch (err) {
         console.error(`[ServerWorld] Failed to save progress for ${p.name}:`, err.message);
@@ -417,6 +439,18 @@ class ServerWorld {
         break;
       case "attune_hearthstone":
         this.handleAttuneHearthstone(player, msg);
+        break;
+      case "bank_deposit":
+        this.handleBankDeposit(player, msg);
+        break;
+      case "bank_withdraw":
+        this.handleBankWithdraw(player, msg);
+        break;
+      case "hotbar_update":
+        this.handleHotbarUpdate(player, msg);
+        break;
+      case "swap_items":
+        this.handleSwapItems(player, msg);
         break;
       case "respawn":
         // client signals it's ready to respawn
@@ -635,6 +669,40 @@ class ServerWorld {
 
   /* ── item actions (use / buy / sell) ────────────────── */
 
+  /** Try to add item to a slot array, stacking if possible. Returns index or -1. */
+  _addItemToSlots(slots, item) {
+    const template = ITEMS[item.id];
+    const maxStack = (template && template.stackSize) || 1;
+
+    // If stackable, try to find existing stack with room
+    if (maxStack > 1) {
+      for (let i = 0; i < slots.length; i++) {
+        const s = slots[i];
+        if (s && s.id === item.id && (s.qty || 1) < maxStack) {
+          s.qty = (s.qty || 1) + (item.qty || 1);
+          if (s.qty > maxStack) {
+            // overflow — need more slots
+            const overflow = s.qty - maxStack;
+            s.qty = maxStack;
+            // place overflow in new slot
+            const overflowItem = { ...item, qty: overflow };
+            return this._addItemToSlots(slots, overflowItem) >= 0 ? i : i;
+          }
+          return i;
+        }
+      }
+    }
+
+    // No existing stack or unstackable — find empty slot
+    for (let i = 0; i < slots.length; i++) {
+      if (!slots[i]) {
+        slots[i] = { ...item, qty: item.qty || 1 };
+        return i;
+      }
+    }
+    return -1; // full
+  }
+
   handleUseItem(player, msg) {
     if (player.dead) return;
     const index = Number(msg.index);
@@ -647,15 +715,23 @@ class ServerWorld {
     const template = ITEMS[item.id];
     if (!template) return;
 
+    // Decrement stack or remove
+    const qty = item.qty || 1;
+    if (qty > 1) {
+      item.qty = qty - 1;
+    } else {
+      inventory[index] = null;
+    }
+
     if (template.effect === "healHp") {
       const before = player.hp;
       player.hp = Math.min(player.maxHp, player.hp + template.power);
       const healed = player.hp - before;
-      inventory[index] = null;
       this.send(player.ws, {
         type: "use_item_result",
         ok: true,
         index,
+        remainingItem: inventory[index],
         effect: "healHp",
         amount: healed,
         hp: player.hp,
@@ -667,11 +743,11 @@ class ServerWorld {
       const before = player.mana;
       player.mana = Math.min(player.maxMana, player.mana + template.power);
       const restored = player.mana - before;
-      inventory[index] = null;
       this.send(player.ws, {
         type: "use_item_result",
         ok: true,
         index,
+        remainingItem: inventory[index],
         effect: "healMana",
         amount: restored,
         hp: player.hp,
@@ -719,16 +795,22 @@ class ServerWorld {
       return;
     }
 
-    // sell for half value (floor)
+    // sell for half value (floor) — sells one from stack
     const sellPrice = Math.max(1, Math.floor(template.value / 2));
     player.gold += sellPrice;
     const soldName = item.name;
-    inventory[index] = null;
+    const qty = item.qty || 1;
+    if (qty > 1) {
+      item.qty = qty - 1;
+    } else {
+      inventory[index] = null;
+    }
 
     this.send(player.ws, {
       type: "sell_item_result",
       ok: true,
       index,
+      remainingItem: inventory[index],
       gold: player.gold,
       soldName,
       sellPrice
@@ -766,25 +848,22 @@ class ServerWorld {
       return;
     }
 
-    // Check inventory space
+    // Check inventory space (stacking or free slot)
     const inventory = player.inventory;
-    let freeSlot = -1;
-    for (let i = 0; i < inventory.length; i++) {
-      if (!inventory[i]) { freeSlot = i; break; }
-    }
-    if (freeSlot === -1) {
+    const newItem = { ...template, qty: 1 };
+    const addIndex = this._addItemToSlots(inventory, newItem);
+    if (addIndex === -1) {
       this.send(player.ws, { type: "buy_item_result", ok: false, reason: "inventory_full" });
       return;
     }
 
     player.gold -= buyPrice;
-    inventory[freeSlot] = { ...template };
 
     this.send(player.ws, {
       type: "buy_item_result",
       ok: true,
-      item: inventory[freeSlot],
-      index: freeSlot,
+      item: inventory[addIndex],
+      index: addIndex,
       gold: player.gold,
       buyPrice
     });
@@ -862,17 +941,14 @@ class ServerWorld {
     // Grant gold
     if (rewards.gold) player.gold = (player.gold || 0) + rewards.gold;
 
-    // Grant items
+    // Grant items (with stacking)
     for (const itemId of (rewards.items || [])) {
       const template = ITEMS[itemId];
       if (!template) continue;
-      let placed = -1;
-      for (let i = 0; i < player.inventory.length; i++) {
-        if (!player.inventory[i]) { placed = i; break; }
-      }
+      const newItem = { ...template, qty: 1 };
+      const placed = this._addItemToSlots(player.inventory, newItem);
       if (placed !== -1) {
-        player.inventory[placed] = { ...template };
-        rewardItems.push({ item: { ...template }, index: placed });
+        rewardItems.push({ item: player.inventory[placed], index: placed });
       }
     }
 
@@ -988,6 +1064,188 @@ class ServerWorld {
       player.casting = null;
       this.send(player.ws, { type: "hearthstone_cast_cancelled", reason: "manual" });
     }
+  }
+
+  /* ── bank actions ───────────────────────────────────── */
+
+  _isNearBanker(player) {
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return false;
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const npcsOnMap = mapEntry.data.npcs || [];
+    return npcsOnMap.some(npcPlacement => {
+      const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
+      if (!npcDef || npcDef.type !== "banker") return false;
+      const npcX = npcPlacement.tx * tileSize;
+      const npcY = npcPlacement.ty * tileSize;
+      return dist(player.x, player.y, npcX, npcY) < tileSize * 1.5;
+    });
+  }
+
+  handleBankDeposit(player, msg) {
+    if (player.dead) return;
+    if (!this._isNearBanker(player)) {
+      this.send(player.ws, { type: "bank_result", ok: false, reason: "too_far" });
+      return;
+    }
+    const invIndex = Number(msg.invIndex);
+    if (!Number.isInteger(invIndex) || invIndex < 0 || invIndex >= 20) return;
+
+    const item = player.inventory[invIndex];
+    if (!item) return;
+
+    // Cannot bank permanent items
+    const template = ITEMS[item.id];
+    if (template && template.permanent) {
+      this.send(player.ws, { type: "bank_result", ok: false, reason: "permanent" });
+      return;
+    }
+
+    const bankIndex = this._addItemToSlots(player.bank, { ...item });
+    if (bankIndex === -1) {
+      this.send(player.ws, { type: "bank_result", ok: false, reason: "bank_full" });
+      return;
+    }
+    player.inventory[invIndex] = null;
+
+    this.send(player.ws, {
+      type: "bank_result",
+      ok: true,
+      action: "deposit",
+      invIndex,
+      bankIndex,
+      inventory: player.inventory,
+      bank: player.bank
+    });
+  }
+
+  handleBankWithdraw(player, msg) {
+    if (player.dead) return;
+    if (!this._isNearBanker(player)) {
+      this.send(player.ws, { type: "bank_result", ok: false, reason: "too_far" });
+      return;
+    }
+    const bankIndex = Number(msg.bankIndex);
+    if (!Number.isInteger(bankIndex) || bankIndex < 0 || bankIndex >= 48) return;
+
+    const item = player.bank[bankIndex];
+    if (!item) return;
+
+    const invIndex = this._addItemToSlots(player.inventory, { ...item });
+    if (invIndex === -1) {
+      this.send(player.ws, { type: "bank_result", ok: false, reason: "inventory_full" });
+      return;
+    }
+    player.bank[bankIndex] = null;
+
+    this.send(player.ws, {
+      type: "bank_result",
+      ok: true,
+      action: "withdraw",
+      invIndex,
+      bankIndex,
+      inventory: player.inventory,
+      bank: player.bank
+    });
+  }
+
+  /* ── hotbar actions ─────────────────────────────────── */
+
+  handleHotbarUpdate(player, msg) {
+    const slots = msg.hotbar;
+    if (!Array.isArray(slots) || slots.length !== 10) return;
+
+    // Validate each slot
+    for (let i = 0; i < 10; i++) {
+      const s = slots[i];
+      if (s === null) {
+        player.hotbar[i] = null;
+      } else if (s && s.type === "skill" && typeof s.skillId === "string") {
+        player.hotbar[i] = { type: "skill", skillId: s.skillId.slice(0, 32) };
+      } else if (s && s.type === "item" && typeof s.itemId === "string") {
+        // Validate item exists in items DB
+        if (ITEMS[s.itemId]) {
+          player.hotbar[i] = { type: "item", itemId: s.itemId.slice(0, 64) };
+        }
+      }
+    }
+
+    this.send(player.ws, { type: "hotbar_result", ok: true, hotbar: player.hotbar });
+  }
+
+  /* ── inventory swap/move ────────────────────────────── */
+
+  handleSwapItems(player, msg) {
+    if (player.dead) return;
+    const from = Number(msg.from);
+    const to = Number(msg.to);
+    const fromContainer = String(msg.fromContainer || "inventory").slice(0, 20);
+    const toContainer = String(msg.toContainer || "inventory").slice(0, 20);
+
+    const getSlots = (name) => {
+      if (name === "inventory") return player.inventory;
+      if (name === "bank") {
+        if (!this._isNearBanker(player)) return null;
+        return player.bank;
+      }
+      return null;
+    };
+
+    const srcSlots = getSlots(fromContainer);
+    const dstSlots = getSlots(toContainer);
+    if (!srcSlots || !dstSlots) {
+      this.send(player.ws, { type: "swap_result", ok: false, reason: "invalid" });
+      return;
+    }
+
+    if (from < 0 || from >= srcSlots.length || to < 0 || to >= dstSlots.length) {
+      this.send(player.ws, { type: "swap_result", ok: false, reason: "invalid" });
+      return;
+    }
+
+    const srcItem = srcSlots[from];
+    const dstItem = dstSlots[to];
+
+    // Don't allow banking permanent items
+    if (toContainer === "bank" && srcItem) {
+      const template = ITEMS[srcItem.id];
+      if (template && template.permanent) {
+        this.send(player.ws, { type: "swap_result", ok: false, reason: "permanent" });
+        return;
+      }
+    }
+
+    // If same item type and stackable, try to merge
+    if (srcItem && dstItem && srcItem.id === dstItem.id) {
+      const template = ITEMS[srcItem.id];
+      const maxStack = (template && template.stackSize) || 1;
+      if (maxStack > 1) {
+        const total = (srcItem.qty || 1) + (dstItem.qty || 1);
+        if (total <= maxStack) {
+          dstItem.qty = total;
+          srcSlots[from] = null;
+        } else {
+          dstItem.qty = maxStack;
+          srcItem.qty = total - maxStack;
+        }
+        this.send(player.ws, {
+          type: "swap_result", ok: true,
+          inventory: player.inventory,
+          bank: player.bank
+        });
+        return;
+      }
+    }
+
+    // Simple swap
+    srcSlots[from] = dstItem;
+    dstSlots[to] = srcItem;
+
+    this.send(player.ws, {
+      type: "swap_result", ok: true,
+      inventory: player.inventory,
+      bank: player.bank
+    });
   }
 
   _completeCast(player) {
@@ -1238,7 +1496,9 @@ class ServerWorld {
           inventory: p.inventory || [],
           equipment: p.equipment || {},
           quests: p.quests || {},
-          hearthstone: p.hearthstone || null
+          hearthstone: p.hearthstone || null,
+          bank: p.bank || [],
+          hotbar: p.hotbar || []
         });
       } catch (err) {
         console.error(`[ServerWorld] Auto-save failed for ${p.name}:`, err.message);
@@ -1445,12 +1705,11 @@ class ServerWorld {
           player.gold = (player.gold || 0) + drop.gold;
         }
 
-        // Add item to server-side inventory
+        // Add item to server-side inventory (with stacking)
         let lootIndex = -1;
         if (drop.item) {
-          for (let i = 0; i < player.inventory.length; i++) {
-            if (!player.inventory[i]) { lootIndex = i; break; }
-          }
+          const lootItem = { ...drop.item, qty: drop.item.qty || 1 };
+          lootIndex = this._addItemToSlots(player.inventory, lootItem);
           if (lootIndex === -1) {
             // Item can't fit; only pick up gold, leave drop for item
             if (drop.gold > 0) {
@@ -1465,7 +1724,6 @@ class ServerWorld {
             }
             return true; // keep drop alive for item
           }
-          player.inventory[lootIndex] = { ...drop.item };
         }
 
         this.send(player.ws, {
@@ -1473,7 +1731,8 @@ class ServerWorld {
           dropId: drop.id,
           gold: drop.gold,
           item: drop.item,
-          index: lootIndex
+          index: lootIndex,
+          slotItem: lootIndex >= 0 ? player.inventory[lootIndex] : null
         });
 
         this.broadcastToMap(mapId, { type: "drop_removed", dropId: drop.id });

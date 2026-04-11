@@ -32,5 +32,13 @@
     "defaultDialog": "Need something forged? I've got good steel.",
     "questIds": [],
     "shop": ["noviceBlade", "forestBow", "steelLongsword", "stitchedVest", "ironShield", "hardLeatherTunic", "chainmailVest", "amberCharm", "darkwoodTalisman"]
+  },
+  "banker_tomas": {
+    "id": "banker_tomas",
+    "name": "Banker Tomas",
+    "color": "#8cb87a",
+    "type": "banker",
+    "defaultDialog": "Your valuables are safe with me. Need to make a deposit?",
+    "questIds": []
   }
 }

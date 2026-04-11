@@ -41,8 +41,7 @@ http://localhost:3000
 | `WASD` / Arrow keys | Move (8 directions) |
 | Left-click enemy | Target enemy |
 | Left-click player | Target player (friendly) |
-| `1` | Attack ability |
-| `2` | Minor Heal (mana + cooldown) |
+| `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
 | `E` | Interact with nearby NPC or waystone |
 | `I` | Toggle inventory |
 | `C` | Toggle equipment panel |
@@ -95,7 +94,7 @@ http://localhost:3000
 
 ### Persistence
 - SQLite database for accounts, characters, and sessions
-- Character progression saved on disconnect (level, XP, gold, HP, mana, inventory, equipment)
+- Character progression saved on disconnect (level, XP, gold, HP, mana, inventory, equipment, bank, hotbar)
 - Session tokens with 24-hour expiry and periodic cleanup
 - PBKDF2 password hashing with per-account salts
 - Rate-limited auth endpoints
@@ -103,7 +102,10 @@ http://localhost:3000
 ### UI
 - Fantasy-themed HUD with health/mana bars, XP bar, minimap
 - Target panel with HP bar (different style for friendly vs enemy targets)
-- Inventory with drag-and-drop (via DragManager)
+- 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear
+- Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
+- Inventory (20 slots) with drag-and-drop (via DragManager) and item stacking (configurable per-item `stackSize`)
+- Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
 - Equipment panel with weapon/armor/trinket slots
 - Quest tracker, quest log, character sheet, and skills panel
 - NPC dialog system with quest accept/turn-in flow
@@ -143,7 +145,7 @@ public/
     systems/
       AudioManager.js           Background music + SFX
       CombatSystem.js           Client-side targeting + ability use
-      DragManager.js            Inventory drag-and-drop
+      DragManager.js            Panel window dragging + item/skill drag-and-drop with lock support
       EntitySystem.js           Player, NPC, enemy, and drop management
       MinimapSystem.js          Corner minimap + full world map overlay
       NetworkSystem.js           WebSocket client + entity smoothing
