@@ -9,9 +9,9 @@ export class AudioManager {
     this.bgmGain = null;
     this.masterGain = null;
 
-    this.sfxVolume = 0.5;
-    this.bgmVolume = 0.3;
-    this.muted = false;
+    this.sfxVolume = this._loadPref('sfxVolume', 0.5);
+    this.bgmVolume = this._loadPref('bgmVolume', 0.3);
+    this.muted = this._loadPref('muted', false);
 
     this._sfxBuffers = {}; // name -> AudioBuffer
     this._bgmElement = null; // HTMLAudioElement for BGM
@@ -35,6 +35,7 @@ export class AudioManager {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
     this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = this.muted ? 0 : 1;
     this.masterGain.connect(this.ctx.destination);
 
     this.sfxGain = this.ctx.createGain();
@@ -74,15 +75,23 @@ export class AudioManager {
     source.start(0);
   }
 
-  /** Start looping a BGM track (e.g. "overworld"). Stops previous. */
+  /** Start looping a BGM track (e.g. "overworld"). Stops previous.
+   *  Tries .mp3 first, falls back to .wav. */
   playBgm(name) {
     if (!this.ctx) return;
     if (this._currentBgm === name) return;
     this.stopBgm();
 
     this._currentBgm = name;
-    const audio = new Audio(`assets/bgm/${name}.wav`);
+    const audio = new Audio(`assets/bgm/${name}.mp3`);
     audio.loop = true;
+
+    // Fall back to .wav if .mp3 fails to load
+    audio.addEventListener('error', () => {
+      if (audio !== this._bgmElement) return;
+      audio.src = `assets/bgm/${name}.wav`;
+    }, { once: true });
+
     this._bgmElement = audio;
 
     const source = this.ctx.createMediaElementSource(audio);
@@ -105,11 +114,13 @@ export class AudioManager {
   setSfxVolume(v) {
     this.sfxVolume = v;
     if (this.sfxGain) this.sfxGain.gain.value = v;
+    this._savePref('sfxVolume', v);
   }
 
   setBgmVolume(v) {
     this.bgmVolume = v;
     if (this.bgmGain) this.bgmGain.gain.value = v;
+    this._savePref('bgmVolume', v);
   }
 
   toggleMute() {
@@ -117,6 +128,7 @@ export class AudioManager {
     if (this.masterGain) {
       this.masterGain.gain.value = this.muted ? 0 : 1;
     }
+    this._savePref('muted', this.muted);
     return this.muted;
   }
 
@@ -125,5 +137,17 @@ export class AudioManager {
     if (this.masterGain) {
       this.masterGain.gain.value = this.muted ? 0 : 1;
     }
+    this._savePref('muted', muted);
+  }
+
+  _savePref(key, value) {
+    try { localStorage.setItem('audio_' + key, JSON.stringify(value)); } catch (e) {}
+  }
+
+  _loadPref(key, fallback) {
+    try {
+      const v = localStorage.getItem('audio_' + key);
+      return v !== null ? JSON.parse(v) : fallback;
+    } catch (e) { return fallback; }
   }
 }

@@ -69,6 +69,11 @@ export class WorldSystem {
     this.portals = data.portals || [];
     this.safeZones = data.safeZones || [];
 
+    // Play map BGM if specified
+    if (data.bgm && this.game && this.game.audio) {
+      this.game.audio.playBgm(data.bgm);
+    }
+
     // Spawn point (stored as tile coords)
     const sp = data.spawnPoint || [0, 0];
     this.spawnPoint = { x: sp[0] * this.tileSize, y: sp[1] * this.tileSize };
@@ -241,23 +246,29 @@ export class WorldSystem {
       if (bld.floors <= 1) continue;
       const localX = tile.x - bld.ox;
       const localY = tile.y - bld.oy;
-      if (localX < 0 || localY < 0 || localX >= bld.cols || localY >= bld.rows) continue;
+      if (localX < 0 || localY < 0) continue;
+
+      // Check bounds against current floor grid (upper floors can be larger than ground)
+      if (this.currentFloor > 0) {
+        const curGrid = bld.upperFloors[this.currentFloor - 1];
+        if (!curGrid || localY >= curGrid.length || localX >= (curGrid[localY]?.length || 0)) continue;
+      } else {
+        if (localX >= bld.cols || localY >= bld.rows) continue;
+      }
 
       if (onStairsUp && this.currentFloor < bld.upperFloors.length) {
-        // Go up one floor
+        // Go up one floor — player stays at same position
         this.currentFloor++;
         this.insideBuilding = bld;
         this._onStairs = true;
-        const dest = this._findPartnerStairs(bld, this.currentFloor, "stairsDown");
-        return { action: "up", floor: this.currentFloor, building: bld.name, teleport: dest };
+        return { action: "up", floor: this.currentFloor, building: bld.name };
       } else if (onStairsDown && this.currentFloor > 0) {
-        // Go down one floor
+        // Go down one floor — player stays at same position
         this.currentFloor--;
         if (this.currentFloor === 0) this.insideBuilding = null;
         else this.insideBuilding = bld;
         this._onStairs = true;
-        const dest = this._findPartnerStairs(bld, this.currentFloor, "stairs");
-        return { action: "down", floor: this.currentFloor, building: bld.name, teleport: dest };
+        return { action: "down", floor: this.currentFloor, building: bld.name };
       }
     }
     return null;
@@ -277,42 +288,6 @@ export class WorldSystem {
     const idx = floorGrid[ly][lx];
     if (idx < 0) return null; // skip tile (void)
     return this.tilePalette[idx] || null;
-  }
-
-  /**
-   * Find the partner stairs tile on a given floor within a building.
-   * Returns { x, y } in world pixels, or null if not found.
-   * @param {object} bld - the building object
-   * @param {number} floor - the destination floor (0 = ground)
-   * @param {string} targetTile - tile name to look for ("stairs" or "stairsDown")
-   */
-  _findPartnerStairs(bld, floor, targetTile) {
-    const ts = this.tileSize;
-    if (floor === 0) {
-      // Search ground-level terrain inside the building
-      for (let r = 0; r < bld.rows; r++) {
-        for (let c = 0; c < bld.cols; c++) {
-          const wx = bld.ox + c;
-          const wy = bld.oy + r;
-          const idx = this.terrain[wy]?.[wx] ?? 0;
-          if (this.tilePalette[idx]?.name === targetTile) {
-            return { x: wx * ts + ts / 2, y: wy * ts + ts / 2 };
-          }
-        }
-      }
-    } else {
-      // Search the upper floor grid
-      const grid = bld.upperFloors[floor - 1];
-      if (!grid) return null;
-      for (let r = 0; r < grid.length; r++) {
-        for (let c = 0; c < (grid[r]?.length || 0); c++) {
-          if (this.tilePalette[grid[r][c]]?.name === targetTile) {
-            return { x: (bld.ox + c) * ts + ts / 2, y: (bld.oy + r) * ts + ts / 2 };
-          }
-        }
-      }
-    }
-    return null;
   }
 
   drawTerrain(ctx, camera, canvas, sprites) {

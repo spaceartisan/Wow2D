@@ -159,12 +159,11 @@ class CollisionMap {
   _getUpperFloorTile(tileX, tileY, floor) {
     for (const bld of this.buildings) {
       if (bld.floors <= 1) continue;
+      const grid = bld.upperFloors[floor - 1];
+      if (!grid) continue;
       const lx = tileX - bld.ox;
       const ly = tileY - bld.oy;
-      if (lx < 0 || ly < 0 || lx >= bld.cols || ly >= bld.rows) continue;
-      const grid = bld.upperFloors[floor - 1];
-      if (!grid) return null;
-      if (ly >= grid.length || lx >= (grid[ly]?.length || 0)) return null;
+      if (ly < 0 || ly >= grid.length || lx < 0 || lx >= (grid[ly]?.length || 0)) continue;
       const idx = grid[ly][lx];
       if (idx < 0) return null;
       return this.tilePalette[idx] || null;
@@ -192,7 +191,7 @@ class ServerWorld {
   constructor() {
     // Load all maps
     this.maps = new Map();       // mapId → { data, collision, enemies[], drops[] }
-    for (const mapId of ["eldengrove", "darkwood"]) {
+    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern"]) {
       const data = loadMap(mapId);
       const collision = new CollisionMap(data);
       const enemies = this._createEnemiesForMap(data, collision);

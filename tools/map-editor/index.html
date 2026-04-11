@@ -24,6 +24,14 @@
       <label>BGM: <input id="mapBgm" type="text" placeholder="" class="input-sm"></label>
       <label>Spawn: <input id="spawnX" type="number" value="5" min="0" class="input-xs">,<input id="spawnY" type="number" value="5" min="0" class="input-xs"></label>
     </div>
+    <div class="topbar-group" id="floorControls" style="display:none;">
+      <button id="btnFloorDown" title="Go down one floor">▼</button>
+      <span id="floorInfo" style="color:#f9e2af;font-size:11px;font-family:monospace;">F0</span>
+      <button id="btnFloorUp" title="Go up one floor">▲</button>
+      <label style="font-size:11px;">W:<input id="floorWidth" type="number" min="3" max="64" class="input-xs" style="width:42px;"></label>
+      <label style="font-size:11px;">H:<input id="floorHeight" type="number" min="3" max="64" class="input-xs" style="width:42px;"></label>
+      <button id="btnExitFloor" title="Back to ground view">Exit Floor</button>
+    </div>
     <div class="topbar-group">
       <span id="cursorInfo">0, 0</span>
       <span id="zoomInfo">100%</span>
@@ -41,6 +49,7 @@
           <button class="tool-btn" data-tool="erase" title="Erase to index 0 (E)">🧹 Erase</button>
           <button class="tool-btn" data-tool="fill" title="Flood fill (G)">🪣 Fill</button>
           <button class="tool-btn" data-tool="pick" title="Pick tile (Alt+click)">💉 Pick</button>
+          <button class="tool-btn" data-tool="delete" title="Delete object at tile (X)">🗑 Delete</button>
         </div>
         <div>
           <label>Brush: <select id="brushSize">
@@ -93,7 +102,7 @@
 
       <!-- Object list -->
       <section class="panel-section">
-        <h3>Objects <button id="btnClearObj" class="btn-sm" title="Delete selected">🗑</button></h3>
+        <h3>Objects <button id="btnRefreshObjs" class="btn-sm" title="Refresh object list">🔄</button> <button id="btnClearObj" class="btn-sm" title="Delete selected">🗑</button></h3>
         <div id="objectList"></div>
       </section>
     </aside>

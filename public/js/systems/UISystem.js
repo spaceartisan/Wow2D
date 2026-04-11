@@ -241,7 +241,7 @@ export class UISystem {
    * Legacy addMessage — routes to "system" channel for combat log and system messages.
    */
   addMessage(text) {
-    this.addChatMessage("combat", text);
+    this.addChatMessage("system", text);
   }
 
   renderChatMessages() {

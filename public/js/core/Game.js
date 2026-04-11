@@ -19,6 +19,7 @@ export class Game {
     this.onLogout = null; // callback set by main.js
 
     this.world = new WorldSystem();
+    this.world.game = this;
     this.sprites = new SpriteManager();
     this.input = new InputSystem(canvas);
     this.camera = { x: 0, y: 0 };
@@ -70,6 +71,11 @@ export class Game {
 
     // Init audio (needs user gesture — canvas click counts)
     this.audio.init();
+
+    // Play initial map BGM (loadMap ran before audio.init)
+    if (this.world.mapData && this.world.mapData.bgm) {
+      this.audio.playBgm(this.world.mapData.bgm);
+    }
 
     this.entities.recalculateDerivedStats();
     this.centerCameraOnPlayer();
@@ -211,8 +217,6 @@ export class Game {
         const statue = this.entities.getClosestStatueInRange();
         if (statue) {
           this.interactWithStatue(statue);
-        } else {
-          this.ui.addMessage("No one nearby to interact with.");
         }
       }
     }
@@ -257,18 +261,6 @@ export class Game {
   checkStairs(dt) {
     const player = this.entities.player;
     const result = this.world.checkStairs(player.x, player.y, dt);
-    if (result) {
-      // Teleport player to the partner stairs on the destination floor
-      if (result.teleport) {
-        player.x = result.teleport.x;
-        player.y = result.teleport.y;
-      }
-      if (result.floor === 0) {
-        this.ui.addMessage(`Returned to ground floor of ${result.building}.`);
-      } else {
-        this.ui.addMessage(`${result.action === "up" ? "Climbed" : "Descended"} to floor ${result.floor + 1} of ${result.building}.`);
-      }
-    }
   }
 
   async changeMap(mapId, targetTx, targetTy) {

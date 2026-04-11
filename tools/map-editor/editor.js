@@ -43,6 +43,11 @@ const S = {
   selectedObjType: null,   // for object mode context
   selectedObjIndex: -1,
   dragRect: null,          // for rectangle-based placements
+  hoverTile: null,          // [tx, ty] for cursor highlight
+
+  // Floor editing
+  editingFloor: 0,         // 0 = ground, 1+ = upper floor
+  editingBuildingIdx: -1,  // index into S.buildings, -1 = none
 
   // Undo
   undoStack: [],
@@ -159,7 +164,7 @@ async function loadMap(id) {
   S.terrain = data.terrain || [];
   S.portals = data.portals || [];
   S.enemySpawns = data.enemySpawns || [];
-  S.npcs = data.npcs || [];
+  S.npcs = (data.npcs || []).map(n => ({ ...n, floor: n.floor || 0 }));
   S.trees = data.trees || [];
   S.props = data.props || [];
   S.buildings = data.buildings || [];
@@ -172,6 +177,7 @@ async function loadMap(id) {
 
   syncFieldsToUI();
   buildPaletteUI();
+  updateObjectList();
   resizeCanvas();
   render();
 }
@@ -288,22 +294,30 @@ function buildPaletteUI() {
 
 /* ── Canvas sizing ────────────────────────── */
 function resizeCanvas() {
-  canvas.width = S.width * S.tileSize * S.zoom;
-  canvas.height = S.height * S.tileSize * S.zoom;
+  const ft = getFloorTerrain();
+  canvas.width = ft.w * S.tileSize * S.zoom;
+  canvas.height = ft.h * S.tileSize * S.zoom;
 }
 
 /* ── Render ───────────────────────────────── */
 function render() {
-  const w = S.width, h = S.height, ts = S.tileSize, z = S.zoom;
+  const ft = getFloorTerrain();
+  const w = ft.w, h = ft.h, ts = S.tileSize, z = S.zoom;
   const pw = w * ts * z, ph = h * ts * z;
   canvas.width = pw;
   canvas.height = ph;
   ctx.clearRect(0, 0, pw, ph);
 
-  // Terrain
+  // Terrain (ground or upper floor grid)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const idx = S.terrain[y] ? S.terrain[y][x] : 0;
+      const idx = ft.grid[y] ? ft.grid[y][x] : 0;
+      if (idx === -1) {
+        // Void tile on upper floors — draw dark checker
+        ctx.fillStyle = ((x + y) % 2 === 0) ? "#181825" : "#11111b";
+        ctx.fillRect(x * ts * z, y * ts * z, ts * z, ts * z);
+        continue;
+      }
       const name = S.palette[idx];
       const sprite = name ? getSprite(tileSpritePath(name)) : null;
       const dx = x * ts * z, dy = y * ts * z, sz = ts * z;
@@ -334,6 +348,42 @@ function render() {
     ctx.stroke();
   }
 
+  // ── Floor edit mode: only show NPCs on this floor, skip world objects ──
+  if (ft.isFloor) {
+    // Show NPCs assigned to this floor (local coords relative to building)
+    const bld = S.buildings[S.editingBuildingIdx];
+    for (const n of S.npcs) {
+      if ((n.floor || 0) !== S.editingFloor) continue;
+      const lx = n.tx - bld.x, ly = n.ty - bld.y;
+      if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+      const def = S.npcDefs[n.npcId];
+      const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+      const nSprite = getSprite(entitySpritePath(n.npcId));
+      if (nSprite) {
+        ctx.drawImage(nSprite, dx, dy, sz, sz);
+      } else {
+        ctx.fillStyle = def ? def.color : "#d4b17c";
+        const cx = (lx + 0.5) * ts * z, cy = (ly + 0.5) * ts * z;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ts * z * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${8 * z}px sans-serif`;
+      ctx.fillText(def ? def.name : n.npcId, dx, dy - 2);
+    }
+
+    // Floor label overlay
+    ctx.fillStyle = "rgba(249, 226, 175, 0.15)";
+    ctx.fillRect(0, 0, pw, 18 * z);
+    ctx.fillStyle = "#f9e2af";
+    ctx.font = `bold ${11 * z}px sans-serif`;
+    ctx.fillText(`Floor ${S.editingFloor + 1}  —  ${bld.name}`, 4 * z, 13 * z);
+    return;
+  }
+
+  // ── Ground floor rendering (everything) ──
+
   // Extra blocked
   ctx.fillStyle = "rgba(255, 0, 0, 0.25)";
   for (const [bx, by] of S.extraBlocked) {
@@ -352,15 +402,18 @@ function render() {
   }
 
   // Buildings
-  ctx.strokeStyle = "rgba(200, 160, 80, 0.6)";
   ctx.lineWidth = 2;
-  for (const b of S.buildings) {
+  for (let bi = 0; bi < S.buildings.length; bi++) {
+    const b = S.buildings[bi];
+    const isMulti = (b.floors || 1) > 1;
+    ctx.strokeStyle = isMulti ? "rgba(200, 160, 80, 0.9)" : "rgba(200, 160, 80, 0.6)";
     ctx.strokeRect(b.x * ts * z, b.y * ts * z, b.w * ts * z, b.h * ts * z);
-    ctx.fillStyle = "rgba(200, 160, 80, 0.08)";
+    ctx.fillStyle = isMulti ? "rgba(200, 160, 80, 0.15)" : "rgba(200, 160, 80, 0.08)";
     ctx.fillRect(b.x * ts * z, b.y * ts * z, b.w * ts * z, b.h * ts * z);
     ctx.fillStyle = "rgba(200, 160, 80, 0.8)";
     ctx.font = `${10 * z}px sans-serif`;
-    ctx.fillText(b.name || "Building", b.x * ts * z + 2, b.y * ts * z + 11 * z);
+    const floorLabel = isMulti ? ` [${b.floors}F]` : "";
+    ctx.fillText((b.name || "Building") + floorLabel, b.x * ts * z + 2, b.y * ts * z + 11 * z);
   }
 
   // Portals
@@ -426,8 +479,9 @@ function render() {
     }
   }
 
-  // NPCs
+  // NPCs (ground floor only in main view)
   for (const n of S.npcs) {
+    if ((n.floor || 0) !== 0) continue;
     const def = S.npcDefs[n.npcId];
     const dx = n.tx * ts * z, dy = n.ty * ts * z, sz = ts * z;
     const nSprite = getSprite(entitySpritePath(n.npcId));
@@ -477,6 +531,16 @@ function render() {
   ctx.lineTo(sx, sy + 4 * z);
   ctx.stroke();
 
+  // Delete tool hover highlight
+  if (S.tool === "delete" && S.hoverTile) {
+    const [hx, hy] = S.hoverTile;
+    ctx.fillStyle = "rgba(243, 139, 168, 0.35)";
+    ctx.fillRect(hx * ts * z, hy * ts * z, ts * z, ts * z);
+    ctx.strokeStyle = "rgba(243, 139, 168, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hx * ts * z, hy * ts * z, ts * z, ts * z);
+  }
+
   // Drag rectangle preview
   if (S.dragRect) {
     const dr = S.dragRect;
@@ -490,10 +554,11 @@ function render() {
 
 /* ── Tile ↔ Pixel helpers ─────────────────── */
 function pixelToTile(px, py) {
+  const ft = getFloorTerrain();
   const rect = canvas.getBoundingClientRect();
   const x = Math.floor((px - rect.left) / (S.tileSize * S.zoom));
   const y = Math.floor((py - rect.top) / (S.tileSize * S.zoom));
-  return [Math.max(0, Math.min(x, S.width - 1)), Math.max(0, Math.min(y, S.height - 1))];
+  return [Math.max(0, Math.min(x, ft.w - 1)), Math.max(0, Math.min(y, ft.h - 1))];
 }
 
 /* ── Undo / Redo ──────────────────────────── */
@@ -521,33 +586,43 @@ function redo() {
 
 function applyUndoAction(action, isUndo) {
   if (action.type === "terrain") {
+    let grid;
+    if (action.isFloor && action.buildingIdx >= 0 && action.floorIdx >= 0) {
+      const bld = S.buildings[action.buildingIdx];
+      grid = bld && bld.upperFloors ? bld.upperFloors[action.floorIdx] : null;
+    } else {
+      grid = S.terrain;
+    }
+    if (!grid) return;
     for (const { x, y, oldVal, newVal } of action.tiles) {
-      S.terrain[y][x] = isUndo ? oldVal : newVal;
+      if (grid[y]) grid[y][x] = isUndo ? oldVal : newVal;
     }
   }
 }
 
 /* ── Painting ─────────────────────────────── */
 function paintTile(tx, ty) {
+  const ft = getFloorTerrain();
   const bs = S.brushSize;
   const half = Math.floor(bs / 2);
   const val = S.tool === "erase" ? 0 : S.selectedPaletteIdx;
-  if (!S.currentStroke) S.currentStroke = { type: "terrain", tiles: [] };
+  if (!S.currentStroke) S.currentStroke = { type: "terrain", tiles: [], isFloor: ft.isFloor, floorIdx: ft.isFloor ? S.editingFloor - 1 : -1, buildingIdx: S.editingBuildingIdx };
 
   for (let dy = -half; dy < bs - half; dy++) {
     for (let dx = -half; dx < bs - half; dx++) {
       const px = tx + dx, py = ty + dy;
-      if (px < 0 || py < 0 || px >= S.width || py >= S.height) continue;
-      const old = S.terrain[py][px];
+      if (px < 0 || py < 0 || px >= ft.w || py >= ft.h) continue;
+      const old = ft.grid[py][px];
       if (old === val) continue;
-      S.terrain[py][px] = val;
+      ft.grid[py][px] = val;
       S.currentStroke.tiles.push({ x: px, y: py, oldVal: old, newVal: val });
     }
   }
 }
 
 function floodFill(tx, ty) {
-  const target = S.terrain[ty][tx];
+  const ft = getFloorTerrain();
+  const target = ft.grid[ty][tx];
   const replacement = S.selectedPaletteIdx;
   if (target === replacement) return;
 
@@ -559,16 +634,16 @@ function floodFill(tx, ty) {
     const [cx, cy] = stack.pop();
     const key = `${cx},${cy}`;
     if (visited.has(key)) continue;
-    if (cx < 0 || cy < 0 || cx >= S.width || cy >= S.height) continue;
-    if (S.terrain[cy][cx] !== target) continue;
+    if (cx < 0 || cy < 0 || cx >= ft.w || cy >= ft.h) continue;
+    if (ft.grid[cy][cx] !== target) continue;
 
     visited.add(key);
     tiles.push({ x: cx, y: cy, oldVal: target, newVal: replacement });
-    S.terrain[cy][cx] = replacement;
+    ft.grid[cy][cx] = replacement;
     stack.push([cx - 1, cy], [cx + 1, cy], [cx, cy - 1], [cx, cy + 1]);
   }
 
-  if (tiles.length) pushUndo({ type: "terrain", tiles });
+  if (tiles.length) pushUndo({ type: "terrain", tiles, isFloor: ft.isFloor, floorIdx: ft.isFloor ? S.editingFloor - 1 : -1, buildingIdx: S.editingBuildingIdx });
   render();
 }
 
@@ -637,9 +712,18 @@ function placeEnemy(tx, ty) {
 function placeNPC(tx, ty) {
   const npcId = getSelectedNPCId();
   if (!npcId) { alert("Select an NPC in the Properties panel first."); return; }
+  let floor = $("#npcFloor") ? parseInt($("#npcFloor").value) || 0 : 0;
+  let worldTx = tx, worldTy = ty;
+  // In floor edit mode, convert local coords to world coords
+  if (S.editingBuildingIdx >= 0) {
+    const bld = S.buildings[S.editingBuildingIdx];
+    worldTx = tx + bld.x;
+    worldTy = ty + bld.y;
+    floor = S.editingFloor;
+  }
   // Remove if already placed
   S.npcs = S.npcs.filter(n => n.npcId !== npcId);
-  S.npcs.push({ npcId, tx, ty });
+  S.npcs.push({ npcId, tx: worldTx, ty: worldTy, floor });
 }
 
 function placeTree(tx, ty) {
@@ -657,6 +741,122 @@ function placeStatue(tx, ty) {
   const id = `${S.mapId || "map"}_waystone_${S.statues.length + 1}`;
   const name = `Waystone ${S.statues.length + 1}`;
   S.statues.push({ id, name, tx, ty });
+}
+
+function showStatueDialog(idx) {
+  const s = S.statues[idx];
+  if (!s) return;
+  showModal(`
+    <h2>Edit Waystone</h2>
+    <label>ID: <input id="dlgStatueId" type="text" value="${s.id}"></label>
+    <label>Name: <input id="dlgStatueName" type="text" value="${s.name}"></label>
+    <div class="modal-row">
+      <label>TX: <input id="dlgStatueTx" type="number" value="${s.tx}"></label>
+      <label>TY: <input id="dlgStatueTy" type="number" value="${s.ty}"></label>
+    </div>
+    <br>
+    <button class="primary" id="dlgStatueOk">Save</button>
+    <button id="dlgCancel">Cancel</button>
+  `);
+  $("#dlgStatueOk").onclick = () => {
+    S.statues[idx] = {
+      id: $("#dlgStatueId").value.trim(),
+      name: $("#dlgStatueName").value.trim(),
+      tx: parseInt($("#dlgStatueTx").value) || s.tx,
+      ty: parseInt($("#dlgStatueTy").value) || s.ty,
+    };
+    hideModal();
+    updateObjectList();
+    render();
+  };
+  $("#dlgCancel").onclick = hideModal;
+}
+
+function showBuildingEditDialog(idx) {
+  const b = S.buildings[idx];
+  if (!b) return;
+  showModal(`
+    <h2>Edit Building</h2>
+    <label>Name: <input id="dlgBEName" type="text" value="${b.name || ""}"></label>
+    <div class="modal-row">
+      <label>X: <input id="dlgBEX" type="number" value="${b.x}"></label>
+      <label>Y: <input id="dlgBEY" type="number" value="${b.y}"></label>
+      <label>W: <input id="dlgBEW" type="number" value="${b.w}" min="1"></label>
+      <label>H: <input id="dlgBEH" type="number" value="${b.h}" min="1"></label>
+    </div>
+    <label>Floors: <input id="dlgBEFloors" type="number" value="${b.floors || 1}" min="1" max="10"></label>
+    <br><br>
+    <button class="primary" id="dlgBuildingEditOk">Save</button>
+    <button id="dlgCancel">Cancel</button>
+  `);
+  $("#dlgBuildingEditOk").onclick = () => {
+    b.name = $("#dlgBEName").value.trim();
+    b.x = parseInt($("#dlgBEX").value) || b.x;
+    b.y = parseInt($("#dlgBEY").value) || b.y;
+    b.w = Math.max(1, parseInt($("#dlgBEW").value) || b.w);
+    b.h = Math.max(1, parseInt($("#dlgBEH").value) || b.h);
+    const newFloors = Math.max(1, parseInt($("#dlgBEFloors").value) || 1);
+    if (newFloors !== (b.floors || 1)) {
+      b.floors = newFloors;
+      if (newFloors > 1) {
+        if (!b.upperFloors) b.upperFloors = [];
+        // Add missing floor grids
+        while (b.upperFloors.length < newFloors - 1) {
+          const wallIdx = S.palette.indexOf("houseWall");
+          const floorIdx = S.palette.indexOf("houseFloor");
+          const wI = wallIdx >= 0 ? wallIdx : 0;
+          const fI = floorIdx >= 0 ? floorIdx : 0;
+          b.upperFloors.push(
+            Array.from({ length: b.h }, (_, gy) =>
+              Array.from({ length: b.w }, (_, gx) =>
+                (gy === 0 || gy === b.h - 1 || gx === 0 || gx === b.w - 1) ? wI : fI
+              )
+            )
+          );
+        }
+        // Trim excess floor grids
+        if (b.upperFloors.length > newFloors - 1) b.upperFloors.length = newFloors - 1;
+      } else {
+        delete b.floors;
+        delete b.upperFloors;
+      }
+    }
+    hideModal();
+    updateObjectList();
+    render();
+  };
+  $("#dlgCancel").onclick = hideModal;
+}
+
+function showSafezoneDialog(idx) {
+  const sz = S.safeZones[idx];
+  if (!sz) return;
+  showModal(`
+    <h2>Edit Safe Zone</h2>
+    <div class="modal-row">
+      <label>X1: <input id="dlgSZX1" type="number" value="${sz.x1}"></label>
+      <label>Y1: <input id="dlgSZY1" type="number" value="${sz.y1}"></label>
+    </div>
+    <div class="modal-row">
+      <label>X2: <input id="dlgSZX2" type="number" value="${sz.x2}"></label>
+      <label>Y2: <input id="dlgSZY2" type="number" value="${sz.y2}"></label>
+    </div>
+    <br>
+    <button class="primary" id="dlgSZOk">Save</button>
+    <button id="dlgCancel">Cancel</button>
+  `);
+  $("#dlgSZOk").onclick = () => {
+    S.safeZones[idx] = {
+      x1: parseInt($("#dlgSZX1").value) || 0,
+      y1: parseInt($("#dlgSZY1").value) || 0,
+      x2: parseInt($("#dlgSZX2").value) || 0,
+      y2: parseInt($("#dlgSZY2").value) || 0,
+    };
+    hideModal();
+    updateObjectList();
+    render();
+  };
+  $("#dlgCancel").onclick = hideModal;
 }
 
 function toggleBlocked(tx, ty) {
@@ -685,33 +885,43 @@ function hideModal() {
   $("#modalOverlay").classList.add("hidden");
 }
 
-function showPortalDialog(x, y, w, h) {
+function showPortalDialog(x, y, w, h, editIdx) {
+  const isEdit = editIdx !== undefined;
+  const existing = isEdit ? S.portals[editIdx] : null;
   showModal(`
-    <h2>New Portal</h2>
+    <h2>${isEdit ? "Edit" : "New"} Portal</h2>
     <div class="modal-row">
-      <label>X: <input id="dlgPX" type="number" value="${x}" readonly></label>
-      <label>Y: <input id="dlgPY" type="number" value="${y}" readonly></label>
-      <label>W: <input id="dlgPW" type="number" value="${w}" readonly></label>
-      <label>H: <input id="dlgPH" type="number" value="${h}" readonly></label>
+      <label>X: <input id="dlgPX" type="number" value="${existing ? existing.x : x}"></label>
+      <label>Y: <input id="dlgPY" type="number" value="${existing ? existing.y : y}"></label>
+      <label>W: <input id="dlgPW" type="number" value="${existing ? existing.w : w}"></label>
+      <label>H: <input id="dlgPH" type="number" value="${existing ? existing.h : h}"></label>
     </div>
-    <label>Target Map ID: <input id="dlgTargetMap" type="text" placeholder="eldengrove"></label>
+    <label>Target Map ID: <input id="dlgTargetMap" type="text" placeholder="eldengrove" value="${existing ? existing.targetMap : ""}"></label>
     <div class="modal-row">
-      <label>Target TX: <input id="dlgTargetTx" type="number" value="5"></label>
-      <label>Target TY: <input id="dlgTargetTy" type="number" value="5"></label>
+      <label>Target TX: <input id="dlgTargetTx" type="number" value="${existing ? existing.targetTx : 5}"></label>
+      <label>Target TY: <input id="dlgTargetTy" type="number" value="${existing ? existing.targetTy : 5}"></label>
     </div>
-    <label>Label: <input id="dlgLabel" type="text" placeholder="To Eldengrove"></label>
+    <label>Label: <input id="dlgLabel" type="text" placeholder="To Eldengrove" value="${existing ? existing.label : ""}"></label>
     <br><br>
-    <button class="primary" id="dlgPortalOk">Add Portal</button>
+    <button class="primary" id="dlgPortalOk">${isEdit ? "Save" : "Add Portal"}</button>
     <button id="dlgCancel">Cancel</button>
   `);
   $("#dlgPortalOk").onclick = () => {
-    S.portals.push({
-      x, y, w, h,
+    const portal = {
+      x: parseInt($("#dlgPX").value) || 0,
+      y: parseInt($("#dlgPY").value) || 0,
+      w: parseInt($("#dlgPW").value) || 1,
+      h: parseInt($("#dlgPH").value) || 1,
       targetMap: $("#dlgTargetMap").value.trim(),
       targetTx: parseInt($("#dlgTargetTx").value) || 0,
       targetTy: parseInt($("#dlgTargetTy").value) || 0,
       label: $("#dlgLabel").value.trim(),
-    });
+    };
+    if (isEdit) {
+      S.portals[editIdx] = portal;
+    } else {
+      S.portals.push(portal);
+    }
     hideModal();
     updateObjectList();
     render();
@@ -737,7 +947,23 @@ function showBuildingDialog(x, y, w, h) {
   $("#dlgBuildingOk").onclick = () => {
     const bld = { x, y, w, h, name: $("#dlgBName").value.trim() };
     const floors = parseInt($("#dlgBFloors").value) || 1;
-    if (floors > 1) bld.floors = floors;
+    if (floors > 1) {
+      bld.floors = floors;
+      // Initialize empty upperFloors grids (houseWall border + houseFloor interior)
+      const wallIdx = S.palette.indexOf("houseWall");
+      const floorIdx = S.palette.indexOf("houseFloor");
+      const wI = wallIdx >= 0 ? wallIdx : 0;
+      const fI = floorIdx >= 0 ? floorIdx : 0;
+      bld.upperFloors = [];
+      for (let f = 0; f < floors - 1; f++) {
+        const grid = Array.from({ length: h }, (_, gy) =>
+          Array.from({ length: w }, (_, gx) =>
+            (gy === 0 || gy === h - 1 || gx === 0 || gx === w - 1) ? wI : fI
+          )
+        );
+        bld.upperFloors.push(grid);
+      }
+    }
     S.buildings.push(bld);
     hideModal();
     updateObjectList();
@@ -846,6 +1072,18 @@ window.removePaletteEntry = function(idx) {
       else if (S.terrain[y][x] > idx) S.terrain[y][x]--;
     }
   }
+  // Also update all building upperFloors grids
+  for (const bld of S.buildings) {
+    if (!bld.upperFloors) continue;
+    for (const grid of bld.upperFloors) {
+      for (let y = 0; y < grid.length; y++) {
+        for (let x = 0; x < grid[y].length; x++) {
+          if (grid[y][x] === idx) grid[y][x] = 0;
+          else if (grid[y][x] > idx) grid[y][x]--;
+        }
+      }
+    }
+  }
   S.palette.splice(idx, 1);
   if (S.selectedPaletteIdx >= S.palette.length) S.selectedPaletteIdx = Math.max(0, S.palette.length - 1);
   buildPaletteUI();
@@ -871,6 +1109,9 @@ function updatePropsPanel() {
     panel.innerHTML = `
       <label>NPC:
         <select id="npcIdSelect">${opts}</select>
+      </label>
+      <label>Floor:
+        <input id="npcFloor" type="number" value="0" min="0" max="10" style="width:50px">
       </label>
       <p class="muted">Click on map to place. Replaces previous position for same NPC.</p>
     `;
@@ -915,8 +1156,11 @@ function updateObjectList() {
 
   S.portals.forEach((p, i) => {
     html += `<div class="obj-item" data-type="portal" data-idx="${i}">
-      <span>🌀 ${p.label || p.targetMap} (${p.x},${p.y})</span>
-      <span class="obj-del" data-type="portal" data-idx="${i}">✕</span>
+      <span>🌀 ${p.label || p.targetMap} (${p.x},${p.y} ${p.w}×${p.h})</span>
+      <span style="display:flex;gap:4px;align-items:center;">
+        <span class="obj-edit-portal" data-idx="${i}" title="Edit portal" style="color:#89b4fa;cursor:pointer;font-size:10px;">✎</span>
+        <span class="obj-del" data-type="portal" data-idx="${i}">✕</span>
+      </span>
     </div>`;
   });
 
@@ -929,30 +1173,43 @@ function updateObjectList() {
 
   S.npcs.forEach((n, i) => {
     const def = S.npcDefs[n.npcId];
+    const floorTag = n.floor ? ` F${n.floor}` : "";
     html += `<div class="obj-item" data-type="npc" data-idx="${i}">
-      <span>🧙 ${def ? def.name : n.npcId} (${n.tx},${n.ty})</span>
+      <span>🧙 ${def ? def.name : n.npcId} (${n.tx},${n.ty})${floorTag}</span>
       <span class="obj-del" data-type="npc" data-idx="${i}">✕</span>
     </div>`;
   });
 
   S.buildings.forEach((b, i) => {
+    const floorCount = b.floors || 1;
+    const floorLabel = floorCount > 1 ? ` [${floorCount}F]` : "";
     html += `<div class="obj-item" data-type="building" data-idx="${i}">
-      <span>🏠 ${b.name} (${b.x},${b.y})</span>
-      <span class="obj-del" data-type="building" data-idx="${i}">✕</span>
+      <span>🏠 ${b.name}${floorLabel} (${b.x},${b.y})</span>
+      <span style="display:flex;gap:4px;align-items:center;">
+        ${floorCount > 1 ? `<span class="obj-edit-floors" data-idx="${i}" title="Edit upper floors" style="color:#89b4fa;cursor:pointer;font-size:10px;">✎F</span>` : ""}
+        <span class="obj-edit-building" data-idx="${i}" title="Edit building" style="color:#89b4fa;cursor:pointer;font-size:10px;">✎</span>
+        <span class="obj-del" data-type="building" data-idx="${i}">✕</span>
+      </span>
     </div>`;
   });
 
   S.statues.forEach((s, i) => {
     html += `<div class="obj-item" data-type="statue" data-idx="${i}">
       <span>💎 ${s.name} (${s.tx},${s.ty})</span>
-      <span class="obj-del" data-type="statue" data-idx="${i}">✕</span>
+      <span style="display:flex;gap:4px;align-items:center;">
+        <span class="obj-edit-statue" data-idx="${i}" title="Edit waystone" style="color:#89b4fa;cursor:pointer;font-size:10px;">✎</span>
+        <span class="obj-del" data-type="statue" data-idx="${i}">✕</span>
+      </span>
     </div>`;
   });
 
   S.safeZones.forEach((sz, i) => {
     html += `<div class="obj-item" data-type="safezone" data-idx="${i}">
       <span>🛡 Safe (${sz.x1},${sz.y1})→(${sz.x2},${sz.y2})</span>
-      <span class="obj-del" data-type="safezone" data-idx="${i}">✕</span>
+      <span style="display:flex;gap:4px;align-items:center;">
+        <span class="obj-edit-safezone" data-idx="${i}" title="Edit safe zone" style="color:#89b4fa;cursor:pointer;font-size:10px;">✎</span>
+        <span class="obj-del" data-type="safezone" data-idx="${i}">✕</span>
+      </span>
     </div>`;
   });
 
@@ -971,6 +1228,46 @@ function updateObjectList() {
       deleteObject(type, idx);
     };
   });
+
+  // Wire up floor-edit buttons
+  list.querySelectorAll(".obj-edit-floors").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      enterFloorEdit(parseInt(btn.dataset.idx));
+    };
+  });
+
+  // Wire up portal-edit buttons
+  list.querySelectorAll(".obj-edit-portal").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      showPortalDialog(0, 0, 1, 1, parseInt(btn.dataset.idx));
+    };
+  });
+
+  // Wire up waystone-edit buttons
+  list.querySelectorAll(".obj-edit-statue").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      showStatueDialog(parseInt(btn.dataset.idx));
+    };
+  });
+
+  // Wire up building-edit buttons
+  list.querySelectorAll(".obj-edit-building").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      showBuildingEditDialog(parseInt(btn.dataset.idx));
+    };
+  });
+
+  // Wire up safezone-edit buttons
+  list.querySelectorAll(".obj-edit-safezone").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      showSafezoneDialog(parseInt(btn.dataset.idx));
+    };
+  });
 }
 
 function deleteObject(type, idx) {
@@ -981,8 +1278,145 @@ function deleteObject(type, idx) {
     case "building": S.buildings.splice(idx, 1); break;
     case "statue": S.statues.splice(idx, 1); break;
     case "safezone": S.safeZones.splice(idx, 1); break;
+    case "tree": S.trees.splice(idx, 1); break;
+    case "prop": S.props.splice(idx, 1); break;
   }
   updateObjectList();
+  render();
+}
+
+function deleteObjectAtTile(tx, ty) {
+  // In floor edit mode, only handle NPCs on current floor
+  if (S.editingBuildingIdx >= 0) {
+    const bld = S.buildings[S.editingBuildingIdx];
+    const worldTx = tx + bld.x, worldTy = ty + bld.y;
+    const ni = S.npcs.findIndex(n => n.tx === worldTx && n.ty === worldTy && (n.floor || 0) === S.editingFloor);
+    if (ni >= 0) { S.npcs.splice(ni, 1); updateObjectList(); render(); }
+    return;
+  }
+
+  // Priority order: statues > npcs > enemies > props > trees > portals > buildings > safezones > blocked
+  const si = S.statues.findIndex(s => s.tx === tx && s.ty === ty);
+  if (si >= 0) { S.statues.splice(si, 1); updateObjectList(); render(); return; }
+
+  const ni = S.npcs.findIndex(n => n.tx === tx && n.ty === ty && (n.floor || 0) === 0);
+  if (ni >= 0) { S.npcs.splice(ni, 1); updateObjectList(); render(); return; }
+
+  for (let ei = 0; ei < S.enemySpawns.length; ei++) {
+    const pi = S.enemySpawns[ei].positions.findIndex(([ex, ey]) => ex === tx && ey === ty);
+    if (pi >= 0) {
+      S.enemySpawns[ei].positions.splice(pi, 1);
+      if (S.enemySpawns[ei].positions.length === 0) S.enemySpawns.splice(ei, 1);
+      updateObjectList(); render(); return;
+    }
+  }
+
+  const pri = S.props.findIndex(p => p.tx === tx && p.ty === ty);
+  if (pri >= 0) { S.props.splice(pri, 1); updateObjectList(); render(); return; }
+
+  const ti = S.trees.findIndex(t => t.tx === tx && t.ty === ty);
+  if (ti >= 0) { S.trees.splice(ti, 1); updateObjectList(); render(); return; }
+
+  const poi = S.portals.findIndex(p => tx >= p.x && tx < p.x + p.w && ty >= p.y && ty < p.y + p.h);
+  if (poi >= 0) { S.portals.splice(poi, 1); updateObjectList(); render(); return; }
+
+  const bi = S.buildings.findIndex(b => tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h);
+  if (bi >= 0) { S.buildings.splice(bi, 1); updateObjectList(); render(); return; }
+
+  const szi = S.safeZones.findIndex(sz => tx >= sz.x1 && tx <= sz.x2 && ty >= sz.y1 && ty <= sz.y2);
+  if (szi >= 0) { S.safeZones.splice(szi, 1); updateObjectList(); render(); return; }
+
+  const bli = S.extraBlocked.findIndex(([bx, by]) => bx === tx && by === ty);
+  if (bli >= 0) { S.extraBlocked.splice(bli, 1); updateObjectList(); render(); return; }
+}
+
+/* ── Floor Editing ─────────────────────────── */
+function enterFloorEdit(buildingIdx) {
+  const bld = S.buildings[buildingIdx];
+  if (!bld || !bld.floors || bld.floors <= 1) return;
+  if (!bld.upperFloors) {
+    // Initialize if missing
+    const wallIdx = S.palette.indexOf("houseWall");
+    const floorIdx = S.palette.indexOf("houseFloor");
+    const wI = wallIdx >= 0 ? wallIdx : 0;
+    const fI = floorIdx >= 0 ? floorIdx : 0;
+    bld.upperFloors = [];
+    for (let f = 0; f < bld.floors - 1; f++) {
+      bld.upperFloors.push(
+        Array.from({ length: bld.h }, (_, gy) =>
+          Array.from({ length: bld.w }, (_, gx) =>
+            (gy === 0 || gy === bld.h - 1 || gx === 0 || gx === bld.w - 1) ? wI : fI
+          )
+        )
+      );
+    }
+  }
+  S.editingBuildingIdx = buildingIdx;
+  S.editingFloor = 1;
+  updateFloorUI();
+  resizeCanvas();
+  render();
+}
+
+function exitFloorEdit() {
+  S.editingBuildingIdx = -1;
+  S.editingFloor = 0;
+  updateFloorUI();
+  resizeCanvas();
+  render();
+}
+
+function changeFloor(delta) {
+  if (S.editingBuildingIdx < 0) return;
+  const bld = S.buildings[S.editingBuildingIdx];
+  const maxFloor = (bld.floors || 1) - 1;
+  S.editingFloor = Math.max(1, Math.min(maxFloor, S.editingFloor + delta));
+  updateFloorUI();
+  render();
+}
+
+function updateFloorUI() {
+  const controls = $("#floorControls");
+  if (S.editingBuildingIdx >= 0) {
+    controls.style.display = "flex";
+    const bld = S.buildings[S.editingBuildingIdx];
+    $("#floorInfo").textContent = `${bld.name} — Floor ${S.editingFloor + 1}/${bld.floors}`;
+    const ft = getFloorTerrain();
+    $("#floorWidth").value = ft.w;
+    $("#floorHeight").value = ft.h;
+  } else {
+    controls.style.display = "none";
+  }
+}
+
+function getFloorTerrain() {
+  // Returns the terrain grid and dimensions for the current editing context
+  if (S.editingBuildingIdx >= 0 && S.editingFloor > 0) {
+    const bld = S.buildings[S.editingBuildingIdx];
+    const floorGrid = bld.upperFloors[S.editingFloor - 1];
+    const h = floorGrid.length;
+    const w = h > 0 ? floorGrid[0].length : 0;
+    return { grid: floorGrid, w, h, offsetX: 0, offsetY: 0, isFloor: true };
+  }
+  return { grid: S.terrain, w: S.width, h: S.height, offsetX: 0, offsetY: 0, isFloor: false };
+}
+
+function resizeFloorGrid() {
+  if (S.editingBuildingIdx < 0 || S.editingFloor <= 0) return;
+  const bld = S.buildings[S.editingBuildingIdx];
+  const floorIdx = S.editingFloor - 1;
+  const oldGrid = bld.upperFloors[floorIdx];
+  const oldH = oldGrid.length;
+  const oldW = oldH > 0 ? oldGrid[0].length : 0;
+  const newW = Math.max(3, Math.min(64, parseInt($("#floorWidth").value) || oldW));
+  const newH = Math.max(3, Math.min(64, parseInt($("#floorHeight").value) || oldH));
+  if (newW === oldW && newH === oldH) return;
+  bld.upperFloors[floorIdx] = Array.from({ length: newH }, (_, y) =>
+    Array.from({ length: newW }, (_, x) =>
+      (y < oldH && x < oldW) ? oldGrid[y][x] : -1
+    )
+  );
+  resizeCanvas();
   render();
 }
 
@@ -1035,8 +1469,18 @@ function setupEventListeners() {
   // Palette editor
   $("#btnEditPalette").onclick = showPaletteEditor;
 
+  // Floor controls
+  $("#btnFloorDown").onclick = () => changeFloor(-1);
+  $("#btnFloorUp").onclick = () => changeFloor(1);
+  $("#btnExitFloor").onclick = () => exitFloorEdit();
+  $("#floorWidth").onchange = resizeFloorGrid;
+  $("#floorHeight").onchange = resizeFloorGrid;
+
   // Brush size
   $("#brushSize").onchange = (e) => { S.brushSize = parseInt(e.target.value); };
+
+  // Refresh object list
+  $("#btnRefreshObjs").onclick = () => { updateObjectList(); render(); };
 
   // Clear selected object
   $("#btnClearObj").onclick = () => {
@@ -1078,7 +1522,8 @@ function onCanvasMouseDown(e) {
 
   // Right click: pick tile
   if (e.button === 2) {
-    S.selectedPaletteIdx = S.terrain[ty][tx];
+    const ft = getFloorTerrain();
+    S.selectedPaletteIdx = ft.grid[ty][tx];
     buildPaletteUI();
     setTool("paint");
     return;
@@ -1086,7 +1531,8 @@ function onCanvasMouseDown(e) {
 
   // Alt+click: pick
   if (e.altKey) {
-    S.selectedPaletteIdx = S.terrain[ty][tx];
+    const ft = getFloorTerrain();
+    S.selectedPaletteIdx = ft.grid[ty][tx];
     buildPaletteUI();
     return;
   }
@@ -1118,15 +1564,27 @@ function onCanvasMouseDown(e) {
 
   // Pick
   if (S.tool === "pick") {
-    S.selectedPaletteIdx = S.terrain[ty][tx];
+    const ft = getFloorTerrain();
+    S.selectedPaletteIdx = ft.grid[ty][tx];
     buildPaletteUI();
     setTool("paint");
+  }
+
+  // Delete object at tile
+  if (S.tool === "delete") {
+    S.isDragging = true;
+    S.lastPaintTile = `${tx},${ty}`;
+    deleteObjectAtTile(tx, ty);
   }
 }
 
 function onCanvasMouseMove(e) {
   const [tx, ty] = pixelToTile(e.clientX, e.clientY);
   $("#cursorInfo").textContent = `${tx}, ${ty}`;
+  S.hoverTile = [tx, ty];
+
+  // Update cursor style
+  canvas.style.cursor = S.tool === "delete" ? "crosshair" : "";
 
   // Panning
   if (S.isPanning && S.panStart) {
@@ -1150,6 +1608,18 @@ function onCanvasMouseMove(e) {
       render();
     }
   }
+
+  // Delete drag
+  if (S.isDragging && S.tool === "delete") {
+    const key = `${tx},${ty}`;
+    if (key !== S.lastPaintTile) {
+      deleteObjectAtTile(tx, ty);
+      S.lastPaintTile = key;
+    }
+  }
+
+  // Redraw hover highlight for delete tool
+  if (S.tool === "delete") render();
 }
 
 function onCanvasMouseUp(e) {
@@ -1205,13 +1675,18 @@ function onKeyDown(e) {
     case "2": S.brushSize = 2; $("#brushSize").value = "2"; break;
     case "3": S.brushSize = 3; $("#brushSize").value = "3"; break;
     case "5": S.brushSize = 5; $("#brushSize").value = "5"; break;
+    case "x": setTool("delete"); break;
     case "home": resetView(); break;
     case "escape":
-      S.objMode = null;
-      S.dragRect = null;
-      $$(".obj-btn").forEach(b => b.classList.remove("active"));
-      updatePropsPanel();
-      render();
+      if (S.editingBuildingIdx >= 0) {
+        exitFloorEdit();
+      } else {
+        S.objMode = null;
+        S.dragRect = null;
+        $$(".obj-btn").forEach(b => b.classList.remove("active"));
+        updatePropsPanel();
+        render();
+      }
       break;
   }
 }
