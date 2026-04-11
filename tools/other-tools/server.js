@@ -42,12 +42,26 @@ const QUESTS_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/quests.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/quests.json'),
 ];
+const PROPS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/props.json'),
+  path.resolve(process.cwd(), '../../public/data/props.json'),
+  path.resolve(process.cwd(), 'public/data/props.json'),
+  path.resolve(process.cwd(), '../public/data/props.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/props.json'),
+];
 const PLAYER_BASE_CANDIDATES = [
   path.resolve(__dirname, '../../public/data/playerBase.json'),
   path.resolve(process.cwd(), '../../public/data/playerBase.json'),
   path.resolve(process.cwd(), 'public/data/playerBase.json'),
   path.resolve(process.cwd(), '../public/data/playerBase.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/playerBase.json'),
+];
+const PROP_SPRITE_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sprites/props'),
+  path.resolve(process.cwd(), '../../public/assets/sprites/props'),
+  path.resolve(process.cwd(), 'public/assets/sprites/props'),
+  path.resolve(process.cwd(), '../public/assets/sprites/props'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/props'),
 ];
 const TILE_SPRITE_DIR_CANDIDATES = [
   path.resolve(__dirname, '../../public/assets/sprites/tiles'),
@@ -80,6 +94,8 @@ function resolveExistingItemsPath() { return firstExisting(ITEMS_CANDIDATES); }
 function resolveExistingEnemiesPath() { return firstExisting(ENEMIES_CANDIDATES); }
 function resolveExistingNpcsPath() { return firstExisting(NPCS_CANDIDATES); }
 function resolveExistingQuestsPath() { return firstExisting(QUESTS_CANDIDATES); }
+function resolveExistingPropsPath() { return firstExisting(PROPS_CANDIDATES); }
+function resolveExistingPropSpriteDir() { return firstExisting(PROP_SPRITE_DIR_CANDIDATES); }
 function resolveExistingPlayerBasePath() { return firstExisting(PLAYER_BASE_CANDIDATES); }
 function resolveExistingTileSpriteDir() { return firstExisting(TILE_SPRITE_DIR_CANDIDATES); }
 function resolveExistingEntitySpriteDir() { return firstExisting(ENTITY_SPRITE_DIR_CANDIDATES); }
@@ -197,6 +213,29 @@ function validateQuests(quests) {
   return null;
 }
 
+function validateProps(props) {
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return 'props must be an object keyed by prop type.';
+  for (const [key, entry] of Object.entries(props)) {
+    if (!key.trim()) return 'Prop type keys cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    if (!Array.isArray(entry.color) || entry.color.length !== 3) return `Entry for "${key}" must contain color: [r, g, b].`;
+    for (const channel of entry.color) if (!Number.isInteger(channel) || channel < 0 || channel > 255) return `Entry for "${key}" has a color channel outside 0-255.`;
+    if (typeof entry.blocked !== 'boolean') return `Entry for "${key}" must contain blocked: boolean.`;
+  }
+  return null;
+}
+function listPropSpriteIds() {
+  const IGNORED = new Set(['portal']);
+  const dir = resolveExistingPropSpriteDir();
+  if (!fs.existsSync(dir)) throw new Error(`Prop sprite directory not found: ${dir}`);
+  const ids = fs.readdirSync(dir, { withFileTypes: true })
+    .filter(e => e.isFile() && path.extname(e.name).toLowerCase() === '.png')
+    .map(e => path.basename(e.name, '.png'))
+    .filter(id => id && !IGNORED.has(id))
+    .sort((a, b) => a.localeCompare(b));
+  return { dir, ids };
+}
+
 function validatePlayerBase(pb) {
   if (!pb || typeof pb !== 'object' || Array.isArray(pb)) return 'playerBase must be a flat object.';
   for (const field of ['moveSpeed','attackRange','attackCooldown','maxHp','maxMana','damage']) {
@@ -217,7 +256,39 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname === '/api/props' && req.method === 'GET') {
+    try { return sendJson(res, 200, { props: JSON.parse(await fs.promises.readFile(resolveExistingPropsPath(), 'utf8')), path: resolveExistingPropsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingPropsPath() }); }
+  }
+  if (pathname === '/api/props' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateProps(body.props);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingPropsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.props, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingPropsPath() }); }
+  }
+  if (pathname.startsWith('/api/prop-sprite/') && req.method === 'GET') {
+    try {
+      const propId = pathname.replace('/api/prop-sprite/', '').trim(); if (!propId) return sendText(res, 400, 'Missing prop id');
+      const spritePath = safeAssetPath(resolveExistingPropSpriteDir(), propId); if (!spritePath) return sendText(res, 403, 'Forbidden');
+      return serveFile(res, spritePath);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname === '/api/prop-sprites/scan' && req.method === 'GET') {
+    try {
+      const { dir, ids } = listPropSpriteIds();
+      let props = {};
+      const propsPath = resolveExistingPropsPath();
+      if (fs.existsSync(propsPath)) props = JSON.parse(await fs.promises.readFile(propsPath, 'utf8'));
+      const existingIds = new Set(Object.keys(props || {}));
+      return sendJson(res, 200, { spriteDir: dir, propsPath, totalSprites: ids.length, totalPropEntries: existingIds.size, newIds: ids.filter(id => !existingIds.has(id)), existingSpriteIds: ids.filter(id => existingIds.has(id)) });
+    } catch (error) { return sendJson(res, 500, { error: error.message, spriteDir: resolveExistingPropSpriteDir() }); }
+  }
 
   if (pathname === '/api/player-base' && req.method === 'GET') {
     try { return sendJson(res, 200, { playerBase: JSON.parse(await fs.promises.readFile(resolveExistingPlayerBasePath(), 'utf8')), path: resolveExistingPlayerBasePath() }); }
@@ -349,6 +420,8 @@ server.listen(PORT, () => {
   console.log(`Enemies target: ${resolveExistingEnemiesPath()}`);
   console.log(`NPCs target: ${resolveExistingNpcsPath()}`);
   console.log(`Quests target: ${resolveExistingQuestsPath()}`);
+  console.log(`Props target: ${resolveExistingPropsPath()}`);
+  console.log(`Prop sprite dir: ${resolveExistingPropSpriteDir()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);
   console.log(`Tile sprite dir: ${resolveExistingTileSpriteDir()}`);
   console.log(`Entity sprite dir: ${resolveExistingEntitySpriteDir()}`);

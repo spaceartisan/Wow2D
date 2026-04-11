@@ -560,11 +560,6 @@ export class UISystem {
         slot.append(img);
       }
 
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "item-name";
-      nameSpan.textContent = item.name;
-      slot.append(nameSpan);
-
       // Stack quantity badge
       if (item.qty && item.qty > 1) {
         const qtySpan = document.createElement("span");
@@ -573,46 +568,12 @@ export class UISystem {
         slot.append(qtySpan);
       }
 
-      // Tooltip
-      if (item.description) {
-        slot.title = this._itemTooltipText(item);
-      }
+      // Tooltip (always show since name is not displayed)
+      slot.title = this._itemTooltipText(item);
 
       // Action buttons
       const btnRow = document.createElement("div");
       btnRow.className = "item-btn-row";
-
-      if (["weapon", "armor", "trinket"].includes(item.type)) {
-        const equipButton = document.createElement("button");
-        equipButton.textContent = "Equip";
-        equipButton.addEventListener("click", () => {
-          this.game.entities.equipItemAtIndex(index);
-          if (this.game.network) this.game.network.sendEquipItem(index);
-          this._inventoryDirty = true;
-          this._equipmentDirty = true;
-          this.renderInventory();
-          this.renderEquipment();
-        });
-        btnRow.append(equipButton);
-      }
-
-      if (item.type === "consumable") {
-        const useButton = document.createElement("button");
-        useButton.textContent = "Use";
-        useButton.addEventListener("click", () => {
-          if (this.game.network) this.game.network.sendUseItem(index);
-        });
-        btnRow.append(useButton);
-      }
-
-      if (item.type === "hearthstone") {
-        const useButton = document.createElement("button");
-        useButton.textContent = "Use";
-        useButton.addEventListener("click", () => {
-          if (this.game.network) this.game.network.sendUseHearthstone();
-        });
-        btnRow.append(useButton);
-      }
 
       // Sell button (only when shop/vendor is open, not for permanent items)
       if (this.shopOpen && !this.game.data?.items?.[item.id]?.permanent) {
@@ -667,6 +628,7 @@ export class UISystem {
     ];
 
     rows.forEach(([label, item]) => {
+      const slot = label.toLowerCase();
       const row = document.createElement("div");
       row.className = "equip-slot";
 
@@ -684,6 +646,11 @@ export class UISystem {
           img.height = 24;
           row.append(img);
         }
+        row.classList.add("has-equip");
+        row.style.cursor = "pointer";
+        row.addEventListener("click", () => {
+          if (this.game.network) this.game.network.sendUnequipItem(slot);
+        });
       }
 
       const valueEl = document.createElement("span");
@@ -691,7 +658,7 @@ export class UISystem {
       valueEl.textContent = item ? item.name : "Empty";
 
       if (item) {
-        row.title = this._itemTooltipText(item);
+        row.title = this._itemTooltipText(item) + "\nClick to unequip";
       }
 
       row.append(labelEl, valueEl);
@@ -1044,40 +1011,18 @@ export class UISystem {
   _handleDragStart(e) {
     if (e.button !== 0) return;
 
-    const sprites = this.game.sprites;
     const p = this.game.entities.player;
 
-    // --- Drag from skill card ---
+    // --- Skill card ---
     const skillCard = e.target.closest("[data-drag-skill]");
     if (skillCard) {
       if (this.hotbarLocked) return;
-      const skillId = skillCard.dataset.dragSkill;
       e.preventDefault();
-
-      const ghost = document.createElement("div");
-      ghost.className = "drag-ghost";
-      const skillIcons = { attack: "sword", heal: "heal" };
-      const iconKey = skillIcons[skillId];
-      const icon = iconKey && sprites && sprites.get(`icons/${iconKey}`);
-      if (icon) {
-        const img = document.createElement("img");
-        img.src = icon.src;
-        ghost.append(img);
-      } else {
-        const span = document.createElement("span");
-        span.className = "drag-ghost-name";
-        span.textContent = skillId;
-        ghost.append(span);
-      }
-      ghost.style.left = `${e.clientX - 20}px`;
-      ghost.style.top = `${e.clientY - 20}px`;
-      document.body.append(ghost);
-
-      this._drag = { container: "skill", index: -1, item: null, skillId, ghost };
+      this._dragPending = { startX: e.clientX, startY: e.clientY, source: "skill", skillId: skillCard.dataset.dragSkill };
       return;
     }
 
-    // --- Drag from hotbar slot ---
+    // --- Hotbar slot ---
     const hotbarEl = e.target.closest(".hotbar-slot");
     if (hotbarEl) {
       if (this.hotbarLocked) return;
@@ -1085,36 +1030,11 @@ export class UISystem {
       const entry = p.hotbar[slotIdx];
       if (!entry) return;
       e.preventDefault();
-
-      const ghost = document.createElement("div");
-      ghost.className = "drag-ghost";
-
-      if (entry.type === "skill") {
-        const skillIcons = { attack: "sword", heal: "heal" };
-        const icon = sprites && sprites.get(`icons/${skillIcons[entry.skillId]}`);
-        if (icon) {
-          const img = document.createElement("img");
-          img.src = icon.src;
-          ghost.append(img);
-        }
-      } else if (entry.type === "item") {
-        const def = this.game.data?.items?.[entry.itemId];
-        const icon = def && sprites && sprites.get(`icons/${def.icon || entry.itemId}`);
-        if (icon) {
-          const img = document.createElement("img");
-          img.src = icon.src;
-          ghost.append(img);
-        }
-      }
-      ghost.style.left = `${e.clientX - 20}px`;
-      ghost.style.top = `${e.clientY - 20}px`;
-      document.body.append(ghost);
-
-      this._drag = { container: "hotbar", index: slotIdx, item: null, skillId: null, hotbarEntry: entry, ghost };
+      this._dragPending = { startX: e.clientX, startY: e.clientY, source: "hotbar", slotIdx, entry };
       return;
     }
 
-    // --- Drag from inventory / bank item slot ---
+    // --- Inventory / bank item slot ---
     const target = e.target.closest("[data-container][data-index]");
     if (!target) return;
     const container = target.dataset.container;
@@ -1127,31 +1047,64 @@ export class UISystem {
     if (!item) return;
 
     e.preventDefault();
+    this._dragPending = { startX: e.clientX, startY: e.clientY, source: "item", container, index, item };
+  }
 
-    // Create ghost
+  /** Promote a pending drag into an active drag with ghost element */
+  _promoteDrag(e) {
+    const pd = this._dragPending;
+    if (!pd) return;
+    const sprites = this.game.sprites;
     const ghost = document.createElement("div");
     ghost.className = "drag-ghost";
 
-    const icon = sprites && sprites.get(`icons/${item.icon || item.id}`);
-    if (icon) {
-      const img = document.createElement("img");
-      img.src = icon.src;
-      ghost.append(img);
-    } else {
-      const span = document.createElement("span");
-      span.className = "drag-ghost-name";
-      span.textContent = item.name;
-      ghost.append(span);
+    if (pd.source === "skill") {
+      const skillIcons = { attack: "sword", heal: "heal" };
+      const iconKey = skillIcons[pd.skillId];
+      const icon = iconKey && sprites && sprites.get(`icons/${iconKey}`);
+      if (icon) { const img = document.createElement("img"); img.src = icon.src; ghost.append(img); }
+      else { const span = document.createElement("span"); span.className = "drag-ghost-name"; span.textContent = pd.skillId; ghost.append(span); }
+      ghost.style.left = `${e.clientX - 20}px`;
+      ghost.style.top = `${e.clientY - 20}px`;
+      document.body.append(ghost);
+      this._drag = { container: "skill", index: -1, item: null, skillId: pd.skillId, ghost };
+    } else if (pd.source === "hotbar") {
+      if (pd.entry.type === "skill") {
+        const skillIcons = { attack: "sword", heal: "heal" };
+        const icon = sprites && sprites.get(`icons/${skillIcons[pd.entry.skillId]}`);
+        if (icon) { const img = document.createElement("img"); img.src = icon.src; ghost.append(img); }
+      } else if (pd.entry.type === "item") {
+        const def = this.game.data?.items?.[pd.entry.itemId];
+        const icon = def && sprites && sprites.get(`icons/${def.icon || pd.entry.itemId}`);
+        if (icon) { const img = document.createElement("img"); img.src = icon.src; ghost.append(img); }
+      }
+      ghost.style.left = `${e.clientX - 20}px`;
+      ghost.style.top = `${e.clientY - 20}px`;
+      document.body.append(ghost);
+      this._drag = { container: "hotbar", index: pd.slotIdx, item: null, skillId: null, hotbarEntry: pd.entry, ghost };
+    } else if (pd.source === "item") {
+      const icon = sprites && sprites.get(`icons/${pd.item.icon || pd.item.id}`);
+      if (icon) { const img = document.createElement("img"); img.src = icon.src; ghost.append(img); }
+      else { const span = document.createElement("span"); span.className = "drag-ghost-name"; span.textContent = pd.item.name; ghost.append(span); }
+      ghost.style.left = `${e.clientX - 20}px`;
+      ghost.style.top = `${e.clientY - 20}px`;
+      document.body.append(ghost);
+      this._drag = { container: pd.container, index: pd.index, item: pd.item, skillId: null, ghost };
     }
 
-    ghost.style.left = `${e.clientX - 20}px`;
-    ghost.style.top = `${e.clientY - 20}px`;
-    document.body.append(ghost);
-
-    this._drag = { container, index, item, skillId: null, ghost };
+    this._dragPending = null;
   }
 
   _handleDragMove(e) {
+    // Promote pending drag after 5px movement
+    if (this._dragPending && !this._drag) {
+      const dx = e.clientX - this._dragPending.startX;
+      const dy = e.clientY - this._dragPending.startY;
+      if (dx * dx + dy * dy >= 25) {
+        this._promoteDrag(e);
+      }
+      return;
+    }
     if (!this._drag) return;
     this._drag.ghost.style.left = `${e.clientX - 20}px`;
     this._drag.ghost.style.top = `${e.clientY - 20}px`;
@@ -1163,6 +1116,16 @@ export class UISystem {
   }
 
   _handleDragEnd(e) {
+    // Click without drag – treat as item use/equip
+    if (this._dragPending && !this._drag) {
+      const pd = this._dragPending;
+      this._dragPending = null;
+      if (pd.source === "item" && pd.container === "inventory") {
+        this._handleInventoryItemClick(pd.index, pd.item);
+      }
+      return;
+    }
+
     if (!this._drag) return;
 
     document.querySelectorAll(".drop-target").forEach(el => el.classList.remove("drop-target"));
@@ -1234,6 +1197,22 @@ export class UISystem {
     if (this._drag) {
       this._drag.ghost.remove();
       this._drag = null;
+    }
+    this._dragPending = null;
+  }
+
+  _handleInventoryItemClick(index, item) {
+    if (["weapon", "armor", "trinket"].includes(item.type)) {
+      this.game.entities.equipItemAtIndex(index);
+      if (this.game.network) this.game.network.sendEquipItem(index);
+      this._inventoryDirty = true;
+      this._equipmentDirty = true;
+      this.renderInventory();
+      this.renderEquipment();
+    } else if (item.type === "consumable") {
+      if (this.game.network) this.game.network.sendUseItem(index);
+    } else if (item.type === "hearthstone") {
+      if (this.game.network) this.game.network.sendUseHearthstone();
     }
   }
 

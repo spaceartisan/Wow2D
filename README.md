@@ -39,8 +39,11 @@ http://localhost:3000
 | Key | Action |
 |---|---|
 | `WASD` / Arrow keys | Move (8 directions) |
-| Left-click enemy | Target enemy |
-| Left-click player | Target player (friendly) |
+| Left-click enemy | Select target (does not attack) |
+| Left-click player | Select target (friendly) |
+| Right-click enemy | Select target and engage auto-attack |
+| Click inventory item | Use consumable / equip gear |
+| Click equipment slot | Unequip item back to inventory |
 | `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
 | `E` | Interact with nearby NPC or waystone |
 | `I` | Toggle inventory |
@@ -59,11 +62,12 @@ http://localhost:3000
 ## Features
 
 ### World & Exploration
-- Two interconnected maps: Eldengrove (128×128) and Darkwood Forest (80×80)
+- Four interconnected maps: Eldengrove (128×128), Darkwood Forest (80×80), Southmere, and Moonfall Cavern
 - Portal system for seamless map transitions with server-side proximity validation
 - Tile-based terrain with palette-driven rendering (grass, dirt, water, cliffs, roads, etc.)
 - Buildings with tile-by-tile layouts and multi-floor interiors (stairs to go up/down)
-- Trees, ambient props, and safe zones
+- Props (trees, rocks, flowers, etc.) with data-driven blocking via `props.json`
+- Safe zones
 - Waystone system — attune your hearthstone to teleport back to town
 - Procedural map generation via `generate-maps.js`
 
@@ -77,7 +81,8 @@ http://localhost:3000
   - Safe zone outlines and legend
 
 ### Combat & Progression
-- Click-to-target combat with server-authoritative hit resolution
+- Target-then-engage combat: left-click to select a target, right-click or hotbar attack to engage auto-attack with chase
+- Server-authoritative hit resolution
 - Multiple enemy types with aggro range, chase AI, leashing, and wander behavior
 - XP and leveling with stat scaling (HP, mana, damage per level)
 - Data-driven loot tables with gold and item drops
@@ -104,9 +109,9 @@ http://localhost:3000
 - Target panel with HP bar (different style for friendly vs enemy targets)
 - 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
-- Inventory (20 slots) with drag-and-drop (via DragManager) and item stacking (configurable per-item `stackSize`)
+- Inventory (20 slots) with click-to-use/equip, drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
 - Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
-- Equipment panel with weapon/armor/trinket slots
+- Equipment panel with weapon/armor/trinket slots (click to unequip)
 - Quest tracker, quest log, character sheet, and skills panel
 - NPC dialog system with quest accept/turn-in flow
 - Floor indicator when inside multi-story buildings
@@ -127,6 +132,7 @@ public/
   styles.css                  Fantasy-themed UI styling
   data/
     tilePalette.json           Global tile definitions (23 tile types)
+    props.json                 Prop type definitions (blocking, color fallback)
     playerBase.json            Shared player base stats (client + server)
     enemies.json               Enemy type definitions
     items.json                 Item definitions
@@ -152,7 +158,7 @@ public/
       QuestSystem.js            Quest state machine + NPC interaction
       UISystem.js               All HUD panels and UI rendering
       WorldSystem.js            Tile map loading, rendering, collision, portals, stairs
-      SpriteManager.js          PNG sprite preloading and lookup
+      SpriteManager.js          Data-driven sprite preloading from palettes/props.json
   assets/
     bgm/                       Background music files
     icons/                     Item icon images

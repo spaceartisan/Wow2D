@@ -90,6 +90,13 @@
 
     playerBase: null,
     playerBaseDirty: false,
+
+    props: {},
+    selectedPropKey: null,
+    propSearch: '',
+    propDirty: false,
+    propSpriteExists: null,
+    pendingPropScanIds: [],
   };
 
   const els = {};
@@ -100,11 +107,12 @@
     'enemySearchInput','enemyList','enemyEntryCount','enemyLootRefCount','selectedEnemyLabel','enemyEmptyState','enemyForm','enemyIdInput','enemyNameInput','enemyPreviewImage','enemyPreviewFallback','enemySpriteStatusBadge','enemySpritePathLabel','enemyColorPreview','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyLootEditor','enemyLootEmptyState','enemyLootAddButton','enemyJsonPreview','enemyDiagnosticsList','enemyValidationSummary','enemyListItemTemplate','addEnemyButton','duplicateEnemyButton','deleteEnemyButton','validateEnemiesButton','reloadEnemiesButton',
     'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
     'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNotStartedTextInput','questDialogNotStartedOptionsEditor','questDialogNotStartedOptionsEmptyState','questDialogNotStartedAddButton','questDialogActiveTextInput','questDialogActiveOptionsEditor','questDialogActiveOptionsEmptyState','questDialogActiveAddButton','questDialogReadyTextInput','questDialogReadyOptionsEditor','questDialogReadyOptionsEmptyState','questDialogReadyAddButton','questDialogCompletedTextInput','questDialogCompletedOptionsEditor','questDialogCompletedOptionsEmptyState','questDialogCompletedAddButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
-    'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton'
+    'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
+    'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : state.tileDirty)))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : state.tileDirty))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -121,6 +129,7 @@
   function setNpcDirty(v){ state.npcDirty = v; updateDirtyBadge(); }
   function setQuestDirty(v){ state.questDirty = v; updateDirtyBadge(); }
   function setPlayerBaseDirty(v){ state.playerBaseDirty = v; updateDirtyBadge(); }
+  function setPropDirty(v){ state.propDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -1319,10 +1328,163 @@
     renderPlayerBaseDiagnostics(messages, errCount||warnCount ? `${errCount} error(s), ${warnCount} warning(s)` : 'Validation passed');
   }
 
+  // Props
+  function getPropSpriteUrl(id) { return `/api/prop-sprite/${encodeURIComponent(id)}?v=${Date.now()}`; }
+  function getPropSpriteDisplayPath(id) { return `public/assets/sprites/props/${id}.png`; }
+  function getVisiblePropKeys() { return Object.keys(state.props).filter(k => k.toLowerCase().includes(state.propSearch.toLowerCase())).sort((a,b)=>a.localeCompare(b)); }
+  function getSelectedPropEntry() { return state.selectedPropKey ? state.props[state.selectedPropKey] || null : null; }
+  function ensureUniquePropKey(baseKey){ let c=baseKey, i=2; while(state.props[c]) c=`${baseKey}_${i++}`; return c; }
+
+  function setPropSpriteStatus(exists) {
+    state.propSpriteExists = exists;
+    if (exists === true) {
+      els.propSpriteStatusBadge.textContent = 'Sprite found';
+      els.propSpriteStatusBadge.className = 'badge online';
+      els.propSpritePreviewImage.classList.remove('hidden');
+      els.propSpritePreviewFallback.classList.add('hidden');
+    } else if (exists === false) {
+      els.propSpriteStatusBadge.textContent = 'Using fallback color';
+      els.propSpriteStatusBadge.className = 'badge unsaved';
+      els.propSpritePreviewImage.classList.add('hidden');
+      els.propSpritePreviewFallback.classList.remove('hidden');
+    } else {
+      els.propSpriteStatusBadge.textContent = 'Checking sprite';
+      els.propSpriteStatusBadge.className = 'badge muted';
+      els.propSpritePreviewImage.classList.add('hidden');
+      els.propSpritePreviewFallback.classList.remove('hidden');
+    }
+  }
+  function renderPropList() {
+    const visibleKeys = getVisiblePropKeys();
+    const allKeys = Object.keys(state.props);
+    els.propEntryCount.textContent = String(allKeys.length);
+    els.propBlockedCount.textContent = String(allKeys.filter(k => !!state.props[k]?.blocked).length);
+    els.propList.innerHTML = '';
+    if (!visibleKeys.length) { const empty=document.createElement('div'); empty.className='subtle'; empty.textContent='No matching props.'; els.propList.appendChild(empty); return; }
+    for (const key of visibleKeys) {
+      const entry = state.props[key] || {};
+      const button = document.createElement('button');
+      button.className = 'tile-list-item' + (key === state.selectedPropKey ? ' active' : '');
+      button.type = 'button';
+      const color = Array.isArray(entry.color) ? entry.color : [0,0,0];
+      button.innerHTML = `
+        <span class="swatch" style="background:${rgbToHex(color)}"></span>
+        <span class="tile-text">
+          <strong class="tile-name">${key}</strong>
+          <span class="tile-meta">${entry.blocked ? 'Blocked' : 'Walkable'} • fallback rgb(${color.join(', ')})</span>
+        </span>`;
+      button.addEventListener('click', () => { state.selectedPropKey = key; renderPropPanel(); renderPropList(); });
+      els.propList.appendChild(button);
+    }
+  }
+  function renderPropPanel() {
+    const entry = getSelectedPropEntry();
+    if (!entry) {
+      els.selectedPropLabel.textContent = 'Nothing selected';
+      els.propEmptyState.classList.remove('hidden');
+      els.propForm.classList.add('hidden');
+      els.propJsonPreview.textContent = '';
+      return;
+    }
+    const color = Array.isArray(entry.color) ? entry.color.map(clampByte) : [0,0,0];
+    const hex = rgbToHex(color);
+    els.selectedPropLabel.textContent = state.selectedPropKey;
+    els.propEmptyState.classList.add('hidden');
+    els.propForm.classList.remove('hidden');
+    els.propIdInput.value = state.selectedPropKey;
+    els.propBlockedInput.checked = !!entry.blocked;
+    els.propColorPicker.value = hex;
+    els.propRInput.value = String(color[0]); els.propGInput.value = String(color[1]); els.propBInput.value = String(color[2]);
+    els.propColorPreview.style.background = hex;
+    els.propSpritePathLabel.textContent = getPropSpriteDisplayPath(state.selectedPropKey);
+    els.propJsonPreview.textContent = JSON.stringify({ [state.selectedPropKey]: { color, blocked: !!entry.blocked } }, null, 2);
+    setPropSpriteStatus(null);
+    els.propSpritePreviewImage.src = getPropSpriteUrl(state.selectedPropKey);
+  }
+  function renderPropDiagnostics(items=[], summary='No validation run yet') {
+    els.propValidationSummary.textContent = summary; els.propDiagnosticsList.innerHTML = '';
+    if (!items.length) { els.propDiagnosticsList.className='diagnostics-list empty-diagnostics'; els.propDiagnosticsList.innerHTML='<p>No messages yet.</p>'; return; }
+    els.propDiagnosticsList.className='diagnostics-list';
+    for (const item of items) { const div=document.createElement('div'); div.className=`diagnostic-item ${item.level||'info'}`; div.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`; els.propDiagnosticsList.appendChild(div); }
+  }
+  function renderProps() { renderPropList(); renderPropPanel(); }
+  function updateSelectedPropColor(rgb) { const entry=getSelectedPropEntry(); if(!entry) return; entry.color=rgb.map(clampByte); setPropDirty(true); renderProps(); }
+  function renameSelectedPropKey(newKeyRaw) {
+    const entry=getSelectedPropEntry(); if(!entry) return; const newKey=String(newKeyRaw||'').trim(); if(!newKey || newKey===state.selectedPropKey) return;
+    if(state.props[newKey]) { renderPropDiagnostics([{level:'error',title:'Rename failed',message:`A prop with type "${newKey}" already exists.`}],'Rename blocked'); renderPropPanel(); return; }
+    const oldKey=state.selectedPropKey; const newProps={};
+    Object.keys(state.props).forEach(k => { newProps[k===oldKey ? newKey : k] = k===oldKey ? entry : state.props[k]; });
+    state.props=newProps; state.selectedPropKey=newKey; setPropDirty(true); renderProps();
+  }
+  async function loadProps() {
+    const result = await apiFetch('/api/props');
+    state.props = result.props || {};
+    const keys = Object.keys(state.props);
+    state.selectedPropKey = keys.includes(state.selectedPropKey) ? state.selectedPropKey : (keys[0] || null);
+    setPropDirty(false); renderProps(); renderPropDiagnostics([{level:'info',title:'Props loaded',message:result.path}], `Loaded ${keys.length} entries from disk`);
+  }
+  async function saveProps() {
+    const result = await apiFetch('/api/props', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({props: state.props}) });
+    setPropDirty(false); renderPropDiagnostics([{level:'info',title:'Saved successfully',message:result.path}], `Saved ${Object.keys(state.props).length} entries to disk`);
+  }
+  function validateProps() {
+    const messages=[]; const entries=Object.entries(state.props);
+    if(!entries.length) messages.push({level:'warning', title:'Props list is empty', message:'There are no prop entries defined. Add a key here and place a matching PNG in public/assets/sprites/props/ — no code changes needed.'});
+    for(const [key, value] of entries){
+      if(!key.trim()) messages.push({level:'error', title:'Blank prop type', message:'A prop entry has an empty type key.'});
+      if(!value || typeof value !== 'object'){ messages.push({level:'error', title:`Invalid entry: ${key}`, message:'Entry must be an object.'}); continue; }
+      if(!Array.isArray(value.color) || value.color.length !== 3) messages.push({level:'error', title:`Invalid color: ${key}`, message:'Color must be an RGB array with exactly 3 values.'});
+      else value.color.forEach((channel,index)=>{ if(!Number.isInteger(Number(channel)) || Number(channel)<0 || Number(channel)>255) messages.push({level:'error', title:`Channel out of range: ${key}`, message:`Color index ${index} must be 0-255.`}); });
+      if(typeof value.blocked !== 'boolean') messages.push({level:'warning', title:`Blocked flag type: ${key}`, message:'blocked should be a boolean true or false.'});
+    }
+    if(state.propSpriteExists === false && state.selectedPropKey) messages.push({level:'warning', title:'Selected prop sprite missing', message:`${getPropSpriteDisplayPath(state.selectedPropKey)} was not found. SpriteManager will use the fallback color at runtime. Add the PNG to fix this.`});
+    if(!messages.length) messages.push({level:'info', title:'Validation passed', message:'No schema problems detected in props.json.'});
+    const errorCount=messages.filter(m=>m.level==='error').length; const warningCount=messages.filter(m=>m.level==='warning').length;
+    renderPropDiagnostics(messages, errorCount||warningCount ? `${errorCount} error(s), ${warningCount} warning(s)` : 'Validation passed');
+  }
+  function addProp(){ const key=ensureUniquePropKey('newProp'); state.props[key]={color:[128,128,128], blocked:false}; state.selectedPropKey=key; setPropDirty(true); renderProps(); }
+  function duplicateProp(){ const entry=getSelectedPropEntry(); if(!entry) return; const key=ensureUniquePropKey(`${state.selectedPropKey}_copy`); state.props[key]=JSON.parse(JSON.stringify(entry)); state.selectedPropKey=key; setPropDirty(true); renderProps(); }
+  function deleteProp(){ const entry=getSelectedPropEntry(); if(!entry) return; if(!window.confirm(`Delete prop "${state.selectedPropKey}"?`)) return; delete state.props[state.selectedPropKey]; state.selectedPropKey=Object.keys(state.props)[0]||null; setPropDirty(true); renderProps(); }
+  async function scanPropsFolder() {
+    const result = await apiFetch('/api/prop-sprites/scan');
+    const pendingIds = result.newIds || [];
+    // Build and show a simple confirm — reuse the tile scan modal
+    state.pendingPropScanIds = pendingIds;
+    els.scanNewCount.textContent = String(pendingIds.length);
+    els.scanExistingCount.textContent = String((result.existingSpriteIds||[]).length);
+    els.scanSpriteDirLabel.textContent = result.spriteDir || 'public/assets/sprites/props';
+    els.scanTileIdList.innerHTML = '';
+    if (!pendingIds.length) {
+      els.scanModalSubtitle.textContent = 'No new prop types were found. All PNGs already have entries.';
+      els.scanTileIdList.innerHTML = '<p class="subtle">Nothing new will be added.</p>';
+      els.scanConfirmButton.disabled = true;
+    } else {
+      els.scanModalSubtitle.textContent = 'Review additions before applying them to props. This does not save to disk until you click Save.';
+      pendingIds.forEach(id => { const pill=document.createElement('span'); pill.className='pill'; pill.textContent=id; els.scanTileIdList.appendChild(pill); });
+      els.scanConfirmButton.disabled = false;
+    }
+    // Override confirm to apply to props instead of tiles
+    els.scanConfirmButton.onclick = confirmPropScanAdditions;
+    els.scanModal.classList.remove('hidden'); els.scanModal.setAttribute('aria-hidden','false');
+  }
+  function confirmPropScanAdditions() {
+    if(!state.pendingPropScanIds.length){ closeScanModal(); return; }
+    state.pendingPropScanIds.forEach(id=>{ if(!state.props[id]) state.props[id]={color:[128,128,128], blocked:false}; });
+    if(!state.selectedPropKey && state.pendingPropScanIds.length) state.selectedPropKey=state.pendingPropScanIds[0];
+    const addedCount=state.pendingPropScanIds.length;
+    setPropDirty(true); renderProps();
+    renderPropDiagnostics([{level:'info', title:'Prop scan applied', message:`Added ${addedCount} new prop entr${addedCount===1?'y':'ies'} from the sprites folder. SpriteManager will auto-load the matching PNGs at startup. Click Save to write to disk.`}], `Added ${addedCount} staged prop entr${addedCount===1?'y':'ies'}`);
+    state.pendingPropScanIds=[];
+    closeScanModal();
+    // Restore tile confirm handler
+    els.scanConfirmButton.onclick = null;
+    els.scanConfirmButton.addEventListener('click', confirmScanAdditions);
+  }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : loadPalette())))));
-    els.saveButton.addEventListener('click', () => state.activeTab === 'items' ? saveItems() : (state.activeTab === 'enemies' ? saveEnemies() : (state.activeTab === 'npcs' ? saveNpcs() : (state.activeTab === 'quests' ? saveQuests() : (state.activeTab === 'playerBase' ? savePlayerBase() : savePalette())))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : loadPalette()))))));
+    els.saveButton.addEventListener('click', () => state.activeTab === 'items' ? saveItems() : (state.activeTab === 'enemies' ? saveEnemies() : (state.activeTab === 'npcs' ? saveNpcs() : (state.activeTab === 'quests' ? saveQuests() : (state.activeTab === 'playerBase' ? savePlayerBase() : (state.activeTab === 'props' ? saveProps() : savePalette()))))));
     els.reloadButton.addEventListener('click', loadPalette);
     els.validateButton.addEventListener('click', validatePalette);
     els.scanTilesButton.addEventListener('click', scanTilesFolder);
@@ -1397,8 +1559,22 @@
     els.validatePlayerBaseButton.addEventListener('click', validatePlayerBase);
     ['pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput'].forEach(id => els[id].addEventListener('input', syncPlayerBaseFromForm));
 
+    els.reloadPropsButton.addEventListener('click', loadProps);
+    els.validatePropsButton.addEventListener('click', validateProps);
+    els.scanPropsButton.addEventListener('click', scanPropsFolder);
+    els.addPropButton.addEventListener('click', addProp);
+    els.duplicatePropButton.addEventListener('click', duplicateProp);
+    els.deletePropButton.addEventListener('click', deleteProp);
+    els.propSearchInput.addEventListener('input', e => { state.propSearch = e.target.value || ''; renderPropList(); });
+    els.propIdInput.addEventListener('change', e => renameSelectedPropKey(e.target.value));
+    els.propBlockedInput.addEventListener('change', e => { const entry=getSelectedPropEntry(); if(!entry) return; entry.blocked=!!e.target.checked; setPropDirty(true); renderProps(); });
+    els.propColorPicker.addEventListener('input', e => updateSelectedPropColor(hexToRgb(e.target.value)));
+    [els.propRInput, els.propGInput, els.propBInput].forEach(input => input.addEventListener('input', () => updateSelectedPropColor([els.propRInput.value, els.propGInput.value, els.propBInput.value])));
+    els.propSpritePreviewImage.addEventListener('load', () => setPropSpriteStatus(true));
+    els.propSpritePreviewImage.addEventListener('error', () => setPropSpriteStatus(false));
+
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -1411,7 +1587,8 @@
     renderEnemies();
     renderNpcs();
     renderQuests();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase()]); }
+    renderProps();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');

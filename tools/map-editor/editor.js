@@ -8,6 +8,7 @@ const S = {
   globalPalette: {},       // tilePalette.json
   enemyDefs: {},           // enemies.json
   npcDefs: {},             // npcs.json
+  propDefs: {},            // props.json
 
   // Map data
   mapId: "",
@@ -22,8 +23,7 @@ const S = {
   portals: [],
   enemySpawns: [],         // { type, positions: [[tx,ty],...] }
   npcs: [],
-  trees: [],
-  props: [],
+  props: [],               // includes trees (type: "tree")
   buildings: [],
   statues: [],
   safeZones: [],
@@ -31,7 +31,7 @@ const S = {
 
   // Editor state
   tool: "paint",           // paint | erase | fill | pick
-  objMode: null,           // portal | enemy | npc | tree | prop | building | statue | safezone | blocked | null
+  objMode: null,           // portal | enemy | npc | prop | building | statue | safezone | blocked | null
   selectedPaletteIdx: 0,
   brushSize: 1,
   zoom: 1,
@@ -90,24 +90,25 @@ const wrap = $("#canvasWrap");
 
 /* ── Init ─────────────────────────────────── */
 async function init() {
-  const [palette, enemies, npcs] = await Promise.all([
+  const [palette, enemies, npcs, propDefs] = await Promise.all([
     fetch("/api/palette").then(r => r.json()),
     fetch("/api/enemies").then(r => r.json()),
     fetch("/api/npcs").then(r => r.json()),
+    fetch("/api/props").then(r => r.json()),
   ]);
   S.globalPalette = palette;
   S.enemyDefs = enemies;
   S.npcDefs = npcs;
+  S.propDefs = propDefs;
 
   // Preload all tile sprites
   for (const name of Object.keys(palette)) loadSprite(tileSpritePath(name));
   // Preload entity sprites
   for (const id of Object.keys(enemies)) loadSprite(entitySpritePath(id));
   for (const id of Object.keys(npcs)) loadSprite(entitySpritePath(id));
-  // Preload prop sprites
-  for (const pName of ["rock", "mushroom", "flower", "portal", "tree_default", "tree_dark", "tree_light", "tree_autumn"]) {
-    loadSprite(propSpritePath(pName));
-  }
+  // Preload prop sprites from props.json + portal
+  for (const pName of Object.keys(propDefs)) loadSprite(propSpritePath(pName));
+  loadSprite(propSpritePath("portal"));
 
   setupEventListeners();
   newMap(80, 80);
@@ -134,7 +135,6 @@ function newMap(w, h) {
   S.portals = [];
   S.enemySpawns = [];
   S.npcs = [];
-  S.trees = [];
   S.props = [];
   S.buildings = [];
   S.statues = [];
@@ -165,8 +165,9 @@ async function loadMap(id) {
   S.portals = data.portals || [];
   S.enemySpawns = data.enemySpawns || [];
   S.npcs = (data.npcs || []).map(n => ({ ...n, floor: n.floor || 0 }));
-  S.trees = data.trees || [];
-  S.props = data.props || [];
+  // Merge legacy trees into props as type "tree" (backward compat for old map files)
+  const loadedTrees = (data.trees || []).map(t => ({ tx: t.tx, ty: t.ty, type: "tree" }));
+  S.props = [...loadedTrees, ...(data.props || [])];
   S.buildings = data.buildings || [];
   S.statues = data.statues || [];
   S.safeZones = data.safeZones || [];
@@ -211,7 +212,7 @@ function buildMapJSON() {
   if (S.bgm) obj.bgm = S.bgm;
   obj.safeZones = S.safeZones;
   obj.buildings = S.buildings;
-  obj.trees = S.trees;
+  // All props (including trees) in a single array
   obj.props = S.props;
   obj.extraBlocked = S.extraBlocked;
   obj.enemySpawns = S.enemySpawns;
@@ -428,30 +429,16 @@ function render() {
     ctx.fillText(p.label || p.targetMap || "Portal", p.x * ts * z + 2, p.y * ts * z + 10 * z);
   }
 
-  // Trees
-  for (const t of S.trees) {
-    const dx = t.tx * ts * z, dy = t.ty * ts * z, sz = ts * z;
-    const treeSprite = getSprite(propSpritePath("tree_default"));
-    if (treeSprite) {
-      ctx.drawImage(treeSprite, dx, dy, sz, sz);
-    } else {
-      const cx = (t.tx + 0.5) * ts * z;
-      const cy = (t.ty + 0.5) * ts * z;
-      ctx.beginPath();
-      ctx.arc(cx, cy, ts * z * 0.4, 0, Math.PI * 2);
-      ctx.fillStyle = t.tint || "rgba(30,100,30,0.7)";
-      ctx.fill();
-    }
-  }
-
-  // Props
+  // Props (including trees)
   for (const p of S.props) {
     const dx = p.tx * ts * z, dy = p.ty * ts * z, sz = ts * z;
     const pSprite = getSprite(propSpritePath(p.type));
     if (pSprite) {
       ctx.drawImage(pSprite, dx, dy, sz, sz);
     } else {
-      ctx.fillStyle = "rgba(160, 160, 160, 0.5)";
+      const def = S.propDefs[p.type];
+      const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(160, 160, 160, 0.5)";
+      ctx.fillStyle = c;
       ctx.fillRect(dx + 4 * z, dy + 4 * z, sz - 8 * z, sz - 8 * z);
     }
     ctx.fillStyle = "#bac2de";
@@ -652,7 +639,6 @@ function handleObjClick(tx, ty) {
   switch (S.objMode) {
     case "enemy": placeEnemy(tx, ty); break;
     case "npc": placeNPC(tx, ty); break;
-    case "tree": placeTree(tx, ty); break;
     case "prop": placeProp(tx, ty); break;
     case "statue": placeStatue(tx, ty); break;
     case "blocked": toggleBlocked(tx, ty); break;
@@ -726,14 +712,9 @@ function placeNPC(tx, ty) {
   S.npcs.push({ npcId, tx: worldTx, ty: worldTy, floor });
 }
 
-function placeTree(tx, ty) {
-  if (S.trees.some(t => t.tx === tx && t.ty === ty)) return;
-  const tint = $("#treeTint") ? $("#treeTint").value : "#2c4f2f";
-  S.trees.push({ tx, ty, tint });
-}
-
 function placeProp(tx, ty) {
   const type = $("#propType") ? $("#propType").value : "rock";
+  if (S.props.some(p => p.tx === tx && p.ty === ty && p.type === type)) return;
   S.props.push({ tx, ty, type });
 }
 
@@ -1115,24 +1096,18 @@ function updatePropsPanel() {
       </label>
       <p class="muted">Click on map to place. Replaces previous position for same NPC.</p>
     `;
-  } else if (S.objMode === "tree") {
-    panel.innerHTML = `
-      <label>Tint: <input id="treeTint" type="color" value="#2c4f2f"></label>
-      <p class="muted">Click to place trees. Trees block movement.</p>
-    `;
   } else if (S.objMode === "prop") {
+    const propTypes = Object.keys(S.propDefs);
+    const opts = propTypes.map(t => {
+      const def = S.propDefs[t];
+      const tag = def.blocked ? " [blocked]" : "";
+      return `<option value="${t}">${t}${tag}</option>`;
+    }).join("");
     panel.innerHTML = `
       <label>Type:
-        <select id="propType">
-          <option value="rock">rock</option>
-          <option value="mushroom">mushroom</option>
-          <option value="bush">bush</option>
-          <option value="sign">sign</option>
-          <option value="barrel">barrel</option>
-          <option value="crate">crate</option>
-        </select>
+        <select id="propType">${opts}</select>
       </label>
-      <p class="muted">Click to place decorative props (no collision).</p>
+      <p class="muted">Click to place. Blocking defined in props.json.</p>
     `;
   } else if (S.objMode === "portal") {
     panel.innerHTML = `<p class="muted">Click and drag on the map to define portal rectangle.</p>`;
@@ -1214,7 +1189,7 @@ function updateObjectList() {
   });
 
   html += `<div class="obj-item" style="color:#6c7086">
-    <span>🌲 Trees: ${S.trees.length} | Props: ${S.props.length} | Blocked: ${S.extraBlocked.length}</span>
+    <span>📦 Props: ${S.props.length} | Blocked: ${S.extraBlocked.length}</span>
   </div>`;
 
   list.innerHTML = html;
@@ -1278,7 +1253,6 @@ function deleteObject(type, idx) {
     case "building": S.buildings.splice(idx, 1); break;
     case "statue": S.statues.splice(idx, 1); break;
     case "safezone": S.safeZones.splice(idx, 1); break;
-    case "tree": S.trees.splice(idx, 1); break;
     case "prop": S.props.splice(idx, 1); break;
   }
   updateObjectList();
@@ -1295,7 +1269,61 @@ function deleteObjectAtTile(tx, ty) {
     return;
   }
 
-  // Priority order: statues > npcs > enemies > props > trees > portals > buildings > safezones > blocked
+  // If an object category is selected, only delete that category
+  const mode = S.objMode;
+  if (mode) {
+    switch (mode) {
+      case "statue": {
+        const i = S.statues.findIndex(s => s.tx === tx && s.ty === ty);
+        if (i >= 0) { S.statues.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "npc": {
+        const i = S.npcs.findIndex(n => n.tx === tx && n.ty === ty && (n.floor || 0) === 0);
+        if (i >= 0) { S.npcs.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "enemy": {
+        for (let ei = 0; ei < S.enemySpawns.length; ei++) {
+          const pi = S.enemySpawns[ei].positions.findIndex(([ex, ey]) => ex === tx && ey === ty);
+          if (pi >= 0) {
+            S.enemySpawns[ei].positions.splice(pi, 1);
+            if (S.enemySpawns[ei].positions.length === 0) S.enemySpawns.splice(ei, 1);
+            updateObjectList(); render(); return;
+          }
+        }
+        return;
+      }
+      case "prop": {
+        const i = S.props.findIndex(p => p.tx === tx && p.ty === ty);
+        if (i >= 0) { S.props.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "portal": {
+        const i = S.portals.findIndex(p => tx >= p.x && tx < p.x + p.w && ty >= p.y && ty < p.y + p.h);
+        if (i >= 0) { S.portals.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "building": {
+        const i = S.buildings.findIndex(b => tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h);
+        if (i >= 0) { S.buildings.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "safezone": {
+        const i = S.safeZones.findIndex(sz => tx >= sz.x1 && tx <= sz.x2 && ty >= sz.y1 && ty <= sz.y2);
+        if (i >= 0) { S.safeZones.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "blocked": {
+        const i = S.extraBlocked.findIndex(([bx, by]) => bx === tx && by === ty);
+        if (i >= 0) { S.extraBlocked.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+    }
+    return;
+  }
+
+  // No category selected — fall through all types (priority order)
   const si = S.statues.findIndex(s => s.tx === tx && s.ty === ty);
   if (si >= 0) { S.statues.splice(si, 1); updateObjectList(); render(); return; }
 
@@ -1313,9 +1341,6 @@ function deleteObjectAtTile(tx, ty) {
 
   const pri = S.props.findIndex(p => p.tx === tx && p.ty === ty);
   if (pri >= 0) { S.props.splice(pri, 1); updateObjectList(); render(); return; }
-
-  const ti = S.trees.findIndex(t => t.tx === tx && t.ty === ty);
-  if (ti >= 0) { S.trees.splice(ti, 1); updateObjectList(); render(); return; }
 
   const poi = S.portals.findIndex(p => tx >= p.x && tx < p.x + p.w && ty >= p.y && ty < p.y + p.h);
   if (poi >= 0) { S.portals.splice(poi, 1); updateObjectList(); render(); return; }

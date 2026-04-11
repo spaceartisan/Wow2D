@@ -100,10 +100,7 @@ function generateEldengrove() {
       const densePatch = (x + y * 2) % 7 === 0;
       const edgePatch = x > 114 && y % 3 !== 0;
       if ((densePatch || edgePatch) && tiles[y][x] !== "water") {
-        trees.push({
-          tx: x, ty: y,
-          tint: (x + y) % 2 === 0 ? "#2c4f2f" : "#315937"
-        });
+        trees.push({ tx: x, ty: y });
         blocked.add(tileKey(x, y));
       }
     }
@@ -265,6 +262,12 @@ function generateEldengrove() {
     }
   }
 
+  // Merge trees into props as type:"tree"
+  const allProps = [
+    ...trees.map(t => ({ tx: t.tx, ty: t.ty, type: "tree" })),
+    ...props
+  ];
+
   return {
     id: "eldengrove",
     name: "Eldengrove Village",
@@ -280,8 +283,7 @@ function generateEldengrove() {
     terrain,
     extraBlocked,
     buildings,
-    trees,
-    props,
+    props: allProps,
     enemySpawns: [
       {
         type: "wolf",
@@ -361,10 +363,7 @@ function generateDarkwood() {
       // Trees everywhere except paths
       const densePatch = (x + y * 2) % 6 === 0;
       if (densePatch) {
-        trees.push({
-          tx: x, ty: y,
-          tint: (x + y) % 2 === 0 ? "#1e3a20" : "#243d26"
-        });
+        trees.push({ tx: x, ty: y });
         blocked.add(tileKey(x, y));
       }
     }
@@ -475,6 +474,12 @@ function generateDarkwood() {
     }
   }
 
+  // Merge trees into props as type:"tree"
+  const allProps = [
+    ...trees.map(t => ({ tx: t.tx, ty: t.ty, type: "tree" })),
+    ...props
+  ];
+
   return {
     id: "darkwood",
     name: "The Darkwood",
@@ -488,8 +493,7 @@ function generateDarkwood() {
     terrain,
     extraBlocked,
     buildings: [],
-    trees,
-    props,
+    props: allProps,
     enemySpawns: [
       {
         type: "wolf",
@@ -533,6 +537,6 @@ const darkwood = generateDarkwood();
 fs.writeFileSync(path.join(outDir, "eldengrove.json"), JSON.stringify(eldengrove));
 fs.writeFileSync(path.join(outDir, "darkwood.json"), JSON.stringify(darkwood));
 
-console.log(`Generated eldengrove.json (${eldengrove.width}x${eldengrove.height}, ${eldengrove.trees.length} trees, ${eldengrove.props.length} props)`);
-console.log(`Generated darkwood.json (${darkwood.width}x${darkwood.height}, ${darkwood.trees.length} trees, ${darkwood.props.length} props)`);
+console.log(`Generated eldengrove.json (${eldengrove.width}x${eldengrove.height}, ${eldengrove.props.length} props)`);
+console.log(`Generated darkwood.json (${darkwood.width}x${darkwood.height}, ${darkwood.props.length} props)`);
 console.log("Done!");

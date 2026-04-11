@@ -27,6 +27,7 @@
       <button class="tab" data-tab="npcs">NPCs</button>
       <button class="tab" data-tab="quests">Quests</button>
       <button class="tab" data-tab="playerBase">Player Base</button>
+      <button class="tab" data-tab="props">Props</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -866,6 +867,135 @@
                 <span id="playerBaseValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="playerBaseDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="props">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Props</h2>
+            <div class="inline-actions">
+              <button id="addPropButton" class="button secondary small">Add</button>
+              <button id="duplicatePropButton" class="button secondary small">Duplicate</button>
+              <button id="deletePropButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="propSearchInput" type="text" placeholder="Find prop type" />
+            </label>
+
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="propEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Blocked</span>
+                <strong id="propBlockedCount">0</strong>
+              </div>
+            </div>
+
+            <div id="propList" class="tile-list" role="listbox" aria-label="Prop entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Props Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/props.json</code> — SpriteManager auto-loads every key's sprite from <code>public/assets/sprites/props</code> at startup. No code changes needed to add a prop type.</p>
+            </div>
+            <div class="inline-actions">
+              <button id="scanPropsButton" class="button secondary">Scan Props Folder</button>
+              <button id="validatePropsButton" class="button secondary">Validate</button>
+              <button id="reloadPropsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Prop</h3>
+                <span id="selectedPropLabel" class="mono subtle">Nothing selected</span>
+              </div>
+
+              <div id="propEmptyState" class="empty-state">
+                <p>Select a prop entry from the list to begin editing.</p>
+              </div>
+
+              <form id="propForm" class="editor-form hidden" autocomplete="off">
+                <label class="field">
+                  <span>Prop Type ID</span>
+                  <input id="propIdInput" type="text" />
+                </label>
+
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="sprite-preview-frame sprite-preview-frame--sm">
+                      <img id="propSpritePreviewImage" class="sprite-preview-image hidden" alt="Selected prop sprite preview" />
+                      <div id="propSpritePreviewFallback" class="sprite-fallback sprite-fallback--sm">
+                        <div id="propColorPreview" class="color-preview sprite-fallback-color-sm"></div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Sprite Preview</span>
+                        <span id="propSpriteStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="propSpritePathLabel">public/assets/sprites/props/&lt;type&gt;.png</code></div>
+                        <div><span class="subtle">SpriteManager preloads this sprite at startup. Fallback color is used if the PNG is missing.</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <label class="field checkbox-field">
+                  <input id="propBlockedInput" type="checkbox" />
+                  <span>Blocked / impassable</span>
+                </label>
+
+                <div class="color-row">
+                  <label class="field color-picker-field">
+                    <span>Fallback Color</span>
+                    <input id="propColorPicker" class="color-picker color-picker-sm" type="color" />
+                  </label>
+                  <label class="field">
+                    <span>R</span>
+                    <input id="propRInput" type="number" min="0" max="255" />
+                  </label>
+                  <label class="field">
+                    <span>G</span>
+                    <input id="propGInput" type="number" min="0" max="255" />
+                  </label>
+                  <label class="field">
+                    <span>B</span>
+                    <input id="propBInput" type="number" min="0" max="255" />
+                  </label>
+                </div>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="propJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="propValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="propDiagnosticsList" class="diagnostics-list empty-diagnostics">
                 <p>No messages yet.</p>
               </div>
             </section>

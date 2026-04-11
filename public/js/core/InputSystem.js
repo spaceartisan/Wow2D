@@ -8,7 +8,8 @@ export class InputSystem {
       y: 0,
       worldX: 0,
       worldY: 0,
-      leftClicked: false
+      leftClicked: false,
+      rightClicked: false
     };
 
     this._onKeyDown = (event) => {
@@ -34,19 +35,27 @@ export class InputSystem {
     this._onMouseDown = (event) => {
       if (event.button === 0) {
         this.mouse.leftClicked = true;
+      } else if (event.button === 2) {
+        this.mouse.rightClicked = true;
       }
+    };
+
+    this._onContextMenu = (event) => {
+      event.preventDefault();
     };
 
     this._onBlur = () => {
       this.keys.clear();
       this.justPressed.clear();
       this.mouse.leftClicked = false;
+      this.mouse.rightClicked = false;
     };
 
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup", this._onKeyUp);
     canvas.addEventListener("mousemove", this._onMouseMove);
     canvas.addEventListener("mousedown", this._onMouseDown);
+    canvas.addEventListener("contextmenu", this._onContextMenu);
     window.addEventListener("blur", this._onBlur);
   }
 
@@ -55,6 +64,7 @@ export class InputSystem {
     window.removeEventListener("keyup", this._onKeyUp);
     this.canvas.removeEventListener("mousemove", this._onMouseMove);
     this.canvas.removeEventListener("mousedown", this._onMouseDown);
+    this.canvas.removeEventListener("contextmenu", this._onContextMenu);
     window.removeEventListener("blur", this._onBlur);
   }
 
@@ -69,5 +79,6 @@ export class InputSystem {
   endFrame() {
     this.justPressed.clear();
     this.mouse.leftClicked = false;
+    this.mouse.rightClicked = false;
   }
 }

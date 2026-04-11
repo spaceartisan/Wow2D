@@ -164,6 +164,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `sell_item` | `index` | Sell item (must be near vendor NPC) |
 | `buy_item` | `npcId, itemId` | Buy from vendor (proximity + gold validated) |
 | `equip_item` | `index` | Equip item from inventory |
+| `unequip_item` | `slot` | Unequip item from equipment slot (`weapon`, `armor`, or `trinket`) |
 | `complete_quest` | `questId, npcId` | Turn in quest at NPC |
 | `quest_state_update` | `questId, state` | Sync quest accept/progress (can't set "completed") |
 | `use_hearthstone` | — | Begin hearthstone cast |
@@ -193,6 +194,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `sell_item_result` | Item sold | `ok, index, remainingItem, gold, soldName, sellPrice` |
 | `buy_item_result` | Item bought | `ok, item, index, gold, buyPrice` |
 | `equip_item_result` | Equip swap | `ok, index, slot, newItem, oldItem, hp, maxHp, mana, maxMana, damage` |
+| `unequip_item_result` | Unequip | `ok, reason?, slot, item, index, hp, maxHp, mana, maxMana, damage` |
 | `quest_complete_result` | Quest turned in | `ok, questId, xp, gold, items[], playerGold, playerXp, playerLevel, hp, maxHp, mana, maxMana` |
 | `attune_result` | Waystone attune | `ok, reason?, hearthstone?` |
 | `hearthstone_result` | Use HS validation fail | `ok: false, reason, remaining?` |
@@ -276,7 +278,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
 
 ## Map System
 
-Maps loaded at startup: `eldengrove`, `darkwood`, `moonfall_cavern`
+Maps loaded at startup: `eldengrove`, `darkwood`, `southmere`, `moonfall_cavern`
 
 Stored in `world.maps` — a `Map<mapId, MapEntry>`:
 
@@ -685,11 +687,9 @@ const activeSessions = db.prepare(
 
 4. **Serve admin UI** — Either a separate static folder (e.g. `admin/`) or a SPA framework. Keep it behind auth middleware.
 
-### Minimal Admin Route Example
+### Admin Auth
 
 ```js
-// In server.js, after existing routes:
-
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "changeme";
 
 function adminAuth(req, res, next) {
@@ -728,6 +728,49 @@ app.post("/admin/broadcast", adminAuth, express.json(), (req, res) => {
   res.json({ ok: true });
 });
 ```
+
+### Implemented Admin API Routes
+
+The admin GUI (`admin/`) is fully implemented. All routes are behind `adminAuth` middleware and prefixed with `/admin/api/`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/api/stats` | Dashboard stats (online count, accounts, characters, active sessions, maps) |
+| GET | `/admin/api/players` | All online players with position, HP, mana, gold, status |
+| GET | `/admin/api/accounts` | All registered accounts |
+| GET | `/admin/api/accounts/:username/characters` | Characters belonging to an account |
+| GET | `/admin/api/characters` | All characters across all accounts |
+| GET | `/admin/api/characters/:id` | Full character detail (stats, inventory, equipment, bank, quests, hearthstone) |
+| POST | `/admin/api/characters/:id/edit` | Edit character stats (level, xp, hp, gold, mapId, tileX, tileY) |
+| POST | `/admin/api/characters/:id/hearthstone` | Set attuned hearthstone waystone |
+| POST | `/admin/api/characters/:id/inventory` | Replace inventory (20-slot array) |
+| POST | `/admin/api/characters/:id/bank` | Replace bank (48-slot array) |
+| GET | `/admin/api/items` | Full item catalog from items.json |
+| GET | `/admin/api/waystones` | All waystones across all maps |
+| POST | `/admin/api/players/:id/kick` | Kick an online player |
+| POST | `/admin/api/players/:id/revive` | Revive a dead player to full HP/mana |
+| POST | `/admin/api/players/:id/teleport` | Teleport player to a waystone |
+| POST | `/admin/api/players/:id/grantxp` | Grant XP (handles level-ups) |
+| POST | `/admin/api/players/:id/setgold` | Set gold amount |
+| POST | `/admin/api/players/:id/whisper` | Send a private whisper from `[Admin]` |
+| POST | `/admin/api/broadcast` | Broadcast system-wide chat message |
+| POST | `/admin/api/save-all` | Force-save all online players to DB |
+| POST | `/admin/api/maps/:mapId/respawn-enemies` | Respawn all dead enemies on a map |
+| GET | `/admin/api/maps/:mapId/enemies` | List all enemies on a map |
+
+### Server Console Commands
+
+The server runs a readline interface for terminal commands:
+
+| Command | Description |
+|---------|-------------|
+| `help` | List all commands |
+| `listaccounts` | Show all accounts with creation dates |
+| `listchars <username>` | List characters for an account |
+| `findchar <name>` | Search characters by name (partial match) |
+| `deletechar <charId>` | Delete a character by ID |
+| `deleteaccount <username>` | Delete an account and all its characters |
+| `changepassword <user> <pw>` | Change an account's password and invalidate sessions |
 
 ### Key Objects Available in server.js Scope
 
@@ -770,7 +813,8 @@ SELECT name, level, gold FROM characters ORDER BY gold DESC LIMIT 10;
 |--------|------|-------------|
 | `eldengrove` | 128×128 tiles | Starter zone, safe town, beginner enemies |
 | `darkwood` | 80×80 tiles | Harder forest zone |
-| `moonfall_cavern` | varies | Cave/dungeon zone |
+| `southmere` | 128×128 tiles | Additional overworld zone |
+| `moonfall_cavern` | 96×96 tiles | Cave/dungeon zone |
 
 Map JSON files: `public/data/maps/{mapId}.json`
 

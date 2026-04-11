@@ -12,7 +12,6 @@ export class WorldSystem {
     this.terrain = [];        // 2D array of palette indices
     this.tilePalette = [];    // resolved array of { name, color:[r,g,b], blocked }
     this.blocked = new Set();
-    this.trees = [];
     this.buildings = [];
     this.ambientProps = [];
     this.portals = [];
@@ -36,6 +35,11 @@ export class WorldSystem {
       const palResp = await fetch("/data/tilePalette.json");
       if (!palResp.ok) throw new Error("Failed to load tilePalette.json");
       this.globalPalette = await palResp.json();
+
+      const propResp = await fetch("/data/props.json");
+      if (!propResp.ok) throw new Error("Failed to load props.json");
+      this.propDefs = await propResp.json();
+
       this._globalPaletteLoaded = true;
     }
 
@@ -117,20 +121,21 @@ export class WorldSystem {
     this.currentFloor = 0;
     this.insideBuilding = null;
 
-    // Trees (stored as tile coords → convert to world center)
-    this.trees = (data.trees || []).map(t => ({
-      x: t.tx * this.tileSize + this.tileSize * 0.5,
-      y: t.ty * this.tileSize + this.tileSize * 0.5,
-      radius: this.tileSize * 0.4,
-      tint: t.tint || "#2c4f2f"
-    }));
-
-    // Props (stored as tile coords → convert to world center)
+    // Props — trees are now type:"tree" alongside other props
     this.ambientProps = (data.props || []).map(p => ({
       x: p.tx * this.tileSize + this.tileSize * 0.5,
       y: p.ty * this.tileSize + this.tileSize * 0.5,
       type: p.type || "rock"
     }));
+
+    // Block props based on propDefs
+    const propDefs = this.propDefs || {};
+    for (const p of (data.props || [])) {
+      const def = propDefs[p.type];
+      if (def?.blocked) {
+        this.blocked.add(tileKey(p.tx, p.ty));
+      }
+    }
   }
 
   inBounds(x, y) {
@@ -397,18 +402,11 @@ export class WorldSystem {
       const img = sprites && sprites.get(`props/${prop.type}`);
       if (img) {
         ctx.drawImage(img, px - img.width / 2, py - img.height / 2);
-      } else if (prop.type === "flower") {
-        ctx.fillStyle = "#f2b8d7";
-        ctx.beginPath();
-        ctx.arc(px, py, 3, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (prop.type === "mushroom") {
-        ctx.fillStyle = "#c97a5e";
-        ctx.beginPath();
-        ctx.arc(px, py, 3, 0, Math.PI * 2);
-        ctx.fill();
       } else {
-        ctx.fillStyle = "#808a8d";
+        // Fallback: use color from props.json
+        const def = this.propDefs && this.propDefs[prop.type];
+        const [r, g, b] = (def && def.color) || [128, 128, 128];
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath();
         ctx.arc(px, py, 4, 0, Math.PI * 2);
         ctx.fill();
@@ -448,42 +446,6 @@ export class WorldSystem {
         ctx.fillText(badgeText, badgeX, badgeY);
       }
     }
-
-    for (const tree of this.trees) {
-      if (tree.x < minX || tree.x > maxX || tree.y < minY || tree.y > maxY) continue;
-
-      const x = tree.x - camera.x;
-      const y = tree.y - camera.y;
-
-      // Pick tree sprite variant based on tint
-      const treeKey = this._treeVariant(tree.tint);
-      const img = sprites && sprites.get(`props/${treeKey}`);
-      if (img) {
-        ctx.drawImage(img, x - img.width / 2, y - img.height / 2 + 4);
-      } else {
-        ctx.fillStyle = "#4d311f";
-        ctx.fillRect(x - 4, y + 8, 8, 14);
-        ctx.fillStyle = tree.tint;
-        ctx.beginPath();
-        ctx.arc(x, y, tree.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        ctx.beginPath();
-        ctx.arc(x - tree.radius * 0.25, y - tree.radius * 0.2, tree.radius * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  _treeVariant(tint) {
-    if (!tint || tint === "#2c4f2f") return "tree_default";
-    // Match to closest variant
-    const r = parseInt(tint.slice(1, 3), 16);
-    const g = parseInt(tint.slice(3, 5), 16);
-    if (r > 100) return "tree_autumn";
-    if (g > 80) return "tree_light";
-    if (g < 50) return "tree_dark";
-    return "tree_default";
   }
 
   _tileColor(rgb, x, y) {

@@ -17,7 +17,7 @@ export class SpriteManager {
    * Preload all required sprites. Call once during game init.
    * Fetches the sprite manifest, then loads every image in parallel.
    */
-  async load(tilePalette, enemyIds, npcIds, itemIds) {
+  async load(tilePalette, enemyIds, npcIds, itemIds, propDefs) {
     const promises = [];
 
     // Tiles — one per palette entry
@@ -46,14 +46,11 @@ export class SpriteManager {
     // Portal
     promises.push(this._loadOne("props/portal"));
 
-    // Trees
-    for (const variant of ["tree_default", "tree_dark", "tree_light", "tree_autumn"]) {
-      promises.push(this._loadOne(`props/${variant}`));
-    }
-
-    // Ambient props
-    for (const prop of ["flower", "mushroom", "rock"]) {
-      promises.push(this._loadOne(`props/${prop}`));
+    // All props from props.json (trees, flowers, rocks, mushrooms, etc.)
+    if (propDefs) {
+      for (const key of Object.keys(propDefs)) {
+        promises.push(this._loadOne(`props/${key}`));
+      }
     }
 
     // Item icons

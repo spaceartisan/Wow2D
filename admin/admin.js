@@ -193,6 +193,7 @@ function showTeleportModal(playerId, name) {
       <option value="eldengrove">Eldengrove</option>
       <option value="darkwood">Darkwood</option>
       <option value="moonfall_cavern">Moonfall Cavern</option>
+      <option value="southmere">Southmere</option>
     </select>
     <label>Tile X</label>
     <input type="number" id="tp-x" value="20" min="0">

@@ -1812,9 +1812,9 @@ input, textarea {
   position: relative;
 }
 
-/* inventory items with content are grabbable */
+/* inventory items with content are clickable / draggable */
 .inventory-item.has-item {
-  cursor: grab;
+  cursor: pointer;
 }
 
 /* ── drag ghost ───────────────────────────────────────── */

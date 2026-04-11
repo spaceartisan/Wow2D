@@ -1,0 +1,74 @@
+{
+    "tree": {
+        "blocked": true,
+        "color": [
+            44,
+            79,
+            47
+        ]
+    },
+    "rock": {
+        "blocked": true,
+        "color": [
+            128,
+            128,
+            128
+        ]
+    },
+    "flower": {
+        "blocked": false,
+        "color": [
+            220,
+            140,
+            180
+        ]
+    },
+    "flower_dup": {
+        "blocked": false,
+        "color": [
+            220,
+            140,
+            180
+        ]
+    },
+    "mushroom": {
+        "blocked": false,
+        "color": [
+            160,
+            100,
+            60
+        ]
+    },
+    "tree_autumn": {
+        "color": [
+            169,
+            120,
+            7
+        ],
+        "blocked": true
+    },
+    "tree_dark": {
+        "color": [
+            0,
+            64,
+            0
+        ],
+        "blocked": true
+    },
+    "tree_default": {
+        "color": [
+            0,
+            130,
+            0
+        ],
+        "blocked": true
+    },
+    "tree_light": {
+        "color": [
+            0,
+            215,
+            0
+        ],
+        "blocked": true
+    }
+}

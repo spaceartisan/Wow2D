@@ -180,6 +180,10 @@ export class NetworkSystem {
     this.send({ type: "equip_item", index });
   }
 
+  sendUnequipItem(slot) {
+    this.send({ type: "unequip_item", slot });
+  }
+
   sendCompleteQuest(questId) {
     this.send({ type: "complete_quest", questId });
   }
@@ -276,6 +280,9 @@ export class NetworkSystem {
         break;
       case "equip_item_result":
         this.onEquipItemResult(msg);
+        break;
+      case "unequip_item_result":
+        this.onUnequipItemResult(msg);
         break;
       case "quest_complete_result":
         this.onQuestCompleteResult(msg);
@@ -672,6 +679,25 @@ export class NetworkSystem {
     this.game.ui._inventoryDirty = true;
     this.game.ui._equipmentDirty = true;
     this.game.ui._hotbarDirty = true;
+  }
+
+  onUnequipItemResult(msg) {
+    if (!msg.ok) {
+      this.game.ui.addMessage(msg.reason || "Cannot unequip that right now.");
+      return;
+    }
+    const player = this.game.entities.player;
+    player.equipment[msg.slot] = null;
+    player.inventorySlots[msg.index] = msg.item;
+    player.hp = msg.hp;
+    player.maxHp = msg.maxHp;
+    player.mana = msg.mana;
+    player.maxMana = msg.maxMana;
+    player.damage = msg.damage;
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._equipmentDirty = true;
+    this.game.ui._hotbarDirty = true;
+    this.game.ui.addMessage(`${msg.item.name} unequipped.`);
   }
 
   onQuestCompleteResult(msg) {

@@ -59,7 +59,8 @@ export class Game {
       this.world.globalPalette,
       Object.keys(enemies),
       Object.keys(npcs),
-      Object.keys(items)
+      Object.keys(items),
+      this.world.propDefs
     );
 
     this.quests = new QuestSystem(this);
@@ -98,6 +99,7 @@ export class Game {
 
   destroy() {
     this._destroyed = true;
+    if (this.audio) this.audio.stopBgm();
     if (this._rafId) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
@@ -158,6 +160,9 @@ export class Game {
 
     if (this.input.mouse.leftClicked) {
       this.combat.handleWorldClick(this.input.mouse.worldX, this.input.mouse.worldY);
+    }
+    if (this.input.mouse.rightClicked) {
+      this.combat.handleWorldRightClick(this.input.mouse.worldX, this.input.mouse.worldY);
     }
 
     // Smooth remote entity positions toward latest server data at 60 fps

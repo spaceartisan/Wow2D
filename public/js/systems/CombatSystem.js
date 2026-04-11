@@ -5,6 +5,7 @@ export class CombatSystem {
     this.game = game;
     this.targetEnemyId = null;
     this.targetPlayerId = null;
+    this.engaged = false;
     this.lastPlayerAttackAt = 0;
     this.lastHealCastAt = 0;
   }
@@ -19,6 +20,7 @@ export class CombatSystem {
     if (clickedEnemy) {
       this.targetEnemyId = clickedEnemy.id;
       this.targetPlayerId = null;
+      this.engaged = false;
       this.game.ui.addMessage(`Target: ${clickedEnemy.name}`);
       return;
     }
@@ -27,6 +29,7 @@ export class CombatSystem {
     if (clickedPlayer) {
       this.targetPlayerId = clickedPlayer.id;
       this.targetEnemyId = null;
+      this.engaged = false;
       this.game.ui.addMessage(`Target: ${clickedPlayer.name}`);
       return;
     }
@@ -34,12 +37,28 @@ export class CombatSystem {
     this.clearTarget();
   }
 
+  handleWorldRightClick(worldX, worldY) {
+    const clickedEnemy = this.game.entities.getEnemyAtWorld(worldX, worldY);
+    if (clickedEnemy) {
+      this.targetEnemyId = clickedEnemy.id;
+      this.targetPlayerId = null;
+      this.engaged = true;
+      return;
+    }
+  }
+
   clearTarget() {
     this.targetEnemyId = null;
     this.targetPlayerId = null;
+    this.engaged = false;
   }
 
   useAttackAbility() {
+    if (!this.targetEnemyId) {
+      this.game.ui.addMessage("No target.");
+      return;
+    }
+    this.engaged = true;
     this.tryPlayerAttack(true);
   }
 
@@ -74,7 +93,9 @@ export class CombatSystem {
       return;
     }
 
-    this.tryPlayerAttack(false, dt);
+    if (this.engaged) {
+      this.tryPlayerAttack(false, dt);
+    }
   }
 
   tryPlayerAttack(forceAttack = false, dt = 0) {

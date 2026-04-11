@@ -198,5 +198,117 @@
       128
     ],
     "blocked": false
+  },
+  "bridgeWood": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "cobblestone": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "fenceWood": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "fountain": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "gateClosed": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "hedge": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "mudBank": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "shallowWater": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "shopWall": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "stoneFloor": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "stoneWall": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "timberWall": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "townSquare": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
+  },
+  "woodFloor": {
+    "color": [
+      128,
+      128,
+      128
+    ],
+    "blocked": false
   }
 }

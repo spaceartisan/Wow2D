@@ -55,9 +55,8 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
 | `bgm` | `string` | Background music track ID. |
 | `safeZones` | `array` | Areas where PvP damage is disabled. |
 | `buildings` | `array` | Interior spaces, optionally multi-story. |
-| `trees` | `array` | Tree positions (blocked + visual). |
-| `props` | `array` | Decorative objects (no collision). |
-| `extraBlocked` | `[tx, ty][]` | Additional blocked tile coordinates beyond palette-blocked tiles. |
+| `props` | `array` | World objects (trees, rocks, flowers, etc.). Blocking behavior defined in `props.json`. |
+| `extraBlocked` | `[tx, ty][]` | Additional blocked tile coordinates beyond palette-blocked and prop-blocked tiles. |
 | `enemySpawns` | `array` | Enemy spawn definitions. |
 | `npcs` | `array` | NPC placements (references `npcs.json`). |
 | `statues` | `array` | Waystone placements for hearthstone attunement. |
@@ -281,29 +280,46 @@ Areas where players cannot deal or receive PvP damage.
 
 All coordinates are in tiles. The zone spans from (x1, y1) to (x2, y2) inclusive.
 
-## Trees and Props
+## Prop Palette (`props.json`)
 
-**Trees** block movement and are drawn as tree sprites:
+All prop types (including trees) are defined globally in `public/data/props.json`. This works like `tilePalette.json` but for world objects placed in the `props` array.
 
 ```json
-"trees": [
-  { "tx": 79, "ty": 20, "tint": "#315937" }
-]
+{
+  "tree":     { "blocked": true,  "color": [44, 79, 47] },
+  "rock":     { "blocked": true,  "color": [128, 128, 128] },
+  "flower":   { "blocked": false, "color": [220, 140, 180] },
+  "mushroom": { "blocked": false, "color": [160, 100, 60] }
+}
 ```
 
-Trees are automatically added to the blocked set. The `tint` controls the tree's color variation.
+| Field | Type | Description |
+|-------|------|-------------|
+| `blocked` | `boolean` | `true` = tile is impassable. Both client and server read this. |
+| `color` | `[r,g,b]` | RGB fallback if no sprite exists. |
 
-**Props** are decorative only (no collision):
+To add a new prop type, add it to `props.json`, place a sprite at `public/assets/sprites/props/{type}.png`, and use the type name in map `props` arrays. No code changes are needed — `SpriteManager` automatically loads sprites for every key in `props.json`.
+
+## Props
+
+All world objects — trees, rocks, flowers, mushrooms, etc. — live in a single `props` array. Each entry’s `type` must match a key in `props.json`, which controls whether the tile blocks movement.
 
 ```json
 "props": [
-  { "tx": 19, "ty": 15, "type": "rock" }
+  { "tx": 79, "ty": 20, "type": "tree" },
+  { "tx": 19, "ty": 15, "type": "rock" },
+  { "tx": 22, "ty": 18, "type": "flower" }
 ]
 ```
 
+| Field | Type | Description |
+|-------|------|-------------|
+| `tx`, `ty` | `number` | Tile position. |
+| `type` | `string` | Must match a key in `props.json`. |
+
 ## Extra Blocked Tiles
 
-For tiles that should block movement but aren't marked `blocked` in the palette (e.g., individual fence tiles, custom obstacles):
+For tiles that should block movement but aren't covered by palette tiles, trees, or props (e.g., invisible barriers, fence tiles):
 
 ```json
 "extraBlocked": [[4, 4], [5, 4], [6, 4]]
@@ -318,7 +334,7 @@ Open `game/ServerWorld.js` and add your map ID to the constructor's map list:
 ```javascript
 constructor() {
   this.maps = new Map();
-  for (const mapId of ["eldengrove", "darkwood", "swamplands"]) {  // ← add here
+  for (const mapId of ["eldengrove", "darkwood", "southmere", "moonfall_cavern", "swamplands"]) {  // ← add here
     const data = loadMap(mapId);
     const collision = new CollisionMap(data);
     const enemies = this._createEnemiesForMap(data, collision);
@@ -329,7 +345,7 @@ constructor() {
 
 That's it. The server will:
 - Load the JSON file from `public/data/maps/swamplands.json`
-- Build a collision map from the terrain palette and extraBlocked
+- Build a collision map from the terrain palette, `props.json` definitions, trees, props, and `extraBlocked`
 - Spawn enemies from `enemySpawns`
 - Accept portal transitions to/from this map
 
@@ -343,7 +359,8 @@ That's it. The server will:
 6. **Place NPCs** — add entries to both the map's `npcs` array and `npcs.json`
 7. **Add a waystone** — so players can bind their hearthstone
 8. **Register on server** — add the map ID to the array in `ServerWorld.js`
-9. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
+9. **Add new prop types** — if your map uses new props, add them to `props.json` and place matching sprites (sprite loading is automatic)
+10. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
 
 ## Example: Minimal Map
 
@@ -389,7 +406,6 @@ That's it. The server will:
   ],
   "npcs": [],
   "buildings": [],
-  "trees": [],
   "props": [],
   "extraBlocked": [],
   "safeZones": []

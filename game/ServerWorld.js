@@ -15,6 +15,7 @@ const ITEMS = JSON.parse(fs.readFileSync(path.join(dataDir, "items.json"), "utf8
 const ENEMY_TYPES = JSON.parse(fs.readFileSync(path.join(dataDir, "enemies.json"), "utf8"));
 const QUEST_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "quests.json"), "utf8"));
 const GLOBAL_PALETTE = JSON.parse(fs.readFileSync(path.join(dataDir, "tilePalette.json"), "utf8"));
+const PROP_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "props.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
 const PLAYER_BASE = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
@@ -127,9 +128,12 @@ class CollisionMap {
 
     // Buildings are now tile-based (walls blocked via palette), no rectangle blocking needed
 
-    // Trees (single-tile blockers)
-    for (const t of (data.trees || [])) {
-      this.blocked.add(tileKey(t.tx, t.ty));
+    // Props (including trees) — blocked per props.json definition
+    for (const p of (data.props || [])) {
+      const def = PROP_DEFS[p.type];
+      if (def?.blocked) {
+        this.blocked.add(tileKey(p.tx, p.ty));
+      }
     }
   }
 
@@ -191,7 +195,7 @@ class ServerWorld {
   constructor() {
     // Load all maps
     this.maps = new Map();       // mapId → { data, collision, enemies[], drops[] }
-    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern"]) {
+    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern", "southmere"]) {
       const data = loadMap(mapId);
       const collision = new CollisionMap(data);
       const enemies = this._createEnemiesForMap(data, collision);
@@ -424,6 +428,9 @@ class ServerWorld {
         break;
       case "equip_item":
         this.handleEquipItem(player, msg);
+        break;
+      case "unequip_item":
+        this.handleUnequipItem(player, msg);
         break;
       case "complete_quest":
         this.handleCompleteQuest(player, msg);
@@ -892,6 +899,40 @@ class ServerWorld {
       slot,
       newItem: item,
       oldItem,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      mana: player.mana,
+      maxMana: player.maxMana,
+      damage: player.damage
+    });
+  }
+
+  handleUnequipItem(player, msg) {
+    if (player.dead) return;
+    const slot = msg.slot;
+    if (!["weapon", "armor", "trinket"].includes(slot)) return;
+
+    const item = player.equipment[slot];
+    if (!item) return;
+
+    // Find an empty inventory slot
+    const emptyIdx = player.inventory.indexOf(null);
+    if (emptyIdx === -1) {
+      this.send(player.ws, { type: "unequip_item_result", ok: false, reason: "Inventory full" });
+      return;
+    }
+
+    player.equipment[slot] = null;
+    player.inventory[emptyIdx] = item;
+
+    this._recalcStats(player);
+
+    this.send(player.ws, {
+      type: "unequip_item_result",
+      ok: true,
+      slot,
+      item,
+      index: emptyIdx,
       hp: player.hp,
       maxHp: player.maxHp,
       mana: player.mana,

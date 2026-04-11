@@ -44,6 +44,11 @@ app.get("/api/npcs", (_req, res) => {
   res.json(data);
 });
 
+app.get("/api/props", (_req, res) => {
+  const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "props.json"), "utf8"));
+  res.json(data);
+});
+
 app.get("/api/maps", (_req, res) => {
   if (!fs.existsSync(MAPS_DIR)) return res.json([]);
   const files = fs.readdirSync(MAPS_DIR)

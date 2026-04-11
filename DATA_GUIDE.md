@@ -328,6 +328,34 @@ Top-level object keyed by tile name. Each tile needs a sprite at `public/assets/
 
 ---
 
+## props.json
+
+Top-level object keyed by prop type. Defines blocking behavior and fallback colors for world objects placed in map `props` arrays (trees are `type: "tree"` props). Both the client and server load this file. `SpriteManager` automatically loads a sprite for every key in this file — place sprites at `public/assets/sprites/props/{propType}.png`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `blocked` | boolean | `true` = tile is impassable. Applied to both trees and props of this type. |
+| `color` | [r,g,b] | RGB fallback color if no sprite exists. |
+
+**Example:**
+```json
+{
+  "tree":     { "blocked": true,  "color": [44, 79, 47] },
+  "rock":     { "blocked": true,  "color": [128, 128, 128] },
+  "flower":   { "blocked": false, "color": [220, 140, 180] },
+  "mushroom": { "blocked": false, "color": [160, 100, 60] }
+}
+```
+
+**To add a prop type (no code changes needed):**
+1. Add the entry to `props.json` with a unique key
+2. Place a sprite at `public/assets/sprites/props/{propType}.png`
+3. Use the prop type name in map JSON `props` arrays (e.g. `{ "tx": 10, "ty": 5, "type": "rock" }`)
+
+`SpriteManager` reads all keys from `props.json` at startup and preloads matching sprites automatically.
+
+---
+
 ## playerbase.json
 
 Single flat object defining starting player stats. Equipment bonuses stack on top of these.
@@ -364,3 +392,4 @@ When adding new content, ensure the matching sprite/icon exists:
 | npcs.json | `public/assets/sprites/entities/{npcId}.png` | 48×48 |
 | items.json | `public/assets/sprites/icons/{itemId}.png` | 32×32 |
 | tilePalette.json | `public/assets/sprites/tiles/{tileName}.png` | 48×48 |
+| props.json | `public/assets/sprites/props/{propType}.png` | varies |
