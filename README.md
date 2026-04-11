@@ -43,12 +43,13 @@ http://localhost:3000
 | Left-click player | Target player (friendly) |
 | `1` | Attack ability |
 | `2` | Minor Heal (mana + cooldown) |
-| `E` | Interact with nearby NPC |
+| `E` | Interact with nearby NPC or waystone |
 | `I` | Toggle inventory |
 | `C` | Toggle equipment panel |
 | `L` | Toggle quest log |
 | `P` | Toggle character sheet |
 | `K` | Toggle skills panel |
+| `M` | Toggle full world map |
 | `Enter` | Focus chat input |
 | `Escape` | Close panels / game menu |
 
@@ -60,11 +61,21 @@ http://localhost:3000
 
 ### World & Exploration
 - Two interconnected maps: Eldengrove (128×128) and Darkwood Forest (80×80)
-- Portal system for seamless map transitions
+- Portal system for seamless map transitions with server-side proximity validation
 - Tile-based terrain with palette-driven rendering (grass, dirt, water, cliffs, roads, etc.)
 - Buildings with tile-by-tile layouts and multi-floor interiors (stairs to go up/down)
 - Trees, ambient props, and safe zones
+- Waystone system — attune your hearthstone to teleport back to town
 - Procedural map generation via `generate-maps.js`
+
+### Minimap & World Map
+- Corner minimap (bottom-right) shows nearby terrain, enemies (red), other players (cyan), and your position (white)
+- Full world map (M key) displays the entire map with:
+  - Player position (blinking white dot)
+  - Portals (blue diamonds with labels)
+  - Waystones (green diamonds)
+  - Quest NPCs: available quests (!), in-progress (…), ready to turn in (?)
+  - Safe zone outlines and legend
 
 ### Combat & Progression
 - Click-to-target combat with server-authoritative hit resolution
@@ -105,6 +116,7 @@ server.js                    Express + WebSocket server entry point
 generate-maps.js             Procedural map generator
 generate-icons.js            Item icon generator
 generate-sfx.js              Sound effect generator
+MAP_GUIDE.md                 Guide for creating new maps
 game/
   ServerWorld.js              Server-authoritative game state (multi-map)
   database.js                 SQLite schema, auth, character persistence
@@ -112,7 +124,7 @@ public/
   index.html                  Canvas + HUD markup
   styles.css                  Fantasy-themed UI styling
   data/
-    tilePalette.json           Global tile definitions (22 tile types)
+    tilePalette.json           Global tile definitions (23 tile types)
     playerBase.json            Shared player base stats (client + server)
     enemies.json               Enemy type definitions
     items.json                 Item definitions
@@ -133,10 +145,12 @@ public/
       CombatSystem.js           Client-side targeting + ability use
       DragManager.js            Inventory drag-and-drop
       EntitySystem.js           Player, NPC, enemy, and drop management
+      MinimapSystem.js          Corner minimap + full world map overlay
       NetworkSystem.js           WebSocket client + entity smoothing
       QuestSystem.js            Quest state machine + NPC interaction
       UISystem.js               All HUD panels and UI rendering
       WorldSystem.js            Tile map loading, rendering, collision, portals, stairs
+      SpriteManager.js          PNG sprite preloading and lookup
   assets/
     bgm/                       Background music files
     icons/                     Item icon images

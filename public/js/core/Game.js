@@ -7,6 +7,7 @@ import { QuestSystem } from "../systems/QuestSystem.js";
 import { SpriteManager } from "../systems/SpriteManager.js";
 import { UISystem } from "../systems/UISystem.js";
 import { WorldSystem } from "../systems/WorldSystem.js";
+import { MinimapSystem } from "../systems/MinimapSystem.js";
 import { clamp } from "../utils.js";
 
 export class Game {
@@ -31,6 +32,7 @@ export class Game {
     this.combat = null;
     this.ui = null;
     this.network = null;
+    this.minimap = null;
     this.audio = new AudioManager();
   }
 
@@ -64,6 +66,7 @@ export class Game {
     this.entities = new EntitySystem(this);
     this.combat = new CombatSystem(this);
     this.ui = new UISystem(this);
+    this.minimap = new MinimapSystem(this);
 
     // Init audio (needs user gesture — canvas click counts)
     this.audio.init();
@@ -188,6 +191,10 @@ export class Game {
       this.ui.toggleSkills();
     }
 
+    if (this.input.wasPressed("m")) {
+      this.minimap.toggle();
+    }
+
     if (this.input.wasPressed("1")) {
       this.combat.useAttackAbility();
     }
@@ -265,6 +272,7 @@ export class Game {
 
     try {
       await this.world.loadMap(mapId);
+      this.minimap.invalidate();
 
       // Reposition player
       const ts = this.world.tileSize;
@@ -337,6 +345,10 @@ export class Game {
     this.world.drawObjects(ctx, cam, this.canvas, this.sprites);
     this.entities.draw(ctx, cam, this.sprites);
     this.drawInteractionPrompt();
+
+    // Maps — minimap always, full map when toggled
+    this.minimap.drawMinimap(ctx, this.canvas.width, this.canvas.height);
+    this.minimap.drawFullMap(ctx, this.canvas.width, this.canvas.height);
   }
 
   drawInteractionPrompt() {
