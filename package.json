@@ -1,0 +1,29 @@
+{
+  "name": "wow2d-prototype",
+  "version": "1.0.0",
+  "description": "Top-down 2D MMORPG-inspired prototype",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "generate:maps": "node generate-maps.js",
+    "generate:icons": "node generate-icons.js",
+    "generate:sfx": "node generate-sfx.js",
+    "generate:sprites": "node tools/generate-sprites.js",
+    "generate:item-icons": "node tools/generate-item-icons.js",
+    "generate": "node generate-maps.js && node generate-icons.js && node generate-sfx.js && node tools/generate-sprites.js && node tools/generate-item-icons.js"
+  },
+  "keywords": [
+    "game",
+    "canvas",
+    "rpg",
+    "mmorpg"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "canvas": "^3.2.3",
+    "express": "^4.19.2",
+    "ws": "^8.20.0"
+  }
+}

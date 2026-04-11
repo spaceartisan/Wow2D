@@ -1,0 +1,1573 @@
+/**
+ * ServerWorld – authoritative server-side game state.
+ * Manages enemies (AI, respawn), combat resolution, loot drops,
+ * and connected players. Broadcasts state at a fixed tick rate.
+ */
+
+const fs = require("fs");
+const path = require("path");
+
+/* ── load data from JSON files ─────────────────────────── */
+
+const dataDir = path.join(__dirname, "..", "public", "data");
+
+const ITEMS = JSON.parse(fs.readFileSync(path.join(dataDir, "items.json"), "utf8"));
+const ENEMY_TYPES = JSON.parse(fs.readFileSync(path.join(dataDir, "enemies.json"), "utf8"));
+const QUEST_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "quests.json"), "utf8"));
+const GLOBAL_PALETTE = JSON.parse(fs.readFileSync(path.join(dataDir, "tilePalette.json"), "utf8"));
+
+/* Shared player base stats — single source of truth for client + server */
+const PLAYER_BASE = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
+
+function loadMap(mapId) {
+  const data = JSON.parse(fs.readFileSync(path.join(dataDir, "maps", `${mapId}.json`), "utf8"));
+  // Resolve palette string refs into full tile objects
+  if (data.palette && !data.tilePalette) {
+    data.tilePalette = data.palette.map(name => {
+      const entry = GLOBAL_PALETTE[name];
+      return entry ? { name, ...entry } : { name, color: [128, 128, 128], blocked: false };
+    });
+  }
+  return data;
+}
+
+/* ── utilities ───────────────────────────────────────────── */
+
+function dist(x1, y1, x2, y2) {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function normalize(x, y) {
+  const len = Math.sqrt(x * x + y * y);
+  return len > 0 ? { x: x / len, y: y / len } : { x: 0, y: 0 };
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function chance(prob) {
+  return Math.random() < prob;
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function tileKey(x, y) {
+  return `${x},${y}`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COLLISION MAP (built from map JSON data)
+   ═══════════════════════════════════════════════════════════ */
+
+class CollisionMap {
+  constructor(mapData) {
+    this.blocked = new Set();
+    this.tileSize = mapData.tileSize || 48;
+    this.mapWidth = mapData.width;
+    this.mapHeight = mapData.height;
+
+    // Spawn point (tile coords → world coords)
+    const sp = mapData.spawnPoint || [0, 0];
+    this.spawnPoint = { x: sp[0] * this.tileSize, y: sp[1] * this.tileSize };
+
+    // Safe zones from map data
+    this.safeZones = (mapData.safeZones || []).map(sz => ({
+      x1: sz.x * this.tileSize,
+      y1: sz.y * this.tileSize,
+      x2: (sz.x + sz.w) * this.tileSize,
+      y2: (sz.y + sz.h) * this.tileSize
+    }));
+
+    this.buildFromMapData(mapData);
+  }
+
+  buildFromMapData(data) {
+    const palette = data.tilePalette || [];
+    const terrain = data.terrain || [];
+
+    // Block tiles based on palette blocked flag
+    for (let y = 0; y < terrain.length; y++) {
+      const row = terrain[y];
+      for (let x = 0; x < row.length; x++) {
+        const idx = row[x];
+        if (palette[idx] && palette[idx].blocked) {
+          this.blocked.add(tileKey(x, y));
+        }
+      }
+    }
+
+    // Extra blocked tiles (stored as [x, y] pairs)
+    for (const entry of (data.extraBlocked || [])) {
+      if (Array.isArray(entry)) {
+        this.blocked.add(tileKey(entry[0], entry[1]));
+      } else {
+        this.blocked.add(entry);
+      }
+    }
+
+    // Buildings are now tile-based (walls blocked via palette), no rectangle blocking needed
+
+    // Trees (single-tile blockers)
+    for (const t of (data.trees || [])) {
+      this.blocked.add(tileKey(t.tx, t.ty));
+    }
+  }
+
+  isBlocked(worldX, worldY, radius = 15) {
+    const checks = [
+      [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+      [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7],
+      [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7]
+    ];
+    for (const [dx, dy] of checks) {
+      const tx = Math.floor((worldX + dx) / this.tileSize);
+      const ty = Math.floor((worldY + dy) / this.tileSize);
+      if (tx < 0 || ty < 0 || tx >= this.mapWidth || ty >= this.mapHeight) return true;
+      if (this.blocked.has(tileKey(tx, ty))) return true;
+    }
+    return false;
+  }
+
+  isSafeZone(wx, wy) {
+    for (const sz of this.safeZones) {
+      if (wx >= sz.x1 && wx <= sz.x2 && wy >= sz.y1 && wy <= sz.y2) return true;
+    }
+    return false;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SERVER WORLD
+   ═══════════════════════════════════════════════════════════ */
+
+let nextPlayerId = 1;
+let enemyIdCounter = 1;
+let dropIdCounter = 1;
+
+class ServerWorld {
+  constructor() {
+    // Load all maps
+    this.maps = new Map();       // mapId → { data, collision, enemies[], drops[] }
+    for (const mapId of ["eldengrove", "darkwood"]) {
+      const data = loadMap(mapId);
+      const collision = new CollisionMap(data);
+      const enemies = this._createEnemiesForMap(data, collision);
+      this.maps.set(mapId, { _mapId: mapId, data, collision, enemies, drops: [] });
+    }
+
+    this.defaultMapId = "eldengrove";
+    this.players = new Map();   // playerId → PlayerState
+    this.tickRate = 20;         // Hz
+    this.tickInterval = null;
+    this.lastTick = Date.now();
+    this.tickCount = 0;          // monotonic counter sent with every state
+  }
+
+  /* ── lifecycle ──────────────────────────────────────── */
+
+  start() {
+    const msPerTick = 1000 / this.tickRate;
+    let nextTickTime = Date.now() + msPerTick;
+
+    const step = () => {
+      this.tick();
+
+      // Self-correcting timer: compensate for drift so the long-term
+      // average stays exactly at the target interval (50 ms for 20 Hz).
+      const now = Date.now();
+      nextTickTime += msPerTick;
+      const delay = Math.max(1, nextTickTime - now);
+      this._tickTimer = setTimeout(step, delay);
+    };
+
+    this._tickTimer = setTimeout(step, msPerTick);
+    console.log(`[ServerWorld] running at ${this.tickRate} ticks/sec`);
+  }
+
+  stop() {
+    clearTimeout(this._tickTimer);
+  }
+
+  /* ── player management ──────────────────────────────── */
+
+  addPlayer(ws, charData) {
+    const id = `p${nextPlayerId++}`;
+    const mapId = this.defaultMapId;
+    const mapEntry = this.maps.get(mapId);
+
+    const level = Math.max(1, Math.min(100, Number(charData.level) || 1));
+    const xp = Math.max(0, Number(charData.xp) || 0);
+    const gold = Math.max(0, Number(charData.gold) || 12);
+
+    // Scale stats by level
+    const maxHp = PLAYER_BASE.maxHp + (level - 1) * 24;
+    const maxMana = PLAYER_BASE.maxMana + (level - 1) * 16;
+    const baseDamage = PLAYER_BASE.damage + (level - 1) * 4;
+
+    const state = {
+      id,
+      ws,
+      mapId,
+      charId: charData.id || null,
+      name: String(charData.name || "Unknown").slice(0, 16),
+      charClass: ["warrior", "mage", "rogue"].includes(charData.charClass) ? charData.charClass : "warrior",
+      level,
+      xp,
+      gold,
+      x: mapEntry.collision.spawnPoint.x,
+      y: mapEntry.collision.spawnPoint.y,
+      hp: clamp(Number(charData.hp) || maxHp, 1, maxHp),
+      maxHp,
+      mana: clamp(Number(charData.mana) || maxMana, 0, maxMana),
+      maxMana,
+      baseDamage,
+      damage: baseDamage,
+      attackRange: PLAYER_BASE.attackRange,
+      attackCooldown: PLAYER_BASE.attackCooldown,
+      lastAttackAt: 0,
+      lastHealAt: 0,
+      dead: false,
+      deathUntil: 0,
+      inventory: (() => {
+        const raw = Array.isArray(charData.inventory) ? charData.inventory : [];
+        const slots = new Array(20).fill(null);
+        for (let i = 0; i < Math.min(raw.length, 20); i++) slots[i] = raw[i] || null;
+        return slots;
+      })(),
+      equipment: (charData.equipment && typeof charData.equipment === "object") ? charData.equipment : {},
+      quests: (charData.quests && typeof charData.quests === "object") ? charData.quests : {},
+      hearthstone: (charData.hearthstone && typeof charData.hearthstone === "object") ? charData.hearthstone : null,
+      casting: null    // { type, startedAt, duration, data }
+    };
+
+    this.players.set(id, state);
+
+    // Ensure player has a hearthstone (grant if missing)
+    if (!state.inventory.some(s => s && s.id === "hearthstone")) {
+      const emptySlot = state.inventory.indexOf(null);
+      if (emptySlot !== -1) {
+        const hs = ITEMS["hearthstone"];
+        state.inventory[emptySlot] = { id: hs.id, name: hs.name, type: hs.type, icon: hs.icon };
+      }
+    }
+
+    // Apply equipment bonuses on load
+    this._recalcStats(state);
+
+    // tell the new player about existing state on their map
+    this.send(ws, {
+      type: "welcome",
+      playerId: id,
+      tick: this.tickCount,
+      tickRate: this.tickRate,
+      enemies: this.enemySnapshot(mapId),
+      players: this.otherPlayersSnapshot(id, mapId),
+      drops: this.dropsSnapshot(mapId),
+      inventory: state.inventory,
+      equipment: state.equipment,
+      level: state.level,
+      xp: state.xp,
+      xpToLevel: this._xpToLevelForLevel(state.level),
+      gold: state.gold,
+      quests: state.quests,
+      hearthstone: state.hearthstone,
+      hp: state.hp,
+      maxHp: state.maxHp,
+      mana: state.mana,
+      maxMana: state.maxMana
+    });
+
+    // tell everyone else on the same map a player joined
+    this.broadcastToMap(mapId, {
+      type: "player_joined",
+      player: this.playerPublic(state)
+    }, id);
+
+    console.log(`[ServerWorld] ${state.name} (${id}) joined ${mapId}. Total: ${this.players.size}`);
+    return id;
+  }
+
+  removePlayer(id) {
+    const p = this.players.get(id);
+    const mapId = p?.mapId;
+
+    // H3: Save character progression to DB
+    if (p && p.charId) {
+      try {
+        const database = require("./database");
+        database.saveCharacterProgress(p.charId, {
+          level: p.level,
+          xp: p.xp || 0,
+          gold: p.gold || 0,
+          hp: p.hp,
+          mana: p.mana,
+          inventory: p.inventory || [],
+          equipment: p.equipment || {},
+          quests: p.quests || {},
+          hearthstone: p.hearthstone || null
+        });
+      } catch (err) {
+        console.error(`[ServerWorld] Failed to save progress for ${p.name}:`, err.message);
+      }
+    }
+
+    this.players.delete(id);
+    if (mapId) {
+      this.broadcastToMap(mapId, { type: "player_left", playerId: id });
+    } else {
+      this.broadcast({ type: "player_left", playerId: id });
+    }
+    if (p) {
+      console.log(`[ServerWorld] ${p.name} (${id}) left. Total: ${this.players.size}`);
+    }
+  }
+
+  /* ── incoming messages from clients ─────────────────── */
+
+  /* Load NPC data for shop validation */
+  static _NPC_DATA = JSON.parse(fs.readFileSync(path.join(dataDir, "npcs.json"), "utf8"));
+
+  handleMessage(playerId, msg) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    switch (msg.type) {
+      case "move":
+        this.handleMove(player, msg);
+        break;
+      case "attack":
+        this.handleAttack(player, msg);
+        break;
+      case "heal":
+        this.handleHeal(player);
+        break;
+      case "chat":
+        this.handleChat(player, msg);
+        break;
+      case "map_change":
+        this.handleMapChange(player, msg);
+        break;
+      case "use_item":
+        this.handleUseItem(player, msg);
+        break;
+      case "sell_item":
+        this.handleSellItem(player, msg);
+        break;
+      case "buy_item":
+        this.handleBuyItem(player, msg);
+        break;
+      case "equip_item":
+        this.handleEquipItem(player, msg);
+        break;
+      case "complete_quest":
+        this.handleCompleteQuest(player, msg);
+        break;
+      case "quest_state_update":
+        this.handleQuestStateUpdate(player, msg);
+        break;
+      case "use_hearthstone":
+        this.handleUseHearthstone(player, msg);
+        break;
+      case "cancel_hearthstone":
+        this.handleCancelHearthstone(player);
+        break;
+      case "attune_hearthstone":
+        this.handleAttuneHearthstone(player, msg);
+        break;
+      case "respawn":
+        // client signals it's ready to respawn
+        break;
+      default:
+        break;
+    }
+  }
+
+  handleMove(player, msg) {
+    if (player.dead) return;
+
+    const x = Number(msg.x);
+    const y = Number(msg.y);
+
+    // basic validation: don't teleport too far per tick
+    const d = dist(player.x, player.y, x, y);
+    if (d > 80) return; // ~205 speed * ~0.33s max jitter tolerance
+
+    // Don't allow moving into blocked tiles (use player's current map)
+    const mapEntry = this.maps.get(player.mapId);
+    if (mapEntry && !mapEntry.collision.isBlocked(x, y, 16)) {
+      player.x = x;
+      player.y = y;
+    }
+  }
+
+  handleMapChange(player, msg) {
+    if (player.dead) return;
+    const targetMapId = String(msg.mapId || "").slice(0, 32);
+    const targetX = Number(msg.x);
+    const targetY = Number(msg.y);
+
+    if (!this.maps.has(targetMapId)) return;
+    if (isNaN(targetX) || isNaN(targetY)) return;
+
+    const oldMapId = player.mapId;
+    const mapEntry = this.maps.get(oldMapId);
+    if (!mapEntry) return;
+
+    // Validate player is near a portal leading to the target map
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const portals = mapEntry.data.portals || [];
+    const nearPortal = portals.some(portal => {
+      if (portal.targetMap !== targetMapId) return false;
+      const portalCenterX = (portal.x + portal.w / 2) * tileSize;
+      const portalCenterY = (portal.y + portal.h / 2) * tileSize;
+      return dist(player.x, player.y, portalCenterX, portalCenterY) < tileSize * 5;
+    });
+    if (!nearPortal) return;
+
+    // Notify old map players that this player left
+    this.broadcastToMap(oldMapId, { type: "player_left", playerId: player.id }, player.id);
+
+    // Move player to new map
+    player.mapId = targetMapId;
+    player.x = targetX;
+    player.y = targetY;
+
+    // Send fresh state for new map
+    this.send(player.ws, {
+      type: "map_changed",
+      mapId: targetMapId,
+      enemies: this.enemySnapshot(targetMapId),
+      players: this.otherPlayersSnapshot(player.id, targetMapId),
+      drops: this.dropsSnapshot(targetMapId)
+    });
+
+    // Notify new map players
+    this.broadcastToMap(targetMapId, {
+      type: "player_joined",
+      player: this.playerPublic(player)
+    }, player.id);
+  }
+
+  handleAttack(player, msg) {
+    if (player.dead) return;
+
+    const now = Date.now();
+    const cooldownMs = player.attackCooldown * 1000;
+    if (now - player.lastAttackAt < cooldownMs) return;
+
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+
+    const enemy = mapEntry.enemies.find((e) => e.id === msg.enemyId);
+    if (!enemy || enemy.dead) return;
+
+    const d = dist(player.x, player.y, enemy.x, enemy.y);
+    if (d > player.attackRange + 30) return; // allow small latency buffer
+
+    player.lastAttackAt = now;
+    const damage = Math.max(2, player.damage + randInt(-2, 4));
+    enemy.hp -= damage;
+
+    // tell attacker about the hit
+    this.send(player.ws, {
+      type: "attack_result",
+      enemyId: enemy.id,
+      damage,
+      enemyHp: enemy.hp,
+      enemyMaxHp: enemy.maxHp
+    });
+
+    if (enemy.hp <= 0) {
+      enemy.hp = 0;
+      this.killEnemy(enemy, player);
+    }
+  }
+
+  handleHeal(player) {
+    if (player.dead) return;
+
+    const now = Date.now();
+    if (now - player.lastHealAt < 5300) {
+      this.send(player.ws, { type: "heal_result", ok: false, reason: "cooldown" });
+      return;
+    }
+
+    const manaCost = 22;
+    if (player.mana < manaCost) {
+      this.send(player.ws, { type: "heal_result", ok: false, reason: "mana" });
+      return;
+    }
+
+    player.mana -= manaCost;
+    const healAmount = 34 + player.level * 6;
+    player.hp = Math.min(player.maxHp, player.hp + healAmount);
+    player.lastHealAt = now;
+
+    this.send(player.ws, {
+      type: "heal_result",
+      ok: true,
+      healAmount,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      mana: player.mana,
+      maxMana: player.maxMana
+    });
+  }
+
+  handleChat(player, msg) {
+    const text = String(msg.text || "").slice(0, 200).trim();
+    if (!text) return;
+
+    // whisper: /w PlayerName message
+    const whisperMatch = text.match(/^\/w\s+(\S+)\s+([\s\S]+)/i);
+    if (whisperMatch) {
+      const targetName = whisperMatch[1];
+      const whisperText = whisperMatch[2].trim();
+      if (!whisperText) return;
+
+      // find target player by name (case-insensitive)
+      let target = null;
+      for (const [, p] of this.players) {
+        if (p.name.toLowerCase() === targetName.toLowerCase()) {
+          target = p;
+          break;
+        }
+      }
+
+      if (!target) {
+        this.send(player.ws, {
+          type: "chat",
+          channel: "system",
+          from: "System",
+          text: `Player "${targetName}" not found.`
+        });
+        return;
+      }
+
+      if (target.id === player.id) {
+        this.send(player.ws, {
+          type: "chat",
+          channel: "system",
+          from: "System",
+          text: "You can't whisper yourself."
+        });
+        return;
+      }
+
+      // send to recipient
+      this.send(target.ws, {
+        type: "chat",
+        channel: "whisper",
+        from: player.name,
+        to: target.name,
+        text: whisperText
+      });
+
+      // echo back to sender
+      this.send(player.ws, {
+        type: "chat",
+        channel: "whisper",
+        from: player.name,
+        to: target.name,
+        text: whisperText
+      });
+      return;
+    }
+
+    // regular world chat
+    this.broadcast({
+      type: "chat",
+      channel: "world",
+      from: player.name,
+      playerId: player.id,
+      text
+    });
+  }
+
+  /* ── item actions (use / buy / sell) ────────────────── */
+
+  handleUseItem(player, msg) {
+    if (player.dead) return;
+    const index = Number(msg.index);
+    if (!Number.isInteger(index) || index < 0 || index >= 20) return;
+
+    const inventory = player.inventory;
+    const item = inventory[index];
+    if (!item || item.type !== "consumable") return;
+
+    const template = ITEMS[item.id];
+    if (!template) return;
+
+    if (template.effect === "healHp") {
+      const before = player.hp;
+      player.hp = Math.min(player.maxHp, player.hp + template.power);
+      const healed = player.hp - before;
+      inventory[index] = null;
+      this.send(player.ws, {
+        type: "use_item_result",
+        ok: true,
+        index,
+        effect: "healHp",
+        amount: healed,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        mana: player.mana,
+        maxMana: player.maxMana
+      });
+    } else if (template.effect === "healMana") {
+      const before = player.mana;
+      player.mana = Math.min(player.maxMana, player.mana + template.power);
+      const restored = player.mana - before;
+      inventory[index] = null;
+      this.send(player.ws, {
+        type: "use_item_result",
+        ok: true,
+        index,
+        effect: "healMana",
+        amount: restored,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        mana: player.mana,
+        maxMana: player.maxMana
+      });
+    } else {
+      this.send(player.ws, { type: "use_item_result", ok: false, reason: "unknown_effect" });
+    }
+  }
+
+  handleSellItem(player, msg) {
+    if (player.dead) return;
+    const index = Number(msg.index);
+    if (!Number.isInteger(index) || index < 0 || index >= 20) return;
+
+    // Verify player is near a vendor NPC
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const npcsOnMap = mapEntry.data.npcs || [];
+    const nearVendor = npcsOnMap.some(npcPlacement => {
+      const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
+      if (!npcDef || !npcDef.shop || npcDef.shop.length === 0) return false;
+      const npcX = npcPlacement.tx * tileSize;
+      const npcY = npcPlacement.ty * tileSize;
+      return dist(player.x, player.y, npcX, npcY) < tileSize * 6;
+    });
+    if (!nearVendor) {
+      this.send(player.ws, { type: "sell_item_result", ok: false, reason: "too_far" });
+      return;
+    }
+
+    const inventory = player.inventory;
+    const item = inventory[index];
+    if (!item) return;
+
+    const template = ITEMS[item.id];
+    if (!template) return;
+
+    // Cannot sell permanent items (hearthstone)
+    if (template.permanent) {
+      this.send(player.ws, { type: "sell_item_result", ok: false, reason: "permanent" });
+      return;
+    }
+
+    // sell for half value (floor)
+    const sellPrice = Math.max(1, Math.floor(template.value / 2));
+    player.gold += sellPrice;
+    const soldName = item.name;
+    inventory[index] = null;
+
+    this.send(player.ws, {
+      type: "sell_item_result",
+      ok: true,
+      index,
+      gold: player.gold,
+      soldName,
+      sellPrice
+    });
+  }
+
+  handleBuyItem(player, msg) {
+    if (player.dead) return;
+    const itemId = String(msg.itemId || "").slice(0, 64);
+    const npcId = String(msg.npcId || "").slice(0, 64);
+
+    // Validate NPC has the item in their shop
+    const npcDef = ServerWorld._NPC_DATA[npcId];
+    if (!npcDef || !npcDef.shop || !npcDef.shop.includes(itemId)) return;
+
+    // Verify player is near this NPC
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const npcPlacement = (mapEntry.data.npcs || []).find(n => n.npcId === npcId);
+    if (!npcPlacement) return;
+    const npcX = npcPlacement.tx * tileSize;
+    const npcY = npcPlacement.ty * tileSize;
+    if (dist(player.x, player.y, npcX, npcY) >= tileSize * 6) {
+      this.send(player.ws, { type: "buy_item_result", ok: false, reason: "too_far" });
+      return;
+    }
+
+    const template = ITEMS[itemId];
+    if (!template) return;
+
+    const buyPrice = template.value;
+    if (player.gold < buyPrice) {
+      this.send(player.ws, { type: "buy_item_result", ok: false, reason: "gold" });
+      return;
+    }
+
+    // Check inventory space
+    const inventory = player.inventory;
+    let freeSlot = -1;
+    for (let i = 0; i < inventory.length; i++) {
+      if (!inventory[i]) { freeSlot = i; break; }
+    }
+    if (freeSlot === -1) {
+      this.send(player.ws, { type: "buy_item_result", ok: false, reason: "inventory_full" });
+      return;
+    }
+
+    player.gold -= buyPrice;
+    inventory[freeSlot] = { ...template };
+
+    this.send(player.ws, {
+      type: "buy_item_result",
+      ok: true,
+      item: inventory[freeSlot],
+      index: freeSlot,
+      gold: player.gold,
+      buyPrice
+    });
+  }
+
+  handleEquipItem(player, msg) {
+    if (player.dead) return;
+    const index = Number(msg.index);
+    if (!Number.isInteger(index) || index < 0 || index >= 20) return;
+
+    const inventory = player.inventory;
+    const item = inventory[index];
+    if (!item || !["weapon", "armor", "trinket"].includes(item.type)) return;
+
+    const slot = item.type;
+    const oldItem = player.equipment[slot] || null;
+    player.equipment[slot] = item;
+    inventory[index] = oldItem;
+
+    this._recalcStats(player);
+
+    this.send(player.ws, {
+      type: "equip_item_result",
+      ok: true,
+      index,
+      slot,
+      newItem: item,
+      oldItem,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      mana: player.mana,
+      maxMana: player.maxMana,
+      damage: player.damage
+    });
+  }
+
+  handleQuestStateUpdate(player, msg) {
+    // Accept quest state updates from client (accept, progress) but never allow
+    // the client to mark quests as "completed" — that's server-authoritative via handleCompleteQuest
+    if (!msg.quests || typeof msg.quests !== "object") return;
+    for (const [questId, state] of Object.entries(msg.quests)) {
+      if (typeof questId !== "string" || questId.length > 64) continue;
+      if (!state || typeof state !== "object") continue;
+      // Only allow non-completed states to be synced from client
+      const existing = player.quests[questId];
+      if (existing && existing.state === "completed") continue;
+      if (state.state === "completed") continue; // client can't force completion
+      player.quests[questId] = state;
+    }
+  }
+
+  handleCompleteQuest(player, msg) {
+    if (player.dead) return;
+    const questId = String(msg.questId || "").slice(0, 64);
+    const def = QUEST_DEFS[questId];
+    if (!def) return;
+
+    // Prevent double-completion using persisted quest state
+    const questState = player.quests[questId];
+    if (questState && questState.state === "completed") return;
+
+    // Mark as completed in persisted quest state
+    player.quests[questId] = {
+      ...(questState || {}),
+      id: questId,
+      state: "completed"
+    };
+
+    const rewards = def.rewards || {};
+    const rewardItems = [];
+
+    // Grant XP
+    if (rewards.xp) this._grantXp(player, rewards.xp);
+
+    // Grant gold
+    if (rewards.gold) player.gold = (player.gold || 0) + rewards.gold;
+
+    // Grant items
+    for (const itemId of (rewards.items || [])) {
+      const template = ITEMS[itemId];
+      if (!template) continue;
+      let placed = -1;
+      for (let i = 0; i < player.inventory.length; i++) {
+        if (!player.inventory[i]) { placed = i; break; }
+      }
+      if (placed !== -1) {
+        player.inventory[placed] = { ...template };
+        rewardItems.push({ item: { ...template }, index: placed });
+      }
+    }
+
+    this.send(player.ws, {
+      type: "quest_complete_result",
+      ok: true,
+      questId,
+      xp: rewards.xp || 0,
+      gold: rewards.gold || 0,
+      items: rewardItems,
+      playerGold: player.gold,
+      playerXp: player.xp,
+      playerLevel: player.level,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      mana: player.mana,
+      maxMana: player.maxMana
+    });
+  }
+
+  /* ── Hearthstone ────────────────────────────────────── */
+
+  handleAttuneHearthstone(player, msg) {
+    if (player.dead) return;
+    const statueId = String(msg.statueId || "").slice(0, 64);
+
+    // Verify statue exists on current map
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+    const statues = mapEntry.data.statues || [];
+    const statue = statues.find(s => s.id === statueId);
+    if (!statue) return;
+
+    // Verify proximity to statue
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const sx = statue.tx * tileSize;
+    const sy = statue.ty * tileSize;
+    if (dist(player.x, player.y, sx, sy) > tileSize * 4) {
+      this.send(player.ws, { type: "attune_result", ok: false, reason: "too_far" });
+      return;
+    }
+
+    // Verify player has hearthstone in inventory
+    if (!player.inventory.some(s => s && s.id === "hearthstone")) {
+      this.send(player.ws, { type: "attune_result", ok: false, reason: "no_hearthstone" });
+      return;
+    }
+
+    player.hearthstone = {
+      statueId: statue.id,
+      statueName: statue.name,
+      mapId: player.mapId,
+      tx: statue.tx,
+      ty: statue.ty,
+      lastUsedAt: player.hearthstone?.lastUsedAt || 0
+    };
+
+    this.send(player.ws, {
+      type: "attune_result",
+      ok: true,
+      hearthstone: player.hearthstone
+    });
+  }
+
+  handleUseHearthstone(player, msg) {
+    if (player.dead) return;
+
+    // Must have attunement
+    if (!player.hearthstone || !player.hearthstone.mapId) {
+      this.send(player.ws, { type: "hearthstone_result", ok: false, reason: "not_attuned" });
+      return;
+    }
+
+    // Must have hearthstone in inventory
+    if (!player.inventory.some(s => s && s.id === "hearthstone")) {
+      this.send(player.ws, { type: "hearthstone_result", ok: false, reason: "no_hearthstone" });
+      return;
+    }
+
+    // Check cooldown (180 seconds)
+    const now = Date.now();
+    const cooldown = (ITEMS["hearthstone"]?.cooldown || 180) * 1000;
+    const lastUsed = player.hearthstone.lastUsedAt || 0;
+    if (now - lastUsed < cooldown) {
+      const remaining = Math.ceil((cooldown - (now - lastUsed)) / 1000);
+      this.send(player.ws, { type: "hearthstone_result", ok: false, reason: "cooldown", remaining });
+      return;
+    }
+
+    // Already casting?
+    if (player.casting) {
+      this.send(player.ws, { type: "hearthstone_result", ok: false, reason: "already_casting" });
+      return;
+    }
+
+    // Start cast
+    const castTime = (ITEMS["hearthstone"]?.castTime || 8) * 1000;
+    player.casting = {
+      type: "hearthstone",
+      startedAt: now,
+      duration: castTime
+    };
+
+    this.send(player.ws, {
+      type: "hearthstone_cast_start",
+      castTime: castTime / 1000,
+      destination: player.hearthstone.statueName
+    });
+  }
+
+  handleCancelHearthstone(player) {
+    if (player.casting && player.casting.type === "hearthstone") {
+      player.casting = null;
+      this.send(player.ws, { type: "hearthstone_cast_cancelled", reason: "manual" });
+    }
+  }
+
+  _completeCast(player) {
+    if (!player.casting || player.casting.type !== "hearthstone") return;
+
+    const hs = player.hearthstone;
+    player.casting = null;
+    player.hearthstone.lastUsedAt = Date.now();
+
+    // Teleport
+    const targetMapId = hs.mapId;
+    const mapEntry = this.maps.get(targetMapId);
+    if (!mapEntry) return;
+
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const targetX = hs.tx * tileSize;
+    const targetY = hs.ty * tileSize;
+
+    if (player.mapId !== targetMapId) {
+      // Cross-map teleport
+      player.mapId = targetMapId;
+      player.x = targetX;
+      player.y = targetY;
+
+      this.send(player.ws, {
+        type: "hearthstone_teleport",
+        mapId: targetMapId,
+        x: targetX,
+        y: targetY,
+        enemies: this.enemySnapshot(targetMapId),
+        players: this.otherPlayersSnapshot(player.id, targetMapId),
+        drops: this.dropsSnapshot(targetMapId),
+        hearthstone: player.hearthstone
+      });
+    } else {
+      // Same-map teleport
+      player.x = targetX;
+      player.y = targetY;
+
+      this.send(player.ws, {
+        type: "hearthstone_teleport",
+        mapId: targetMapId,
+        x: targetX,
+        y: targetY,
+        hearthstone: player.hearthstone
+      });
+    }
+  }
+
+  _interruptCast(player, reason) {
+    if (!player.casting) return;
+    player.casting = null;
+    this.send(player.ws, { type: "hearthstone_cast_cancelled", reason: reason || "interrupted" });
+  }
+
+  /* ── stat recalculation ─────────────────────────────── */
+
+  _recalcStats(player) {
+    const weapon = player.equipment.weapon || null;
+    const armor = player.equipment.armor || null;
+    const trinket = player.equipment.trinket || null;
+
+    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + (armor?.hpBonus || 0);
+    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + (trinket?.manaBonus || 0);
+    const damage = player.baseDamage + (weapon?.attackBonus || 0);
+
+    // Preserve HP/mana ratio when max changes
+    const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
+    const manaRatio = player.maxMana > 0 ? player.mana / player.maxMana : 1;
+
+    player.maxHp = maxHp;
+    player.maxMana = maxMana;
+    player.damage = damage;
+    player.hp = clamp(Math.round(maxHp * hpRatio), 1, maxHp);
+    player.mana = clamp(Math.round(maxMana * manaRatio), 0, maxMana);
+  }
+
+  _xpToLevelForLevel(level) {
+    let xpToLevel = 160;
+    for (let i = 1; i < level; i++) xpToLevel = Math.round(xpToLevel * 1.28);
+    return xpToLevel;
+  }
+
+  _grantXp(player, amount) {
+    player.xp = (player.xp || 0) + amount;
+    let xpToLevel = this._xpToLevelForLevel(player.level);
+
+    while (player.xp >= xpToLevel && player.level < 100) {
+      player.xp -= xpToLevel;
+      player.level += 1;
+      player.baseDamage = PLAYER_BASE.damage + (player.level - 1) * 4;
+      this._recalcStats(player);
+      // Fully heal on level-up
+      player.hp = player.maxHp;
+      player.mana = player.maxMana;
+      xpToLevel = this._xpToLevelForLevel(player.level);
+    }
+  }
+
+  /* ── enemy management ───────────────────────────────── */
+
+  _createEnemiesForMap(mapData, collision) {
+    const enemies = [];
+    const tileSize = collision.tileSize;
+    const spawns = mapData.enemySpawns || [];
+
+    for (const spawn of spawns) {
+      const type = spawn.type;
+      const positions = spawn.positions || [];
+      for (const [tx, ty] of positions) {
+        const e = this.makeEnemy(type, tx * tileSize, ty * tileSize);
+        if (e) enemies.push(e);
+      }
+    }
+
+    return enemies;
+  }
+
+  makeEnemy(type, x, y) {
+    const t = ENEMY_TYPES[type];
+    if (!t) {
+      console.warn(`[ServerWorld] Unknown enemy type: ${type}`);
+      return null;
+    }
+    return {
+      id: `e${enemyIdCounter++}`,
+      type,
+      name: t.name,
+      x, y,
+      spawnX: x,
+      spawnY: y,
+      radius: t.radius || 15,
+      hp: t.maxHp,
+      maxHp: t.maxHp,
+      damage: t.damage,
+      speed: t.speed,
+      xpReward: t.xp,
+      goldMin: t.goldMin,
+      goldMax: t.goldMax,
+      respawnSeconds: t.respawnSeconds,
+      color: t.color,
+      dead: false,
+      deadUntil: 0,
+      aggroRange: t.aggroRange || 210,
+      attackRange: t.attackRange || 34,
+      attackCooldown: t.attackCooldown || 1.35,
+      lastAttackAt: 0,
+      targetPlayerId: null,
+      wanderDir: { x: 0, y: 0 },
+      wanderTimer: 0,
+      wanderIdle: true,
+      loot: t.loot || []
+    };
+  }
+
+  killEnemy(enemy, killerPlayer) {
+    enemy.dead = true;
+    enemy.deadUntil = Date.now() + enemy.respawnSeconds * 1000;
+    enemy.targetPlayerId = null;
+
+    // create loot drop using data-driven loot table
+    const gold = randInt(enemy.goldMin, enemy.goldMax);
+    let item = null;
+
+    for (const lootEntry of (enemy.loot || [])) {
+      if (chance(lootEntry.chance)) {
+        const template = ITEMS[lootEntry.itemId];
+        if (template) {
+          item = { ...template };
+          break; // only one item per kill
+        }
+      }
+    }
+
+    const drop = {
+      id: `d${dropIdCounter++}`,
+      x: enemy.x + randInt(-8, 8),
+      y: enemy.y + randInt(-8, 8),
+      gold,
+      item,
+      ownerId: killerPlayer.id,
+      ownerUntil: Date.now() + 10000,
+      expiresAt: Date.now() + 25000
+    };
+
+    const mapEntry = this.maps.get(killerPlayer.mapId);
+    if (mapEntry) mapEntry.drops.push(drop);
+
+    // Grant XP server-side
+    this._grantXp(killerPlayer, enemy.xpReward);
+
+    // tell killer about kill
+    this.send(killerPlayer.ws, {
+      type: "enemy_killed",
+      enemyId: enemy.id,
+      enemyType: enemy.type,
+      xpReward: enemy.xpReward
+    });
+
+    // tell everyone on this map about the drop
+    this.broadcastToMap(killerPlayer.mapId, {
+      type: "drop_spawned",
+      drop: { id: drop.id, x: drop.x, y: drop.y }
+    });
+  }
+
+  /* ── tick loop ──────────────────────────────────────── */
+
+  tick() {
+    const now = Date.now();
+    const dt = Math.min(0.1, (now - this.lastTick) / 1000);
+    this.lastTick = now;
+
+    this.tickCount++;
+
+    // Process each map independently
+    for (const [mapId, mapEntry] of this.maps) {
+      this.updateEnemyAi(mapEntry, dt, now);
+      this.updateEnemyRespawns(mapEntry, now);
+      this.updateDropPickups(mapEntry, mapId, now);
+    }
+    this.updatePlayerDeaths(now);
+    this.updatePlayerRegen(dt);
+    this.updatePlayerCasts(now);
+    this.broadcastWorldState();
+
+    // Periodic auto-save every 60 seconds
+    if (!this._lastAutoSave) this._lastAutoSave = now;
+    if (now - this._lastAutoSave > 60000) {
+      this._lastAutoSave = now;
+      this._autoSaveAll();
+    }
+  }
+
+  _autoSaveAll() {
+    const database = require("./database");
+    for (const [, p] of this.players) {
+      if (!p.charId) continue;
+      try {
+        database.saveCharacterProgress(p.charId, {
+          level: p.level,
+          xp: p.xp || 0,
+          gold: p.gold || 0,
+          hp: p.hp,
+          mana: p.mana,
+          inventory: p.inventory || [],
+          equipment: p.equipment || {},
+          quests: p.quests || {},
+          hearthstone: p.hearthstone || null
+        });
+      } catch (err) {
+        console.error(`[ServerWorld] Auto-save failed for ${p.name}:`, err.message);
+      }
+    }
+  }
+
+  updateEnemyAi(mapEntry, dt, now) {
+    for (const enemy of mapEntry.enemies) {
+      if (enemy.dead) continue;
+
+      // find nearest alive player on this map
+      let closestPlayer = null;
+      let closestDist = Infinity;
+
+      for (const [, player] of this.players) {
+        if (player.dead || player.mapId !== mapEntry._mapId) continue;
+        const d = dist(enemy.x, enemy.y, player.x, player.y);
+        if (d < closestDist) {
+          closestDist = d;
+          closestPlayer = player;
+        }
+      }
+
+      // aggro logic
+      if (closestPlayer && closestDist < enemy.aggroRange && !mapEntry.collision.isSafeZone(closestPlayer.x, closestPlayer.y)) {
+        enemy.targetPlayerId = closestPlayer.id;
+      } else if (enemy.targetPlayerId) {
+        const target = this.players.get(enemy.targetPlayerId);
+        if (!target || target.dead || target.mapId !== mapEntry._mapId ||
+            dist(enemy.x, enemy.y, target.x, target.y) > enemy.aggroRange * 1.6 ||
+            mapEntry.collision.isSafeZone(target.x, target.y)) {
+          enemy.targetPlayerId = null;
+        }
+      }
+
+      // chase + attack
+      if (enemy.targetPlayerId) {
+        const target = this.players.get(enemy.targetPlayerId);
+        if (target && !target.dead) {
+          const d = dist(enemy.x, enemy.y, target.x, target.y);
+
+          if (d > enemy.attackRange) {
+            const dir = normalize(target.x - enemy.x, target.y - enemy.y);
+            this._moveEnemy(enemy, dir.x * enemy.speed, dir.y * enemy.speed, dt, mapEntry.collision);
+          } else if (now - enemy.lastAttackAt > enemy.attackCooldown * 1000) {
+            // attack player
+            enemy.lastAttackAt = now;
+            const damage = Math.max(1, enemy.damage + randInt(-2, 2));
+            target.hp -= damage;
+
+            // Interrupt casts on damage
+            if (target.casting) {
+              this._interruptCast(target, "damaged");
+            }
+
+            this.send(target.ws, {
+              type: "player_damaged",
+              damage,
+              hp: target.hp,
+              maxHp: target.maxHp,
+              attackerName: enemy.name
+            });
+
+            if (target.hp <= 0) {
+              target.hp = 0;
+              this.onPlayerDeath(target, now);
+            }
+          }
+
+          // leash check
+          if (dist(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY) > 300) {
+            enemy.targetPlayerId = null;
+          }
+          continue;
+        } else {
+          enemy.targetPlayerId = null;
+        }
+      }
+
+      // wander / return home
+      const homeD = dist(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
+      if (homeD > 24) {
+        const dir = normalize(enemy.spawnX - enemy.x, enemy.spawnY - enemy.y);
+        this._moveEnemy(enemy, dir.x * enemy.speed * 0.5, dir.y * enemy.speed * 0.5, dt, mapEntry.collision);
+      } else {
+        enemy.wanderTimer -= dt;
+        if (enemy.wanderTimer <= 0) {
+          if (enemy.wanderIdle) {
+            enemy.wanderIdle = false;
+            enemy.wanderTimer = randRange(0.8, 1.6);
+            enemy.wanderDir = normalize(randRange(-1, 1), randRange(-1, 1));
+          } else {
+            enemy.wanderIdle = true;
+            enemy.wanderTimer = randRange(2.0, 4.5);
+          }
+        }
+        if (!enemy.wanderIdle) {
+          this._moveEnemy(enemy, enemy.wanderDir.x * enemy.speed * 0.35, enemy.wanderDir.y * enemy.speed * 0.35, dt, mapEntry.collision);
+        }
+      }
+    }
+  }
+
+  _moveEnemy(enemy, vx, vy, dt, collision) {
+    const nx = enemy.x + vx * dt;
+    if (!collision.isBlocked(nx, enemy.y, enemy.radius)) enemy.x = nx;
+    const ny = enemy.y + vy * dt;
+    if (!collision.isBlocked(enemy.x, ny, enemy.radius)) enemy.y = ny;
+  }
+
+  updateEnemyRespawns(mapEntry, now) {
+    for (const enemy of mapEntry.enemies) {
+      if (!enemy.dead || now < enemy.deadUntil) continue;
+      enemy.dead = false;
+      enemy.hp = enemy.maxHp;
+      enemy.x = enemy.spawnX + randInt(-12, 12);
+      enemy.y = enemy.spawnY + randInt(-12, 12);
+      enemy.targetPlayerId = null;
+      enemy.wanderTimer = 0;
+    }
+  }
+
+  onPlayerDeath(player, now) {
+    player.dead = true;
+    player.deathUntil = now + 4200;
+
+    // M7: Death gold penalty (server-authoritative)
+    const goldLost = Math.min(player.gold || 0, 10);
+    player.gold = Math.max(0, (player.gold || 0) - goldLost);
+
+    this.send(player.ws, {
+      type: "you_died",
+      goldLost
+    });
+
+    // all enemies targeting this player lose aggro (on their map)
+    const mapEntry = this.maps.get(player.mapId);
+    if (mapEntry) {
+      for (const e of mapEntry.enemies) {
+        if (e.targetPlayerId === player.id) {
+          e.targetPlayerId = null;
+        }
+      }
+    }
+  }
+
+  updatePlayerRegen(dt) {
+    for (const [, player] of this.players) {
+      if (player.dead) continue;
+      player.mana = Math.min(player.maxMana, player.mana + 7 * dt);
+      player.hp = Math.min(player.maxHp, player.hp + 1.8 * dt);
+    }
+  }
+
+  updatePlayerCasts(now) {
+    for (const [, player] of this.players) {
+      if (!player.casting) continue;
+      if (player.dead) { player.casting = null; continue; }
+      if (now - player.casting.startedAt >= player.casting.duration) {
+        this._completeCast(player);
+      }
+    }
+  }
+
+  updatePlayerDeaths(now) {
+    for (const [, player] of this.players) {
+      if (!player.dead || now < player.deathUntil) continue;
+
+      const mapEntry = this.maps.get(player.mapId);
+      const spawn = mapEntry ? mapEntry.collision.spawnPoint : { x: 0, y: 0 };
+
+      player.dead = false;
+      player.hp = player.maxHp;
+      player.mana = player.maxMana;
+      player.x = spawn.x;
+      player.y = spawn.y;
+
+      this.send(player.ws, {
+        type: "you_respawned",
+        x: player.x,
+        y: player.y,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        mana: player.mana,
+        maxMana: player.maxMana
+      });
+    }
+  }
+
+  updateDropPickups(mapEntry, mapId, now) {
+    mapEntry.drops = mapEntry.drops.filter((drop) => {
+      if (now > drop.expiresAt) return false;
+
+      for (const [, player] of this.players) {
+        if (player.dead || player.mapId !== mapId) continue;
+        if (dist(player.x, player.y, drop.x, drop.y) > 42) continue;
+
+        if (now < drop.ownerUntil && player.id !== drop.ownerId) continue;
+
+        // Add gold to server state
+        if (drop.gold > 0) {
+          player.gold = (player.gold || 0) + drop.gold;
+        }
+
+        // Add item to server-side inventory
+        let lootIndex = -1;
+        if (drop.item) {
+          for (let i = 0; i < player.inventory.length; i++) {
+            if (!player.inventory[i]) { lootIndex = i; break; }
+          }
+          if (lootIndex === -1) {
+            // Item can't fit; only pick up gold, leave drop for item
+            if (drop.gold > 0) {
+              this.send(player.ws, {
+                type: "loot_pickup",
+                dropId: drop.id,
+                gold: drop.gold,
+                item: null,
+                index: -1
+              });
+              drop.gold = 0;
+            }
+            return true; // keep drop alive for item
+          }
+          player.inventory[lootIndex] = { ...drop.item };
+        }
+
+        this.send(player.ws, {
+          type: "loot_pickup",
+          dropId: drop.id,
+          gold: drop.gold,
+          item: drop.item,
+          index: lootIndex
+        });
+
+        this.broadcastToMap(mapId, { type: "drop_removed", dropId: drop.id });
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  /* ── broadcasting ───────────────────────────────────── */
+
+  broadcastWorldState() {
+    // Group players by map for efficient per-map snapshots
+    for (const [, player] of this.players) {
+      const mapId = player.mapId;
+      const enemies = this.enemySnapshot(mapId);
+      const players = this.playersOnMap(mapId);
+      const drops = this.dropsSnapshot(mapId);
+
+      this.send(player.ws, {
+        type: "state",
+        tick: this.tickCount,
+        enemies,
+        players,
+        drops,
+        you: {
+          id: player.id,
+          hp: player.hp,
+          maxHp: player.maxHp,
+          mana: player.mana,
+          maxMana: player.maxMana,
+          dead: player.dead,
+          x: player.x,
+          y: player.y,
+          gold: player.gold || 0,
+          level: player.level,
+          xp: player.xp || 0,
+          damage: player.damage
+        }
+      });
+    }
+  }
+
+  enemySnapshot(mapId) {
+    const mapEntry = this.maps.get(mapId);
+    if (!mapEntry) return [];
+    return mapEntry.enemies.map((e) => ({
+      id: e.id,
+      type: e.type,
+      name: e.name,
+      x: e.x,
+      y: e.y,
+      hp: e.hp,
+      maxHp: e.maxHp,
+      dead: e.dead,
+      color: e.color,
+      radius: e.radius,
+      level: e.level || 1
+    }));
+  }
+
+  dropsSnapshot(mapId) {
+    const mapEntry = this.maps.get(mapId);
+    if (!mapEntry) return [];
+    return mapEntry.drops.map((d) => ({
+      id: d.id,
+      x: d.x,
+      y: d.y
+    }));
+  }
+
+  playersOnMap(mapId) {
+    const out = [];
+    for (const [, p] of this.players) {
+      if (p.mapId === mapId) out.push(this.playerPublic(p));
+    }
+    return out;
+  }
+
+  playerPublic(p) {
+    return {
+      id: p.id,
+      name: p.name,
+      charClass: p.charClass,
+      level: p.level,
+      x: p.x,
+      y: p.y,
+      hp: p.hp,
+      maxHp: p.maxHp,
+      dead: p.dead
+    };
+  }
+
+  otherPlayersSnapshot(excludeId, mapId) {
+    const out = [];
+    for (const [id, p] of this.players) {
+      if (id !== excludeId && p.mapId === mapId) out.push(this.playerPublic(p));
+    }
+    return out;
+  }
+
+  /* ── helpers ────────────────────────────────────────── */
+
+  send(ws, data) {
+    try {
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify(data));
+      }
+    } catch (_) {
+      /* socket may have closed */
+    }
+  }
+
+  broadcast(data) {
+    const json = JSON.stringify(data);
+    for (const [, player] of this.players) {
+      try {
+        if (player.ws.readyState === 1) {
+          player.ws.send(json);
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }
+
+  broadcastToMap(mapId, data, excludeId) {
+    const json = JSON.stringify(data);
+    for (const [id, player] of this.players) {
+      if (player.mapId !== mapId) continue;
+      if (excludeId && id === excludeId) continue;
+      try {
+        if (player.ws.readyState === 1) {
+          player.ws.send(json);
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }
+}
+
+module.exports = { ServerWorld };

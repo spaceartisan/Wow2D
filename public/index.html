@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Azerfall - Top-Down MMO Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body oncontextmenu="return false">
+    <!-- ═══════════════ SCREEN: LOGIN ═══════════════ -->
+    <div id="screen-login" class="screen active">
+      <div class="login-backdrop"></div>
+      <div class="login-container">
+        <div class="logo-title">
+          <span class="logo-glyph">⚔</span>
+          <h1>Azerfall</h1>
+          <p class="tagline">A frontier of old roads and deep woods</p>
+        </div>
+        <form id="login-form" class="auth-form" autocomplete="off">
+          <div class="form-group">
+            <label for="login-username">Account Name</label>
+            <input id="login-username" type="text" maxlength="20" placeholder="Enter username" required />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" maxlength="128" placeholder="Enter password" required />
+          </div>
+          <div id="login-error" class="form-error"></div>
+          <button type="submit" class="btn-primary">Log In</button>
+          <button type="button" id="show-register" class="btn-secondary">Create Account</button>
+        </form>
+
+        <form id="register-form" class="auth-form hidden" autocomplete="off">
+          <div class="form-group">
+            <label for="reg-username">Account Name</label>
+            <input id="reg-username" type="text" maxlength="20" placeholder="3-20 chars, a-z / 0-9 / _" required />
+          </div>
+          <div class="form-group">
+            <label for="reg-password">Password</label>
+            <input id="reg-password" type="password" maxlength="128" placeholder="At least 4 characters" required />
+          </div>
+          <div class="form-group">
+            <label for="reg-password2">Confirm Password</label>
+            <input id="reg-password2" type="password" maxlength="128" placeholder="Re-enter password" required />
+          </div>
+          <div id="register-error" class="form-error"></div>
+          <button type="submit" class="btn-primary">Create Account</button>
+          <button type="button" id="show-login" class="btn-secondary">Back to Login</button>
+        </form>
+
+        <div class="login-footer">v1.0 &mdash; Local Prototype</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ SCREEN: CHARACTER SELECT ═══════════════ -->
+    <div id="screen-charselect" class="screen">
+      <div class="login-backdrop"></div>
+      <div class="charselect-container">
+        <h2 class="charselect-title">Choose Your Champion</h2>
+        <div id="char-list" class="char-list"></div>
+        <div class="charselect-actions">
+          <button id="btn-enter-world" class="btn-primary" disabled>Enter World</button>
+          <button id="btn-create-char" class="btn-secondary">Create Character</button>
+          <button id="btn-delete-char" class="btn-danger" disabled>Delete</button>
+          <button id="btn-logout" class="btn-muted">Log Out</button>
+        </div>
+      </div>
+
+      <!-- character creation sub-panel -->
+      <div id="char-create-panel" class="char-create-panel hidden">
+        <h3>Create Character</h3>
+        <form id="char-create-form" autocomplete="off">
+          <div class="form-group">
+            <label for="char-name-input">Character Name</label>
+            <input id="char-name-input" type="text" maxlength="16" placeholder="2-16 letters" required />
+          </div>
+          <div class="form-group">
+            <label>Class</label>
+            <div class="class-picker">
+              <button type="button" class="class-btn selected" data-class="warrior">
+                <span class="class-icon">🗡️</span>
+                <span class="class-label">Warrior</span>
+              </button>
+              <button type="button" class="class-btn" data-class="mage">
+                <span class="class-icon">🔮</span>
+                <span class="class-label">Mage</span>
+              </button>
+              <button type="button" class="class-btn" data-class="rogue">
+                <span class="class-icon">🗡️</span>
+                <span class="class-label">Rogue</span>
+              </button>
+            </div>
+          </div>
+          <div id="char-create-error" class="form-error"></div>
+          <div class="charselect-actions">
+            <button type="submit" class="btn-primary">Create</button>
+            <button type="button" id="btn-cancel-create" class="btn-secondary">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ═══════════════ SCREEN: GAME ═══════════════ -->
+    <div id="screen-game" class="screen">
+      <div id="game-frame">
+        <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+        <div id="hud">
+          <!-- top-left: player info -->
+          <section id="player-panel" class="hud-card">
+            <div class="portrait" id="player-portrait">W</div>
+            <div class="player-meta">
+              <div id="player-name">Adventurer</div>
+              <div id="player-level">Level 1</div>
+              <div class="bar-wrap">
+                <label>HP</label>
+                <div class="bar hp"><span id="hp-fill"></span></div>
+                <span class="bar-text" id="hp-text">120 / 120</span>
+              </div>
+              <div class="bar-wrap">
+                <label>Mana</label>
+                <div class="bar mana"><span id="mana-fill"></span></div>
+                <span class="bar-text" id="mana-text">80 / 80</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- top-right: utility buttons + quest tracker -->
+          <div id="top-right-stack">
+            <div id="utility-bar">
+              <button data-action="inventory" class="utility-btn" title="Inventory (I)">
+                <img src="assets/icons/bag.png" alt="Bag" class="icon" />
+              </button>
+              <button data-action="equipment" class="utility-btn" title="Equipment (C)">
+                <img src="assets/icons/shield.png" alt="Gear" class="icon" />
+              </button>
+              <button data-action="questlog" class="utility-btn" title="Quest Log (L)">
+                <img src="assets/icons/scroll.png" alt="Quests" class="icon" />
+              </button>
+              <button data-action="charsheet" class="utility-btn" title="Character (P)">
+                <img src="assets/icons/person.png" alt="Character" class="icon" />
+              </button>
+              <button data-action="skills" class="utility-btn" title="Skills (K)">
+                <img src="assets/icons/lightning.png" alt="Skills" class="icon" />
+              </button>
+              <button id="btn-game-menu" class="utility-btn" title="Menu (Esc)">
+                <img src="assets/icons/menu.png" alt="Menu" class="icon" />
+              </button>
+            </div>
+          </div>
+
+          <!-- quest tracker (moveable) -->
+          <section id="quest-panel" class="hud-card">
+            <h3><img src="assets/icons/scroll.png" alt="" class="icon panel-icon" /> Quests</h3>
+            <div id="quest-tracker"></div>
+          </section>
+
+          <!-- floor indicator (shown when upstairs) -->
+          <div id="floor-indicator" class="hidden"></div>
+
+          <!-- target panel -->
+          <section id="target-panel" class="hud-card hidden">
+            <h3 id="target-name">Target</h3>
+            <span id="target-level" class="target-level-text"></span>
+            <div class="bar enemy"><span id="target-hp-fill"></span></div>
+            <div id="target-hp-text"></div>
+          </section>
+
+          <!-- inventory panel -->
+          <section id="inventory-panel" class="hud-card hidden">
+            <div class="panel-header">
+              <h3><img src="assets/icons/bag.png" alt="" class="icon panel-icon" /> Inventory</h3>
+              <button class="panel-close" data-close="inventory">&times;</button>
+            </div>
+            <div id="inventory-grid"></div>
+          </section>
+
+          <!-- equipment panel -->
+          <section id="equipment-panel" class="hud-card hidden">
+            <div class="panel-header">
+              <h3><img src="assets/icons/shield.png" alt="" class="icon panel-icon" /> Equipment</h3>
+              <button class="panel-close" data-close="equipment">&times;</button>
+            </div>
+            <div id="equipment-slots"></div>
+          </section>
+
+          <!-- quest log panel -->
+          <section id="quest-log-panel" class="hud-card hidden">
+            <div class="panel-header">
+              <h3><img src="assets/icons/scroll.png" alt="" class="icon panel-icon" /> Quest Log</h3>
+              <button class="panel-close" data-close="quest-log">&times;</button>
+            </div>
+            <div id="quest-log-body"></div>
+          </section>
+
+          <!-- character sheet panel -->
+          <section id="char-sheet-panel" class="hud-card hidden">
+            <div class="panel-header">
+              <h3><img src="assets/icons/person.png" alt="" class="icon panel-icon" /> Character</h3>
+              <button class="panel-close" data-close="char-sheet">&times;</button>
+            </div>
+            <div id="char-sheet-body"></div>
+          </section>
+
+          <!-- skills panel -->
+          <section id="skills-panel" class="hud-card hidden">
+            <div class="panel-header">
+              <h3><img src="assets/icons/lightning.png" alt="" class="icon panel-icon" /> Skills</h3>
+              <button class="panel-close" data-close="skills">&times;</button>
+            </div>
+            <div id="skills-body"></div>
+          </section>
+
+          <!-- bottom bar -->
+          <section id="bottom-bar" class="hud-card">
+            <div id="xp-bar-wrap">
+              <div id="xp-bar"><span id="xp-fill"></span></div>
+              <span id="xp-label">XP</span>
+            </div>
+            <div id="action-bar">
+              <button data-action="attack" class="action-btn" title="Attack (1)">
+                <img src="assets/icons/sword.png" alt="Attack" class="icon action-icon" />
+                <span class="action-key">1</span>
+              </button>
+              <button data-action="heal" class="action-btn" title="Minor Heal (2)">
+                <img src="assets/icons/heal.png" alt="Heal" class="icon action-icon" />
+                <span class="action-key">2</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- gold counter (bottom-right) -->
+          <div id="gold-counter"><img src="assets/icons/coin.png" alt="Gold" class="icon gold-icon" /> <span id="gold-value">0</span></div>
+
+          <!-- messages / chat system -->
+          <section id="message-panel" class="hud-card">
+            <div id="chat-tabs">
+              <button class="chat-tab active" data-channel="all">All</button>
+              <button class="chat-tab" data-channel="world">World</button>
+              <button class="chat-tab" data-channel="whisper">Whisper</button>
+              <button class="chat-tab" data-channel="system">System</button>
+            </div>
+            <div id="messages"></div>
+            <div id="chat-input-wrap">
+              <input id="chat-input" type="text" maxlength="200" placeholder="Press Enter to chat... (/w name msg to whisper)" autocomplete="off" />
+            </div>
+          </section>
+
+          <!-- NPC dialog panel (separate from chat) -->
+          <section id="npc-dialog-panel" class="hud-card hidden">
+            <div class="panel-header">
+              <h3 id="npc-dialog-name">NPC</h3>
+              <button class="panel-close" data-close="npc-dialog">&times;</button>
+            </div>
+            <div id="npc-dialog-body"></div>
+            <div id="npc-dialog-actions"></div>
+          </section>
+
+          <!-- in-game menu -->
+          <div id="game-menu-panel" class="hud-card hidden">
+            <h4 class="menu-section-title">Sound</h4>
+            <div class="menu-slider-row">
+              <label>SFX</label>
+              <input id="slider-sfx" type="range" min="0" max="100" value="50" class="menu-slider" />
+              <span id="sfx-vol-label" class="vol-label">50</span>
+            </div>
+            <div class="menu-slider-row">
+              <label>BGM</label>
+              <input id="slider-bgm" type="range" min="0" max="100" value="30" class="menu-slider" />
+              <span id="bgm-vol-label" class="vol-label">30</span>
+            </div>
+            <div class="menu-toggle-row">
+              <label>Mute All</label>
+              <button id="btn-mute-toggle" class="btn-secondary menu-toggle-btn">Mute</button>
+            </div>
+            <hr class="menu-divider" />
+            <button id="btn-game-charselect" class="btn-secondary game-menu-item">Character Select</button>
+            <button id="btn-game-logout" class="btn-danger game-menu-item">Log Out</button>
+          </div>
+        </div>
+
+        <div id="death-overlay" class="hidden">
+          <div class="death-text">You Have Died</div>
+          <div class="death-sub">Returning to town...</div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
