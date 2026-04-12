@@ -29,6 +29,7 @@
       <button class="tab" data-tab="playerBase">Player Base</button>
       <button class="tab" data-tab="props">Props</button>
       <button class="tab" data-tab="particles">Particles</button>
+      <button class="tab" data-tab="skills">Skills</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -1138,7 +1139,7 @@
                   <input id="particleIdInput" type="text" />
                 </label>
 
-                <div class="split-grid two-columns">
+                <div class="split-grid four-columns">
                   <label class="field">
                     <span>Blend Mode</span>
                     <select id="particleBlendModeInput">
@@ -1148,9 +1149,17 @@
                       <option value="screen">screen</option>
                     </select>
                   </label>
+                  <label class="field">
+                    <span>Emit Interval <span class="subtle">(s, continuous)</span></span>
+                    <input id="particleEmitIntervalInput" type="number" step="0.01" min="0.01" placeholder="e.g. 0.1" />
+                  </label>
                   <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
                     <input id="particleFadeOutInput" type="checkbox" />
                     <span>Fade Out</span>
+                  </label>
+                  <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                    <input id="particleContinuousInput" type="checkbox" />
+                    <span>Continuous</span>
                   </label>
                 </div>
 
@@ -1265,6 +1274,257 @@
                 <span id="particleValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="particleDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="skills">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Skills</h2>
+            <div class="inline-actions">
+              <button id="addSkillButton" class="button secondary small">Add</button>
+              <button id="duplicateSkillButton" class="button secondary small">Duplicate</button>
+              <button id="deleteSkillButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="skillSearchInput" type="text" placeholder="Find skill id, name, or type" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="skillEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Types</span>
+                <strong id="skillTypeCount">0</strong>
+              </div>
+            </div>
+            <div id="skillList" class="tile-list" role="listbox" aria-label="Skill entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Skills Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/skills.json</code> — class-restricted abilities loaded by the Skills panel and hotbar</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateSkillsButton" class="button secondary">Validate</button>
+              <button id="reloadSkillsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Skill</h3>
+                <span id="selectedSkillLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="skillEmptyState" class="empty-state">
+                <p>Select a skill entry from the list to begin editing.</p>
+              </div>
+
+              <form id="skillForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Skill ID</span>
+                    <input id="skillIdInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="skillNameInput" type="text" />
+                  </label>
+                </div>
+
+                <div class="split-grid four-columns">
+                  <label class="field">
+                    <span>Type</span>
+                    <select id="skillTypeInput">
+                      <option value="attack">attack</option>
+                      <option value="heal">heal</option>
+                      <option value="buff">buff</option>
+                      <option value="debuff">debuff</option>
+                      <option value="support">support</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Targeting</span>
+                    <select id="skillTargetingInput">
+                      <option value="enemy">enemy</option>
+                      <option value="self">self</option>
+                      <option value="aoe">aoe</option>
+                      <option value="aoe_ally">aoe_ally</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Icon</span>
+                    <input id="skillIconInput" type="text" placeholder="icon key" />
+                  </label>
+                  <label class="field">
+                    <span>Level Req</span>
+                    <input id="skillLevelReqInput" type="number" step="1" min="1" />
+                  </label>
+                </div>
+
+                <div class="split-grid three-columns">
+                  <label class="field">
+                    <span>Mana Cost</span>
+                    <input id="skillManaCostInput" type="number" step="1" min="0" />
+                  </label>
+                  <label class="field">
+                    <span>Cooldown (s) <span class="subtle">null = auto-attack</span></span>
+                    <input id="skillCooldownInput" type="number" step="0.1" min="0" placeholder="null" />
+                  </label>
+                  <label class="field">
+                    <span>Range (px) <span class="subtle">null = melee, 0 = self</span></span>
+                    <input id="skillRangeInput" type="number" step="1" min="0" placeholder="null" />
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span>Description</span>
+                  <textarea id="skillDescriptionInput" rows="2"></textarea>
+                </label>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Classes</h4></div>
+                  <div class="split-grid four-columns">
+                    <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="warrior" /><span>Warrior</span></label>
+                    <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="mage" /><span>Mage</span></label>
+                    <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="ranger" /><span>Ranger</span></label>
+                    <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="cleric" /><span>Cleric</span></label>
+                  </div>
+                  <label class="field">
+                    <span>Additional classes <span class="subtle">(comma-separated)</span></span>
+                    <input id="skillClassesExtraInput" type="text" placeholder="rogue, paladin, …" />
+                  </label>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>FX &amp; Audio</h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Particle <span class="subtle">(cast/self)</span></span>
+                      <input id="skillParticleInput" type="text" placeholder="e.g. fire" />
+                    </label>
+                    <label class="field">
+                      <span>Hit Particle</span>
+                      <input id="skillHitParticleInput" type="text" placeholder="e.g. fire" />
+                    </label>
+                    <div class="field">
+                      <span class="field-label">SFX <span class="subtle">(hit/heal)</span></span>
+                      <div class="sfx-field">
+                        <input id="skillSfxInput" type="text" placeholder="e.g. magic_hit" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="skillSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="split-grid two-columns">
+                    <div class="field">
+                      <span class="field-label">Cast SFX <span class="subtle">(optional)</span></span>
+                      <div class="sfx-field">
+                        <input id="skillCastSfxInput" type="text" placeholder="e.g. staff_swing" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="skillCastSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                    <label class="field">
+                      <span>Projectile Speed <span class="subtle">(px/s, ranged only)</span></span>
+                      <input id="skillProjectileSpeedInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group skill-type-group" data-skill-type="attack,debuff">
+                  <div class="inline-json-header"><h4>Attack / Debuff</h4></div>
+                  <div class="split-grid four-columns">
+                    <label class="field">
+                      <span>Damage</span>
+                      <input id="skillDamageInput" type="number" step="1" min="0" />
+                    </label>
+                    <label class="field">
+                      <span>Dmg / Level</span>
+                      <input id="skillDamagePerLevelInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                    <label class="field">
+                      <span>Damage Type</span>
+                      <select id="skillDamageTypeInput">
+                        <option value="physical">physical</option>
+                        <option value="fire">fire</option>
+                        <option value="frost">frost</option>
+                        <option value="arcane">arcane</option>
+                        <option value="nature">nature</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>AoE Radius <span class="subtle">(px)</span></span>
+                      <input id="skillAoeRadiusInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                  </div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Hits</span>
+                      <input id="skillHitsInput" type="number" step="1" min="1" placeholder="optional" />
+                    </label>
+                    <label class="field">
+                      <span>Hit Interval (s)</span>
+                      <input id="skillHitIntervalInput" type="number" step="0.1" min="0" placeholder="optional" />
+                    </label>
+                    <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                      <input id="skillChanneledInput" type="checkbox" />
+                      <span>Channeled</span>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group skill-type-group" data-skill-type="heal">
+                  <div class="inline-json-header"><h4>Heal</h4></div>
+                  <div class="split-grid four-columns">
+                    <label class="field">
+                      <span>Heal Amount</span>
+                      <input id="skillHealAmountInput" type="number" step="1" min="0" />
+                    </label>
+                    <label class="field">
+                      <span>Heal / Level</span>
+                      <input id="skillHealPerLevelInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                    <label class="field">
+                      <span>HoT Ticks</span>
+                      <input id="skillHealTicksInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                    <label class="field">
+                      <span>Tick Interval (s)</span>
+                      <input id="skillHealIntervalInput" type="number" step="0.1" min="0" placeholder="optional" />
+                    </label>
+                  </div>
+                  <label class="field checkbox-field">
+                    <input id="skillHealChanneledInput" type="checkbox" />
+                    <span>Channeled</span>
+                  </label>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="skillJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="skillValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="skillDiagnosticsList" class="diagnostics-list empty-diagnostics">
                 <p>No messages yet.</p>
               </div>
             </section>

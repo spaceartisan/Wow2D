@@ -38,6 +38,7 @@ export class EntitySystem {
       gold: 12,
       dead: false,
       deathUntil: 0,
+      activeBuffs: [],
       inventorySlots: Array(20).fill(null),
       bank: Array(48).fill(null),
       hotbar: [
@@ -300,6 +301,10 @@ export class EntitySystem {
     const trinket = player.equipment.trinket;
 
     player.damage = player.baseDamage + (weapon?.attackBonus || 0);
+
+    // Use weapon range if present (ranged weapons), otherwise default melee range
+    const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
+    player.attackRange = weaponDef?.range || PLAYER_BASE.attackRange;
 
     const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + (armor?.hpBonus || 0);
     const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + (trinket?.manaBonus || 0);

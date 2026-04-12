@@ -1,0 +1,68 @@
+{
+  "battleShout": {
+    "name": "Battle Shout",
+    "description": "Damage increased by 20%.",
+    "type": "buff",
+    "icon": "assets/sprites/status/battleShout.png"
+  },
+  "arcaneIntellect": {
+    "name": "Arcane Intellect",
+    "description": "Maximum mana increased by 25%.",
+    "type": "buff",
+    "icon": "assets/sprites/status/arcaneIntellect.png"
+  },
+  "evasion": {
+    "name": "Evasion",
+    "description": "Move speed increased by 35%.",
+    "type": "buff",
+    "icon": "assets/sprites/status/evasion.png"
+  },
+  "inspired": {
+    "name": "Inspired",
+    "description": "Damage increased by 15%.",
+    "type": "buff",
+    "icon": "assets/sprites/status/inspired.png"
+  },
+  "manaShield": {
+    "name": "Mana Shield",
+    "description": "Absorbing damage with mana.",
+    "type": "buff",
+    "icon": "assets/sprites/status/manaShield.png"
+  },
+  "sprinting": {
+    "name": "Sprint",
+    "description": "Move speed greatly increased.",
+    "type": "buff",
+    "icon": "assets/sprites/status/sprinting.png"
+  },
+  "chilled": {
+    "name": "Chilled",
+    "description": "Move speed reduced by 30%.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/chilled.png"
+  },
+  "stunned": {
+    "name": "Stunned",
+    "description": "Unable to act.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/stunned.png"
+  },
+  "sundered": {
+    "name": "Sundered",
+    "description": "Damage taken increased by 20%.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/sundered.png"
+  },
+  "weakened": {
+    "name": "Weakened",
+    "description": "Damage reduced by 25%.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/weakened.png"
+  },
+  "poisoned": {
+    "name": "Poisoned",
+    "description": "Taking damage over time.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/poisoned.png"
+  }
+}

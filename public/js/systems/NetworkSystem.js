@@ -224,6 +224,10 @@ export class NetworkSystem {
     this.send({ type: "heal" });
   }
 
+  sendSkill(skillId, enemyId) {
+    this.send({ type: "use_skill", skillId, enemyId: enemyId || null });
+  }
+
   sendChat(text) {
     this.send({ type: "chat", text });
   }
@@ -374,6 +378,18 @@ export class NetworkSystem {
         break;
       case "swap_result":
         this.onSwapResult(msg);
+        break;
+      case "skill_result":
+        this.onSkillResult(msg);
+        break;
+      case "combat_visual":
+        this.onCombatVisual(msg);
+        break;
+      case "projectile_spawn":
+        this.onProjectileSpawn(msg);
+        break;
+      case "projectile_hit":
+        this.onProjectileHit(msg);
         break;
       case "auth_error":
         this._intentionalClose = true;
@@ -562,6 +578,7 @@ export class NetworkSystem {
       if (msg.you.level !== undefined) player.level = msg.you.level;
       if (msg.you.xp !== undefined) player.xp = msg.you.xp;
       if (msg.you.damage !== undefined) player.damage = msg.you.damage;
+      if (msg.you.buffs) player.activeBuffs = msg.you.buffs;
 
       // Update shop gold display + button states without full re-render
       if (this.game.ui?.shopOpen) this.game.ui.refreshShopGold();
@@ -633,23 +650,27 @@ export class NetworkSystem {
   }
 
   onAttackResult(msg) {
-    // Store override so the HP bar updates instantly even though the
-    // interpolated snapshot hasn't caught up yet.
-    this.enemyOverrides.set(msg.enemyId, {
-      hp: msg.enemyHp,
-      maxHp: msg.enemyMaxHp
-    });
-    this.game.ui.addMessage(`You strike for ${msg.damage} damage.`);
-
-    // Look up equipped weapon's effects, fall back to playerBase defaults
     const weapon = this.game.entities.player.equipment?.weapon;
     const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
     const playerBase = this.game.entities.player;
     const hitParticle = weaponDef?.hitParticle || playerBase._baseHitParticle;
     const hitSfx = weaponDef?.hitSfx || playerBase._baseHitSfx;
-
-    this.game.audio.play(hitSfx);
     const enemy = this.game.entities.enemies.find(e => e.id === msg.enemyId);
+
+    // Ranged weapon — arrow already in flight (spawned by projectile_spawn)
+    if (weaponDef?.range) {
+      this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
+      this.game.ui.addMessage(`You strike for ${msg.damage} damage.`);
+      return;
+    }
+
+    // Melee — instant effects
+    this.enemyOverrides.set(msg.enemyId, {
+      hp: msg.enemyHp,
+      maxHp: msg.enemyMaxHp
+    });
+    this.game.ui.addMessage(`You strike for ${msg.damage} damage.`);
+    this.game.audio.play(hitSfx);
     if (enemy) this.game.particles.emit(hitParticle, enemy.x, enemy.y);
   }
 
@@ -739,6 +760,137 @@ export class NetworkSystem {
     this.game.ui.addMessage(`Minor Heal restores ${msg.healAmount} HP.`);
     const p = this.game.entities.player;
     this.game.particles.emit("heal", p.x, p.y);
+  }
+
+  /** Projectile color lookup by damage type */
+  static _PROJ_COLORS = {
+    fire:     { color: "#f59a2e", trail: "#c44b0a", size: 5 },
+    frost:    { color: "#8ad4f5", trail: "#4a8ab0", size: 5 },
+    arcane:   { color: "#b88aef", trail: "#6a4aad", size: 4 },
+    nature:   { color: "#6ae870", trail: "#2a8a30", size: 4 },
+    physical: { color: "#c8c0a8", trail: "#7a7460", size: 3 }
+  };
+
+  onSkillResult(msg) {
+    const player = this.game.entities.player;
+    const skillDef = this.game.data.skills[msg.skillId];
+
+    if (!msg.ok) {
+      if (msg.reason === "cooldown") {
+        this.game.ui.addMessage(`${skillDef?.name || msg.skillId} is on cooldown.`);
+      } else if (msg.reason === "mana") {
+        this.game.ui.addMessage("Not enough mana.");
+      }
+      return;
+    }
+
+    // Update mana from server
+    if (msg.mana != null) player.mana = msg.mana;
+    if (msg.maxMana != null) player.maxMana = msg.maxMana;
+
+    // Track buffs/debuffs applied to self
+    if (msg.buff) {
+      if (!player.activeBuffs) player.activeBuffs = [];
+      // Remove duplicate, add with remaining time matching world state format
+      player.activeBuffs = player.activeBuffs.filter(b => b.id !== msg.buff.id);
+      player.activeBuffs.push({
+        ...msg.buff,
+        remaining: msg.buff.duration
+      });
+    }
+
+    if (msg.damage != null && msg.enemyId != null) {
+      const enemy = this.game.entities.getEnemyById(msg.enemyId);
+
+      // Ranged / projectile skill — damage comes later via projectile_hit
+      if (skillDef?.projectileSpeed && skillDef.projectileSpeed > 0) {
+        return;
+      }
+
+      // Melee / instant skill - apply immediately
+      if (enemy) {
+        enemy.hp = msg.enemyHp;
+        enemy.maxHp = msg.enemyMaxHp;
+        if (skillDef?.hitParticle) {
+          this.game.particles.emit(skillDef.hitParticle, enemy.x, enemy.y);
+        }
+        if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      }
+      this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits for ${msg.damage}.`);
+    } else if (msg.healAmount != null) {
+      // Heal skill
+      player.hp = msg.hp;
+      player.maxHp = msg.maxHp;
+      if (skillDef?.particle) this.game.particles.emit(skillDef.particle, player.x, player.y);
+      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} restores ${msg.healAmount} HP.`);
+    } else {
+      // Buff/support skill (or ranged skill launch confirmation)
+      if (skillDef?.projectileSpeed > 0) return; // projectile in flight
+      if (skillDef?.particle) this.game.particles.emit(skillDef.particle, player.x, player.y);
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} activated.`);
+    }
+  }
+
+  /**
+   * Handle a combat visual broadcast from the server.
+   * This fires for other players' attacks/heals/buffs so everyone sees the effects.
+   */
+  onCombatVisual(msg) {
+    // ── Self-targeted effect (heal / buff on another player) ──
+    if (msg.selfTarget) {
+      // Find the remote player who cast
+      const rp = this.game.entities.remotePlayers.find(p => p.id === msg.attackerId);
+      const x = rp ? rp.x : msg.ax;
+      const y = rp ? rp.y : msg.ay;
+      if (msg.particle) this.game.particles.emit(msg.particle, x, y);
+      if (msg.sfx) this.game.audio.play(msg.sfx);
+      return;
+    }
+
+    // ── Enemy attacking a player (not us — that's handled by player_damaged) ──
+    if (msg.targetPlayerId) {
+      const rp = this.game.entities.remotePlayers.find(p => p.id === msg.targetPlayerId);
+      const x = rp ? rp.x : msg.tx;
+      const y = rp ? rp.y : msg.ty;
+      if (msg.hitParticle) this.game.particles.emit(msg.hitParticle, x, y);
+      if (msg.hitSfx) this.game.audio.play(msg.hitSfx);
+      return;
+    }
+
+    // ── Player attacking an enemy ──
+
+    // Ranged projectile hit — arrow already exists from projectile_spawn
+    if (msg.projectileHit) {
+      if (msg.enemyHp != null) {
+        this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
+      }
+      return;
+    }
+
+    const enemy = this.game.entities.getEnemyById(msg.enemyId);
+    const ex = enemy ? enemy.x : msg.ex;
+    const ey = enemy ? enemy.y : msg.ey;
+
+    // Find attacker position from remote players (use msg fallback)
+    const attacker = this.game.entities.remotePlayers.find(p => p.id === msg.attackerId);
+    const ax = attacker ? attacker.x : msg.ax;
+    const ay = attacker ? attacker.y : msg.ay;
+
+    // Skill-based attack
+    if (msg.skillId) {
+      const skillDef = this.game.data.skills[msg.skillId];
+
+      // Instant skill — particles at impact
+      if (msg.hitParticle) this.game.particles.emit(msg.hitParticle, ex, ey);
+      if (msg.hitSfx) this.game.audio.play(msg.hitSfx);
+      return;
+    }
+
+    // Weapon-based attack (auto-attack) — only melee reaches here
+    if (msg.hitParticle) this.game.particles.emit(msg.hitParticle, ex, ey);
+    if (msg.hitSfx) this.game.audio.play(msg.hitSfx);
   }
 
   onChat(msg) {
@@ -963,6 +1115,8 @@ export class NetworkSystem {
     this._castingInterval = null;
     if (msg.reason === "damaged") {
       this.game.ui.addMessage("Hearthstone interrupted!");
+    } else if (msg.reason === "moved") {
+      this.game.ui.addMessage("Hearthstone interrupted by movement!");
     } else if (msg.reason === "manual") {
       this.game.ui.addMessage("Hearthstone cancelled.");
     }
@@ -1164,7 +1318,7 @@ export class NetworkSystem {
       this._enemySnaps, this._latestEnemyMap,
       this._enemyResult, renderTick, this._smoothPosEnemy
     );
-    // Patch overrides (attack_result / enemy_killed)
+    // Patch immediate overrides (attack_result / enemy_killed)
     if (this.enemyOverrides.size > 0) {
       for (let i = 0; i < this._enemyResult.length; i++) {
         const e = this._enemyResult[i];
@@ -1185,6 +1339,78 @@ export class NetworkSystem {
       this._playerResult, playerRenderTick, this._smoothPosPlayer
     );
     this.game.entities.remotePlayers = this._playerResult;
+  }
+
+  /**
+   * Handle a server-spawned projectile (arrow or skill projectile).
+   * All clients (attacker + observers) receive this and spawn the visual.
+   * Damage is computed later on the server when the projectile hits.
+   */
+  onProjectileSpawn(msg) {
+    const enemy = this.game.entities.getEnemyById(msg.targetEnemyId);
+    if (!enemy) return;
+
+    if (msg.weaponId) {
+      // Weapon attack — spawn arrow
+      const weaponDef = this.game.data.items[msg.weaponId];
+      this.game.projectiles.spawn({
+        sx: msg.sx, sy: msg.sy,
+        tx: enemy.x, ty: enemy.y,
+        targetId: msg.targetEnemyId,
+        speed: msg.speed,
+        sprite: "assets/sprites/entities/arrow.png",
+        spriteW: 16, spriteH: 32,
+        color: "#d4a856",
+        trail: "#8b7340",
+        size: 3,
+        onHit: () => {
+          const e = this.game.entities.getEnemyById(msg.targetEnemyId);
+          if (e) {
+            this.game.particles.emit(weaponDef?.hitParticle || "hit_spark", e.x, e.y);
+            this.game.audio.play(weaponDef?.hitSfx || "sword_hit");
+          }
+        }
+      });
+    } else if (msg.skillId) {
+      // Skill projectile
+      const pColors = NetworkSystem._PROJ_COLORS[msg.damageType] || NetworkSystem._PROJ_COLORS.physical;
+      const skillDef = this.game.data.skills[msg.skillId];
+      this.game.projectiles.spawn({
+        sx: msg.sx, sy: msg.sy,
+        tx: enemy.x, ty: enemy.y,
+        targetId: msg.targetEnemyId,
+        speed: msg.speed,
+        color: pColors.color,
+        trail: pColors.trail,
+        size: pColors.size,
+        onHit: () => {
+          const e = this.game.entities.getEnemyById(msg.targetEnemyId);
+          if (e) {
+            if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, e.x, e.y);
+            if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Handle a server-side skill projectile hit.
+   * Damage was computed by the server when its projectile reached the enemy.
+   */
+  onProjectileHit(msg) {
+    this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
+    const skillDef = this.game.data.skills[msg.skillId];
+    this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits for ${msg.damage}.`);
+
+    if (msg.debuff) {
+      const enemy = this.game.entities.getEnemyById(msg.enemyId);
+      if (enemy) {
+        if (!enemy.debuffs) enemy.debuffs = [];
+        enemy.debuffs = enemy.debuffs.filter(d => d.id !== msg.debuff.id);
+        enemy.debuffs.push({ ...msg.debuff, remaining: msg.debuff.duration });
+      }
+    }
   }
 
   /**

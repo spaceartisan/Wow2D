@@ -9,6 +9,7 @@ import { UISystem } from "../systems/UISystem.js";
 import { WorldSystem } from "../systems/WorldSystem.js";
 import { MinimapSystem } from "../systems/MinimapSystem.js";
 import { ParticleSystem } from "../systems/ParticleSystem.js";
+import { ProjectileSystem } from "../systems/ProjectileSystem.js";
 import { clamp } from "../utils.js";
 
 export class Game {
@@ -36,6 +37,7 @@ export class Game {
     this.network = null;
     this.minimap = null;
     this.audio = new AudioManager();
+    this.projectiles = new ProjectileSystem(this);
   }
 
   async init() {
@@ -44,13 +46,15 @@ export class Game {
     window.addEventListener("resize", this._resizeBound);
 
     // Load all data-driven JSON files in parallel
-    const [items, enemies, npcs, quests] = await Promise.all([
+    const [items, enemies, npcs, quests, skills, statusEffects] = await Promise.all([
       fetch("/data/items.json").then(r => r.json()),
       fetch("/data/enemies.json").then(r => r.json()),
       fetch("/data/npcs.json").then(r => r.json()),
-      fetch("/data/quests.json").then(r => r.json())
+      fetch("/data/quests.json").then(r => r.json()),
+      fetch("/data/skills.json").then(r => r.json()),
+      fetch("/data/statusEffects.json").then(r => r.json())
     ]);
-    this.data = { items, enemies, npcs, quests };
+    this.data = { items, enemies, npcs, quests, skills, statusEffects };
 
     // Load the starting map
     await this.world.loadMap("eldengrove");
@@ -176,6 +180,7 @@ export class Game {
 
     this.entities.update(dt);
     this.combat.update(dt);
+    this.projectiles.update(dt);
     this.particles.update(dt);
     this.checkPortals();
     this.checkStairs(dt);
@@ -326,6 +331,7 @@ export class Game {
 
       // Clear combat target (enemies are server-managed)
       this.combat.targetEnemyId = null;
+      this.projectiles.clear();
 
       // Tell server about the map transition
       if (this.network) {
@@ -385,6 +391,7 @@ export class Game {
     this.world.drawTerrain(ctx, cam, this.canvas, this.sprites);
     this.world.drawObjects(ctx, cam, this.canvas, this.sprites);
     this.entities.draw(ctx, cam, this.sprites);
+    this.projectiles.draw(ctx, cam);
     this.particles.draw(ctx, cam);
     this.drawInteractionPrompt();
 

@@ -102,6 +102,11 @@
     selectedParticleKey: null,
     particleSearch: '',
     particleDirty: false,
+
+    skills: {},
+    selectedSkillKey: null,
+    skillSearch: '',
+    skillDirty: false,
   };
 
   const els = {};
@@ -114,14 +119,15 @@
     'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNotStartedTextInput','questDialogNotStartedOptionsEditor','questDialogNotStartedOptionsEmptyState','questDialogNotStartedAddButton','questDialogActiveTextInput','questDialogActiveOptionsEditor','questDialogActiveOptionsEmptyState','questDialogActiveAddButton','questDialogReadyTextInput','questDialogReadyOptionsEditor','questDialogReadyOptionsEmptyState','questDialogReadyAddButton','questDialogCompletedTextInput','questDialogCompletedOptionsEditor','questDialogCompletedOptionsEmptyState','questDialogCompletedAddButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
     'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
     'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton',
-    'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
+    'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleEmitIntervalInput','particleContinuousInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
+    'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton',
     'enemyHitParticleInput','enemyHitSfxInput',
     'itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput',
     'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : state.tileDirty)))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : state.tileDirty))))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -140,6 +146,7 @@
   function setPlayerBaseDirty(v){ state.playerBaseDirty = v; updateDirtyBadge(); }
   function setPropDirty(v){ state.propDirty = v; updateDirtyBadge(); }
   function setParticleDirty(v){ state.particleDirty = v; updateDirtyBadge(); }
+  function setSkillDirty(v){ state.skillDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -1694,12 +1701,13 @@
       const dt = Math.min((ts - (this.lastTime || ts)) / 1000, 0.1);
       this.lastTime = ts;
 
-      // Auto-emit burst on interval
+      // Auto-emit burst on interval, respecting emitInterval for continuous presets
       if (state.activeTab === 'particles' && state.selectedParticleKey) {
+        const cfg = state.particles[state.selectedParticleKey];
+        const interval = (cfg && cfg.continuous && cfg.emitInterval) ? cfg.emitInterval : this.autoEmitInterval;
         this.autoEmitAccum += dt;
-        if (this.autoEmitAccum >= this.autoEmitInterval) {
+        if (this.autoEmitAccum >= interval) {
           this.autoEmitAccum = 0;
-          const cfg = state.particles[state.selectedParticleKey];
           if (cfg && this.canvas) {
             const W = this.canvas.width  / devicePixelRatio;
             const H = this.canvas.height / devicePixelRatio;
@@ -1837,6 +1845,8 @@
     els.particleIdInput.value = state.selectedParticleKey;
     els.particleBlendModeInput.value = entry.blendMode || 'source-over';
     els.particleFadeOutInput.checked = entry.fadeOut !== false;
+    els.particleContinuousInput.checked = !!entry.continuous;
+    els.particleEmitIntervalInput.value = entry.emitInterval != null ? entry.emitInterval : '';
     els.particleCountMinInput.value = entry.count?.[0] ?? '';
     els.particleCountMaxInput.value = entry.count?.[1] ?? '';
     els.particleLifetimeMinInput.value = entry.lifetime?.[0] ?? '';
@@ -1865,6 +1875,10 @@
     }
     entry.blendMode = els.particleBlendModeInput.value;
     entry.fadeOut = els.particleFadeOutInput.checked;
+    entry.continuous = els.particleContinuousInput.checked;
+    const emitInterval = parseFloat(els.particleEmitIntervalInput.value);
+    if (!isNaN(emitInterval) && emitInterval > 0) entry.emitInterval = emitInterval;
+    else delete entry.emitInterval;
     entry.count = [Number(els.particleCountMinInput.value||0), Number(els.particleCountMaxInput.value||0)];
     entry.lifetime = [Number(els.particleLifetimeMinInput.value||0), Number(els.particleLifetimeMaxInput.value||0)];
     entry.speed = [Number(els.particleSpeedMinInput.value||0), Number(els.particleSpeedMaxInput.value||0)];
@@ -1912,6 +1926,8 @@
       if (typeof entry.friction !== 'number' || entry.friction < 0 || entry.friction > 1) messages.push({level:'warning', title:`${key}: friction`, message:'friction should be a number between 0 and 1.'});
       if (typeof entry.fadeOut !== 'boolean') messages.push({level:'warning', title:`${key}: fadeOut`, message:'fadeOut should be a boolean.'});
       if (!VALID_BLENDS.has(entry.blendMode)) messages.push({level:'warning', title:`${key}: blendMode`, message:`blendMode "${entry.blendMode}" is unusual. Common values: lighter, source-over.`});
+      if (entry.continuous && !entry.emitInterval) messages.push({level:'warning', title:`${key}: emitInterval`, message:'Continuous presets should define emitInterval (seconds between bursts).'});
+      if (entry.emitInterval != null && (typeof entry.emitInterval !== 'number' || entry.emitInterval <= 0)) messages.push({level:'error', title:`${key}: emitInterval`, message:'emitInterval must be a positive number.'});
     }
     if (!messages.length) messages.push({level:'info', title:'Validation passed', message:'No schema problems detected in particles.json.'});
     const errorCount=messages.filter(m=>m.level==='error').length; const warningCount=messages.filter(m=>m.level==='warning').length;
@@ -1922,10 +1938,235 @@
   function deleteParticle() { const entry=getSelectedParticleEntry(); if(!entry) return; if(!window.confirm(`Delete preset "${state.selectedParticleKey}"?`)) return; delete state.particles[state.selectedParticleKey]; state.selectedParticleKey=Object.keys(state.particles)[0]||null; setParticleDirty(true); renderParticles(); }
   function addParticleColor() { const entry=getSelectedParticleEntry(); if(!entry) return; if(!Array.isArray(entry.color)) entry.color=[]; entry.color.push('#ffffff'); setParticleDirty(true); renderParticlePanel(); }
 
+  // Skills
+  const SKILL_TYPES = ['attack','heal','buff','debuff','support'];
+  const SKILL_TARGETING = ['enemy','self','aoe','aoe_ally'];
+  const KNOWN_CLASSES = ['warrior','mage','ranger','cleric'];
+  const DEFAULT_NEW_SKILL = { id:'newSkill', name:'New Skill', description:'', type:'attack', targeting:'enemy', range:null, cooldown:null, manaCost:0, damage:0, damageType:'physical', particle:null, sfx:null, classes:[], levelReq:1, icon:'newSkill' };
+
+  function getVisibleSkillKeys() {
+    const q = state.skillSearch.toLowerCase();
+    return Object.keys(state.skills).filter(k => {
+      const s = state.skills[k] || {};
+      return !q || k.toLowerCase().includes(q) || String(s.name||'').toLowerCase().includes(q) || String(s.type||'').toLowerCase().includes(q);
+    }).sort((a,b)=>a.localeCompare(b));
+  }
+  function getSelectedSkillEntry() { return state.selectedSkillKey ? state.skills[state.selectedSkillKey] || null : null; }
+  function ensureUniqueSkillKey(baseKey){ let c=baseKey, i=2; while(state.skills[c]) c=`${baseKey}_${i++}`; return c; }
+
+  const SKILL_TYPE_COLOR = { attack:'#d06060', heal:'#3fb06a', buff:'#5a9cf5', debuff:'#c8983a', support:'#9daabf' };
+
+  function updateSkillTypeVisibility(type) {
+    document.querySelectorAll('.skill-type-group').forEach(el => {
+      const types = (el.dataset.skillType || '').split(',');
+      el.classList.toggle('visible', types.includes(type));
+    });
+  }
+
+  function getSkillClasses() {
+    const checked = [...document.querySelectorAll('.skill-class-cb:checked')].map(cb => cb.value);
+    const extra = (els.skillClassesExtraInput.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+    return [...new Set([...checked, ...extra])];
+  }
+
+  function buildCurrentSkillObject() {
+    const type = els.skillTypeInput.value;
+    const obj = {
+      id: (els.skillIdInput.value || '').trim() || state.selectedSkillKey,
+      name: els.skillNameInput.value || '',
+      description: els.skillDescriptionInput.value || '',
+      type,
+      targeting: els.skillTargetingInput.value,
+      range: els.skillRangeInput.value !== '' ? Number(els.skillRangeInput.value) : null,
+      cooldown: els.skillCooldownInput.value !== '' ? Number(els.skillCooldownInput.value) : null,
+      manaCost: Number(els.skillManaCostInput.value || 0),
+      classes: getSkillClasses(),
+      levelReq: Number(els.skillLevelReqInput.value || 1),
+      icon: (els.skillIconInput.value || '').trim(),
+    };
+    const particle = els.skillParticleInput.value.trim();
+    const hitParticle = els.skillHitParticleInput.value.trim();
+    const sfx = els.skillSfxInput.value.trim();
+    const castSfx = els.skillCastSfxInput.value.trim();
+    const projSpeed = els.skillProjectileSpeedInput.value;
+    if (particle) obj.particle = particle;
+    if (hitParticle) obj.hitParticle = hitParticle;
+    if (sfx) obj.sfx = sfx;
+    if (castSfx) obj.castSfx = castSfx;
+    if (projSpeed !== '') obj.projectileSpeed = Number(projSpeed);
+    if (type === 'attack' || type === 'debuff') {
+      obj.damage = Number(els.skillDamageInput.value || 0);
+      obj.damageType = els.skillDamageTypeInput.value;
+      const dpl = els.skillDamagePerLevelInput.value;
+      if (dpl !== '') obj.damagePerLevel = Number(dpl);
+      const aoeR = els.skillAoeRadiusInput.value;
+      if (aoeR !== '') obj.aoeRadius = Number(aoeR);
+      const hits = els.skillHitsInput.value;
+      if (hits !== '') obj.hits = Number(hits);
+      const hitInt = els.skillHitIntervalInput.value;
+      if (hitInt !== '') obj.hitInterval = Number(hitInt);
+      if (els.skillChanneledInput.checked) obj.channeled = true;
+    }
+    if (type === 'heal') {
+      obj.healAmount = Number(els.skillHealAmountInput.value || 0);
+      const hpl = els.skillHealPerLevelInput.value;
+      if (hpl !== '') obj.healPerLevel = Number(hpl);
+      const ticks = els.skillHealTicksInput.value;
+      if (ticks !== '') obj.healTicks = Number(ticks);
+      const tickInt = els.skillHealIntervalInput.value;
+      if (tickInt !== '') obj.healInterval = Number(tickInt);
+      if (els.skillHealChanneledInput.checked) obj.channeled = true;
+    }
+    return obj;
+  }
+
+  function renderSkillPanel() {
+    const skill = getSelectedSkillEntry();
+    if (!skill) {
+      els.selectedSkillLabel.textContent = 'Nothing selected';
+      els.skillEmptyState.classList.remove('hidden');
+      els.skillForm.classList.add('hidden');
+      els.skillJsonPreview.textContent = '';
+      return;
+    }
+    els.selectedSkillLabel.textContent = state.selectedSkillKey;
+    els.skillEmptyState.classList.add('hidden');
+    els.skillForm.classList.remove('hidden');
+    els.skillIdInput.value = skill.id || state.selectedSkillKey;
+    els.skillNameInput.value = skill.name || '';
+    els.skillDescriptionInput.value = skill.description || '';
+    els.skillTypeInput.value = SKILL_TYPES.includes(skill.type) ? skill.type : 'attack';
+    els.skillTargetingInput.value = SKILL_TARGETING.includes(skill.targeting) ? skill.targeting : 'enemy';
+    els.skillIconInput.value = skill.icon || '';
+    els.skillLevelReqInput.value = skill.levelReq ?? 1;
+    els.skillManaCostInput.value = skill.manaCost ?? 0;
+    els.skillCooldownInput.value = skill.cooldown != null ? skill.cooldown : '';
+    els.skillRangeInput.value = skill.range != null ? skill.range : '';
+    // Classes
+    const classes = Array.isArray(skill.classes) ? skill.classes : [];
+    document.querySelectorAll('.skill-class-cb').forEach(cb => { cb.checked = classes.includes(cb.value); });
+    const extra = classes.filter(c => !KNOWN_CLASSES.includes(c));
+    els.skillClassesExtraInput.value = extra.join(', ');
+    // FX
+    els.skillParticleInput.value = skill.particle || '';
+    els.skillHitParticleInput.value = skill.hitParticle || '';
+    els.skillSfxInput.value = skill.sfx || '';
+    els.skillCastSfxInput.value = skill.castSfx || '';
+    els.skillProjectileSpeedInput.value = skill.projectileSpeed != null ? skill.projectileSpeed : '';
+    // Type-specific
+    els.skillDamageInput.value = skill.damage ?? '';
+    els.skillDamagePerLevelInput.value = skill.damagePerLevel != null ? skill.damagePerLevel : '';
+    els.skillDamageTypeInput.value = skill.damageType || 'physical';
+    els.skillAoeRadiusInput.value = skill.aoeRadius != null ? skill.aoeRadius : '';
+    els.skillHitsInput.value = skill.hits != null ? skill.hits : '';
+    els.skillHitIntervalInput.value = skill.hitInterval != null ? skill.hitInterval : '';
+    els.skillChanneledInput.checked = !!skill.channeled;
+    els.skillHealAmountInput.value = skill.healAmount ?? '';
+    els.skillHealPerLevelInput.value = skill.healPerLevel != null ? skill.healPerLevel : '';
+    els.skillHealTicksInput.value = skill.healTicks != null ? skill.healTicks : '';
+    els.skillHealIntervalInput.value = skill.healInterval != null ? skill.healInterval : '';
+    els.skillHealChanneledInput.checked = !!skill.channeled;
+    updateSkillTypeVisibility(els.skillTypeInput.value);
+    els.skillJsonPreview.textContent = JSON.stringify({ [state.selectedSkillKey]: skill }, null, 2);
+  }
+
+  function syncSelectedSkillFromForm() {
+    const current = getSelectedSkillEntry(); if (!current) return;
+    const built = buildCurrentSkillObject();
+    const newKey = built.id || state.selectedSkillKey;
+    if (newKey !== state.selectedSkillKey && !state.skills[newKey]) {
+      const newSkills = {};
+      Object.keys(state.skills).forEach(k => { newSkills[k === state.selectedSkillKey ? newKey : k] = state.skills[k]; });
+      state.skills = newSkills; state.selectedSkillKey = newKey;
+    }
+    state.skills[state.selectedSkillKey] = built;
+    setSkillDirty(true);
+    renderSkillList();
+    els.skillJsonPreview.textContent = JSON.stringify({ [state.selectedSkillKey]: built }, null, 2);
+  }
+
+  function renderSkillList() {
+    const visibleKeys = getVisibleSkillKeys();
+    const allKeys = Object.keys(state.skills);
+    els.skillEntryCount.textContent = String(allKeys.length);
+    els.skillTypeCount.textContent = String(new Set(allKeys.map(k => state.skills[k]?.type).filter(Boolean)).size);
+    els.skillList.innerHTML = '';
+    if (!visibleKeys.length) { const empty=document.createElement('div'); empty.className='subtle'; empty.textContent='No matching skills.'; els.skillList.appendChild(empty); return; }
+    for (const key of visibleKeys) {
+      const skill = state.skills[key] || {};
+      const color = SKILL_TYPE_COLOR[skill.type] || '#888';
+      const button = document.createElement('button');
+      button.className = 'tile-list-item' + (key === state.selectedSkillKey ? ' active' : '');
+      button.type = 'button';
+      button.innerHTML = `<span class="swatch" style="background:${color}"></span><span class="tile-text"><strong class="tile-name">${skill.name || key}</strong><span class="tile-meta">${key} • ${skill.type||'?'} • lvl ${skill.levelReq??'?'} • ${(skill.classes||[]).join(', ')||'no class'}</span></span>`;
+      button.addEventListener('click', () => { state.selectedSkillKey = key; renderSkillPanel(); renderSkillList(); });
+      els.skillList.appendChild(button);
+    }
+  }
+
+  function renderSkillDiagnostics(items=[], summary='No validation run yet') {
+    els.skillValidationSummary.textContent = summary; els.skillDiagnosticsList.innerHTML = '';
+    if (!items.length) { els.skillDiagnosticsList.className='diagnostics-list empty-diagnostics'; els.skillDiagnosticsList.innerHTML='<p>No messages yet.</p>'; return; }
+    els.skillDiagnosticsList.className='diagnostics-list';
+    for (const item of items) { const div=document.createElement('div'); div.className=`diagnostic-item ${item.level||'info'}`; div.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`; els.skillDiagnosticsList.appendChild(div); }
+  }
+
+  function renderSkills() { renderSkillList(); renderSkillPanel(); }
+
+  async function loadSkills() {
+    const result = await apiFetch('/api/skills');
+    state.skills = result.skills || {};
+    const keys = Object.keys(state.skills);
+    state.selectedSkillKey = keys.includes(state.selectedSkillKey) ? state.selectedSkillKey : (keys[0] || null);
+    setSkillDirty(false); renderSkills(); renderSkillDiagnostics([{level:'info', title:'Skills loaded', message:result.path}], `Loaded ${keys.length} entries from disk`);
+  }
+
+  async function saveSkills() {
+    const result = await apiFetch('/api/skills', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({skills: state.skills}) });
+    setSkillDirty(false); renderSkillDiagnostics([{level:'info', title:'Saved successfully', message:result.path}], `Saved ${Object.keys(state.skills).length} entries to disk`);
+  }
+
+  function validateSkills() {
+    const messages=[]; const entries=Object.entries(state.skills);
+    if (!entries.length) messages.push({level:'warning', title:'No skills', message:'skills.json is empty.'});
+    for (const [key, skill] of entries) {
+      if (!key.trim()) { messages.push({level:'error', title:'Blank key', message:'A skill has an empty id.'}); continue; }
+      if ((skill.id||'') !== key) messages.push({level:'warning', title:`Key/id mismatch: ${key}`, message:`Object key is "${key}" but id is "${skill.id||''}".`});
+      ['name','description','icon'].forEach(f => { if (!skill[f]||!String(skill[f]).trim()) messages.push({level:'warning', title:`Missing ${f}: ${key}`, message:`${f} should be a non-empty string.`}); });
+      if (!SKILL_TYPES.includes(skill.type)) messages.push({level:'error', title:`Invalid type: ${key}`, message:`type must be one of ${SKILL_TYPES.join(', ')}.`});
+      if (!SKILL_TARGETING.includes(skill.targeting)) messages.push({level:'error', title:`Invalid targeting: ${key}`, message:`targeting must be one of ${SKILL_TARGETING.join(', ')}.`});
+      if (typeof skill.manaCost !== 'number') messages.push({level:'error', title:`manaCost: ${key}`, message:'manaCost must be a number.'});
+      if (typeof skill.levelReq !== 'number') messages.push({level:'error', title:`levelReq: ${key}`, message:'levelReq must be a number.'});
+      if (!Array.isArray(skill.classes)||!skill.classes.length) messages.push({level:'warning', title:`No classes: ${key}`, message:'classes should be a non-empty array.'});
+      if ((skill.type==='attack'||skill.type==='debuff') && typeof skill.damage !== 'number') messages.push({level:'error', title:`damage: ${key}`, message:'attack/debuff skills must have a numeric damage field.'});
+      if (skill.type==='heal' && typeof skill.healAmount !== 'number') messages.push({level:'error', title:`healAmount: ${key}`, message:'heal skills must have a numeric healAmount field.'});
+    }
+    if (!messages.length) messages.push({level:'info', title:'Validation passed', message:'No schema problems detected in skills.json.'});
+    const errorCount=messages.filter(m=>m.level==='error').length; const warnCount=messages.filter(m=>m.level==='warning').length;
+    renderSkillDiagnostics(messages, errorCount||warnCount ? `${errorCount} error(s), ${warnCount} warning(s)` : 'Validation passed');
+  }
+
+  function addSkill() { const key=ensureUniqueSkillKey('newSkill'); state.skills[key]=JSON.parse(JSON.stringify(DEFAULT_NEW_SKILL)); state.skills[key].id=key; state.selectedSkillKey=key; setSkillDirty(true); renderSkills(); }
+  function duplicateSkill() { const s=getSelectedSkillEntry(); if(!s) return; const key=ensureUniqueSkillKey(`${state.selectedSkillKey}_copy`); const clone=JSON.parse(JSON.stringify(s)); clone.id=key; state.skills[key]=clone; state.selectedSkillKey=key; setSkillDirty(true); renderSkills(); }
+  function deleteSkill() { if(!getSelectedSkillEntry()) return; if(!window.confirm(`Delete skill "${state.selectedSkillKey}"?`)) return; delete state.skills[state.selectedSkillKey]; state.selectedSkillKey=Object.keys(state.skills)[0]||null; setSkillDirty(true); renderSkills(); }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : loadPalette())))))));
-    els.saveButton.addEventListener('click', () => state.activeTab === 'items' ? saveItems() : (state.activeTab === 'enemies' ? saveEnemies() : (state.activeTab === 'npcs' ? saveNpcs() : (state.activeTab === 'quests' ? saveQuests() : (state.activeTab === 'playerBase' ? savePlayerBase() : (state.activeTab === 'props' ? saveProps() : (state.activeTab === 'particles' ? saveParticles() : savePalette())))))));;
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : loadPalette()))))))));
+    els.saveButton.addEventListener('click', () => {
+      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills' };
+      const label = tabNames[state.activeTab] || state.activeTab;
+      if (!window.confirm(`Save ${label} to disk?\n\nThis will overwrite the JSON file.`)) return;
+      if (state.activeTab === 'items') saveItems();
+      else if (state.activeTab === 'enemies') saveEnemies();
+      else if (state.activeTab === 'npcs') saveNpcs();
+      else if (state.activeTab === 'quests') saveQuests();
+      else if (state.activeTab === 'playerBase') savePlayerBase();
+      else if (state.activeTab === 'props') saveProps();
+      else if (state.activeTab === 'particles') saveParticles();
+      else if (state.activeTab === 'skills') saveSkills();
+      else savePalette();
+    });
     els.reloadButton.addEventListener('click', loadPalette);
     els.validateButton.addEventListener('click', validatePalette);
     els.scanTilesButton.addEventListener('click', scanTilesFolder);
@@ -2021,15 +2262,28 @@
     els.deleteParticleButton.addEventListener('click', deleteParticle);
     els.particleColorAddButton.addEventListener('click', addParticleColor);
     els.particleSearchInput.addEventListener('input', e => { state.particleSearch = e.target.value || ''; renderParticleList(); });
-    ['particleIdInput','particleBlendModeInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput'].forEach(id => els[id].addEventListener('input', syncSelectedParticleFromForm));
+    ['particleIdInput','particleBlendModeInput','particleEmitIntervalInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput'].forEach(id => els[id].addEventListener('input', syncSelectedParticleFromForm));
     els.particleBlendModeInput.addEventListener('change', syncSelectedParticleFromForm);
     els.particleFadeOutInput.addEventListener('change', syncSelectedParticleFromForm);
+    els.particleContinuousInput.addEventListener('change', syncSelectedParticleFromForm);
     els.particleEmitButton.addEventListener('click', () => _preview.emitAtCenter());
     els.particleClearButton.addEventListener('click', () => _preview.clear());
     els.particlePreviewCanvas.addEventListener('click', e => {
       const rect = els.particlePreviewCanvas.getBoundingClientRect();
       _preview.emitAt(e.clientX - rect.left, e.clientY - rect.top);
     });
+
+    els.reloadSkillsButton.addEventListener('click', loadSkills);
+    els.validateSkillsButton.addEventListener('click', validateSkills);
+    els.addSkillButton.addEventListener('click', addSkill);
+    els.duplicateSkillButton.addEventListener('click', duplicateSkill);
+    els.deleteSkillButton.addEventListener('click', deleteSkill);
+    els.skillSearchInput.addEventListener('input', e => { state.skillSearch = e.target.value || ''; renderSkillList(); });
+    els.skillTypeInput.addEventListener('change', () => { updateSkillTypeVisibility(els.skillTypeInput.value); syncSelectedSkillFromForm(); });
+    ['skillIdInput','skillNameInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput'].forEach(id => els[id].addEventListener('input', syncSelectedSkillFromForm));
+    els.skillChanneledInput.addEventListener('change', syncSelectedSkillFromForm);
+    els.skillHealChanneledInput.addEventListener('change', syncSelectedSkillFromForm);
+    document.querySelectorAll('.skill-class-cb').forEach(cb => cb.addEventListener('change', syncSelectedSkillFromForm));
 
     // SFX play buttons — single delegated listener covers all tabs
     document.addEventListener('click', e => {
@@ -2042,7 +2296,7 @@
     });
 
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -2058,7 +2312,8 @@
     renderQuests();
     renderProps();
     renderParticles();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles()]); }
+    renderSkills();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -2067,6 +2322,7 @@
       renderQuestDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderPlayerBaseDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderParticleDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderSkillDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 

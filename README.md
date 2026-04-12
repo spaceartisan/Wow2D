@@ -87,6 +87,10 @@ http://localhost:3000
 - XP and leveling with stat scaling (HP, mana, damage per level)
 - Data-driven loot tables with gold and item drops
 - Data-driven combat effects: weapons, enemies, and consumables define their own particle effects and SFX via JSON
+- Data-driven skill system: class-restricted abilities (attacks, heals, buffs, debuffs, support) defined in skills.json
+- Ranged weapon support: bows use extended attack range from item data
+- Projectile system: homing projectiles with sprite support (arrow.png for bows) and glow-circle fallback for magic
+- Buff/debuff status effects with icon images loaded from statusEffects.json
 - Death with gold penalty and shrine respawn
 
 ### Multiplayer
@@ -135,7 +139,9 @@ public/
     tilePalette.json           Global tile definitions (23 tile types)
     props.json                 Prop type definitions (blocking, color fallback)
     playerBase.json            Shared player base stats (client + server)
-    particles.json             Particle effect presets
+    particles.json             Particle effect presets (burst + continuous emitters)
+    skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support)
+    statusEffects.json         Buff/debuff display metadata and icon paths
     enemies.json               Enemy type definitions
     items.json                 Item definitions
     npcs.json                  NPC definitions
@@ -157,7 +163,8 @@ public/
       EntitySystem.js           Player, NPC, enemy, and drop management
       MinimapSystem.js          Corner minimap + full world map overlay
       NetworkSystem.js           WebSocket client + entity smoothing
-      ParticleSystem.js          Data-driven particle emitter & renderer
+      ParticleSystem.js          Data-driven particle emitter & renderer (burst + continuous)
+      ProjectileSystem.js        Homing projectiles with sprite and glow rendering
       QuestSystem.js            Quest state machine + NPC interaction
       UISystem.js               All HUD panels and UI rendering
       WorldSystem.js            Tile map loading, rendering, collision, portals, stairs
@@ -166,6 +173,46 @@ public/
     bgm/                       Background music files
     icons/                     Item icon images
     sfx/                       Sound effect files
+    sprites/
+      entities/                Entity sprites (player, NPC, enemy, arrow)
+      status/                  Buff/debuff status effect icons (32×32 pixel-art PNGs)
+```
+
+## Particle System
+
+Particle presets are defined in `public/data/particles.json`. Each preset configures burst size, lifetime, speed, color palette, gravity, friction, and blend mode.
+
+### Burst Particles (one-shot)
+
+Spawned with `particles.emit("hit_spark", x, y)`. Used for hit effects, death effects, loot sparkles, level-ups, etc.
+
+### Continuous Emitters
+
+Presets with `"continuous": true` and `"emitInterval"` are intended for looping effects. Start with `emitContinuous()`, reposition with `moveContinuous()`, stop with `stopContinuous()`.
+
+| Preset | Description | emitInterval |
+|---|---|---|
+| `campfire` | Flickering flame particles rising upward | 0.08s |
+| `torch` | Smaller flame for wall torches / sconces | 0.10s |
+| `poison_cloud` | Expanding green gas cloud | 0.20s |
+| `frost_aura` | Swirling ice crystals around a target | 0.18s |
+| `arcane_aura` | Purple arcane sparkles | 0.20s |
+| `heal_aura` | Green healing motes rising upward | 0.22s |
+| `smoke` | Grey smoke drifting up | 0.15s |
+| `embers` | Glowing sparks rising from fire | 0.12s |
+| `waterfall_mist` | Light blue water spray | 0.14s |
+
+Example usage in code:
+```js
+// Start a campfire emitter at world position (400, 300)
+this.particles.emitContinuous("campfire_1", "campfire", 400, 300);
+
+// Move it
+this.particles.moveContinuous("campfire_1", 420, 310);
+
+// Stop after 10 seconds (or manually)
+this.particles.emitContinuous("timed_fire", "campfire", 400, 300, { duration: 10 });
+this.particles.stopContinuous("campfire_1");
 ```
 
 ## npm Scripts

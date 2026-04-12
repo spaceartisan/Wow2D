@@ -89,6 +89,7 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 | Field | Type | Description |
 |-------|------|-------------|
 | `attackBonus` | number | Added to player base damage |
+| `range` | number | *(optional)* Attack range in pixels. Omit for melee weapons (defaults to `playerBase.attackRange`). Bows use 200–250. |
 | `hitParticle` | string | *(optional)* Particle preset emitted when attack lands (falls back to `playerBase.hitParticle`) |
 | `hitSfx` | string | *(optional)* SFX played when attack lands (falls back to `playerBase.hitSfx`) |
 | `swingSfx` | string | *(optional)* SFX played on swing (falls back to `playerBase.swingSfx`) |
@@ -400,6 +401,107 @@ Single flat object defining starting player stats. Equipment bonuses stack on to
   "swingSfx": "punch_swing"
 }
 ```
+
+---
+
+## skills.json
+
+Top-level object keyed by skill ID. Defines all abilities players can learn and use. Skills are class-restricted and level-gated. The client loads this at startup and renders available skills in the Skills panel.
+
+### Common fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Must match the object key |
+| `name` | string | Display name |
+| `description` | string | Tooltip text |
+| `type` | string | One of: `attack`, `heal`, `buff`, `debuff`, `support` |
+| `targeting` | string | One of: `enemy`, `self`, `aoe`, `aoe_ally` |
+| `range` | number\|null | Effective range in pixels. `null` = melee (uses weapon/player range). `0` = self-only. |
+| `cooldown` | number\|null | Seconds between uses. `null` = uses weapon attack cooldown (auto-attack). |
+| `manaCost` | number | Mana consumed per use |
+| `particle` | string\|null | Particle preset emitted on cast/self |
+| `sfx` | string\|null | SFX played on effect (hit/heal) |
+| `castSfx` | string\|null | *(optional)* SFX played on cast start |
+| `classes` | array | List of class strings that can use this skill (e.g. `["warrior", "mage"]`) |
+| `levelReq` | number | Minimum player level required |
+| `icon` | string | Icon identifier for UI |
+
+### Type-specific fields
+
+**attack / debuff:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `damage` | number | Base damage |
+| `damagePerLevel` | number | *(optional)* Extra damage per player level above 1 |
+| `damageType` | string | `physical`, `fire`, `frost`, `arcane`, `nature` |
+| `projectileSpeed` | number | *(optional)* Projectile speed in px/sec (ranged skills only) |
+| `hitParticle` | string | *(optional)* Particle emitted on target when hit |
+| `hits` | number | *(optional)* Number of hits for multi-hit skills (e.g. Arcane Missiles) |
+| `hitInterval` | number | *(optional)* Seconds between hits |
+| `channeled` | boolean | *(optional)* Whether the skill is channeled (interrupted by movement) |
+| `aoeRadius` | number | *(optional)* AoE radius for `targeting: "aoe"` |
+| `debuff` | object | *(optional)* Debuff applied on hit (see Buff/Debuff below) |
+
+**heal:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `healAmount` | number | Base HP healed |
+| `healPerLevel` | number | *(optional)* Extra healing per player level above 1 |
+| `healTicks` | number | *(optional)* Number of HoT ticks |
+| `healInterval` | number | *(optional)* Seconds between HoT ticks |
+| `channeled` | boolean | *(optional)* Whether the heal is channeled |
+
+**buff / support:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `buff` | object | Buff object applied to self or allies |
+| `aoeRadius` | number | *(optional)* Radius for `targeting: "aoe_ally"` |
+
+### Buff / Debuff object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique buff/debuff identifier |
+| `stat` | string | Stat affected: `damage`, `moveSpeed`, `maxMana`, `damageTaken`, `stunned`, `manaShield`, `dot` |
+| `modifier` | number | Multiplier (positive = buff, negative = debuff, e.g. `0.2` = +20%) |
+| `duration` | number | Duration in seconds |
+| `absorbAmount` | number | *(manaShield only)* Base absorb amount |
+| `absorbPerLevel` | number | *(manaShield only)* Extra absorb per player level |
+| `tickDamage` | number | *(dot only)* Damage per tick |
+| `tickDamagePerLevel` | number | *(dot only)* Extra tick damage per level |
+| `tickInterval` | number | *(dot only)* Seconds between ticks |
+
+**Example:**
+```json
+"fireball": {
+  "id": "fireball",
+  "name": "Fireball",
+  "description": "Hurl a ball of fire at your target, dealing magic damage.",
+  "type": "attack",
+  "targeting": "enemy",
+  "range": 220,
+  "cooldown": 2.5,
+  "manaCost": 18,
+  "damage": 28,
+  "damagePerLevel": 5,
+  "damageType": "fire",
+  "projectileSpeed": 320,
+  "particle": "fire",
+  "hitParticle": "fire",
+  "sfx": "magic_hit",
+  "castSfx": "staff_swing",
+  "classes": ["mage"],
+  "levelReq": 1,
+  "icon": "fireball"
+}
+```
+
+**To add a skill:**
+1. Add the entry to `skills.json` with a unique key
+2. Specify `classes` and `levelReq` for availability
+3. The Skills panel and hotbar system will pick it up automatically
+4. Server validates class, level, cooldown, mana, and range before executing
 
 ---
 

@@ -49,6 +49,13 @@ const PARTICLES_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/particles.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/particles.json'),
 ];
+const SKILLS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/skills.json'),
+  path.resolve(process.cwd(), '../../public/data/skills.json'),
+  path.resolve(process.cwd(), 'public/data/skills.json'),
+  path.resolve(process.cwd(), '../public/data/skills.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/skills.json'),
+];
 const PROPS_CANDIDATES = [
   path.resolve(__dirname, '../../public/data/props.json'),
   path.resolve(process.cwd(), '../../public/data/props.json'),
@@ -109,6 +116,7 @@ function resolveExistingEnemiesPath() { return firstExisting(ENEMIES_CANDIDATES)
 function resolveExistingNpcsPath() { return firstExisting(NPCS_CANDIDATES); }
 function resolveExistingQuestsPath() { return firstExisting(QUESTS_CANDIDATES); }
 function resolveExistingParticlesPath() { return firstExisting(PARTICLES_CANDIDATES); }
+function resolveExistingSkillsPath() { return firstExisting(SKILLS_CANDIDATES); }
 function resolveExistingPropsPath() { return firstExisting(PROPS_CANDIDATES); }
 function resolveExistingPropSpriteDir() { return firstExisting(PROP_SPRITE_DIR_CANDIDATES); }
 function resolveExistingPlayerBasePath() { return firstExisting(PLAYER_BASE_CANDIDATES); }
@@ -229,6 +237,23 @@ function validateQuests(quests) {
   return null;
 }
 
+function validateSkills(skills) {
+  const VALID_TYPES = new Set(['attack','heal','buff','debuff','support']);
+  const VALID_TARGETING = new Set(['enemy','self','aoe','aoe_ally']);
+  if (!skills || typeof skills !== 'object' || Array.isArray(skills)) return 'skills must be an object keyed by skill id.';
+  for (const [key, entry] of Object.entries(skills)) {
+    if (!key.trim()) return 'Skill ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    for (const field of ['id','name','description','icon']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    if (!VALID_TYPES.has(entry.type)) return `Entry for "${key}" has invalid type "${entry.type}".`;
+    if (!VALID_TARGETING.has(entry.targeting)) return `Entry for "${key}" has invalid targeting "${entry.targeting}".`;
+    if (typeof entry.manaCost !== 'number') return `Entry for "${key}" must contain manaCost: number.`;
+    if (typeof entry.levelReq !== 'number') return `Entry for "${key}" must contain levelReq: number.`;
+    if (!Array.isArray(entry.classes) || !entry.classes.length) return `Entry for "${key}" classes must be a non-empty array.`;
+  }
+  return null;
+}
+
 function validateParticles(particles) {
   if (!particles || typeof particles !== 'object' || Array.isArray(particles)) return 'particles must be an object keyed by preset name.';
   const BLEND_MODES = new Set(['lighter', 'source-over', 'multiply', 'screen', 'overlay']);
@@ -292,7 +317,22 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname === '/api/skills' && req.method === 'GET') {
+    try { return sendJson(res, 200, { skills: JSON.parse(await fs.promises.readFile(resolveExistingSkillsPath(), 'utf8')), path: resolveExistingSkillsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingSkillsPath() }); }
+  }
+  if (pathname === '/api/skills' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateSkills(body.skills);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingSkillsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.skills, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingSkillsPath() }); }
+  }
 
   if (pathname.startsWith('/api/sfx/') && req.method === 'GET') {
     try {
@@ -495,6 +535,7 @@ server.listen(PORT, () => {
   console.log(`Props target: ${resolveExistingPropsPath()}`);
   console.log(`Prop sprite dir: ${resolveExistingPropSpriteDir()}`);
   console.log(`Particles target: ${resolveExistingParticlesPath()}`);
+  console.log(`Skills target:    ${resolveExistingSkillsPath()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);
   console.log(`Tile sprite dir: ${resolveExistingTileSpriteDir()}`);
   console.log(`Entity sprite dir: ${resolveExistingEntitySpriteDir()}`);

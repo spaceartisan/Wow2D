@@ -39,7 +39,9 @@ export class UISystem {
       skillsBody: document.getElementById("skills-body"),
       bankPanel: document.getElementById("bank-panel"),
       bankGrid: document.getElementById("bank-grid"),
-      actionBar: document.getElementById("action-bar")
+      actionBar: document.getElementById("action-bar"),
+      playerBuffs: document.getElementById("player-buffs"),
+      targetDebuffs: document.getElementById("target-debuffs")
     };
 
     this.inventoryOpen = false;
@@ -467,6 +469,9 @@ export class UISystem {
     this.updateTargetPanel();
     this.updateCastBar();
 
+    // Render player buff icons
+    this._renderBuffStrip(this.el.playerBuffs, player.activeBuffs || [], true);
+
     // Only re-render inventory/equipment when dirty to avoid DOM thrashing
     if (this.inventoryOpen && this._inventoryDirty) {
       this.renderInventory();
@@ -496,6 +501,7 @@ export class UISystem {
       if (!target || target.dead) {
         this.el.targetPanel.classList.add("hidden");
         if (hpBar) hpBar.classList.remove("friendly");
+        this._renderBuffStrip(this.el.targetDebuffs, [], false);
         return;
       }
       const ratio = target.hp / target.maxHp;
@@ -505,6 +511,7 @@ export class UISystem {
       this.el.targetHpText.textContent = `${Math.round(target.hp)} / ${target.maxHp}`;
       if (this.el.targetLevel) this.el.targetLevel.textContent = target.level ? `Lv ${target.level}` : "";
       if (hpBar) hpBar.classList.remove("friendly");
+      this._renderBuffStrip(this.el.targetDebuffs, target.debuffs || [], false);
       return;
     }
 
@@ -514,6 +521,7 @@ export class UISystem {
       if (!rp || rp.dead) {
         this.el.targetPanel.classList.add("hidden");
         if (hpBar) hpBar.classList.remove("friendly");
+        this._renderBuffStrip(this.el.targetDebuffs, [], false);
         return;
       }
       const ratio = rp.maxHp > 0 ? rp.hp / rp.maxHp : 1;
@@ -523,11 +531,61 @@ export class UISystem {
       this.el.targetHpText.textContent = `${Math.round(rp.hp)} / ${rp.maxHp}`;
       if (this.el.targetLevel) this.el.targetLevel.textContent = rp.level ? `Lv ${rp.level}` : "";
       if (hpBar) hpBar.classList.add("friendly");
+      this._renderBuffStrip(this.el.targetDebuffs, [], false);
       return;
     }
 
     this.el.targetPanel.classList.add("hidden");
     if (hpBar) hpBar.classList.remove("friendly");
+    this._renderBuffStrip(this.el.targetDebuffs, [], false);
+  }
+
+  /* ── buff / debuff icon rendering ─────────────────── */
+
+  _renderBuffStrip(container, entries, isBuff) {
+    if (!container) return;
+    const cls = isBuff ? "is-buff" : "is-debuff";
+    const statusDefs = this.game.data?.statusEffects || {};
+
+    // Fast path: if count matches, just update timers
+    const existing = container.children;
+    if (existing.length === entries.length) {
+      let match = true;
+      for (let i = 0; i < entries.length; i++) {
+        if (existing[i].dataset.bid !== entries[i].id) { match = false; break; }
+      }
+      if (match) {
+        for (let i = 0; i < entries.length; i++) {
+          const timer = existing[i].querySelector(".buff-timer");
+          if (timer) timer.textContent = Math.ceil(entries[i].remaining) + "s";
+        }
+        return;
+      }
+    }
+
+    container.textContent = "";
+    for (const entry of entries) {
+      const def = statusDefs[entry.id];
+      const el = document.createElement("div");
+      el.className = `buff-icon ${cls}`;
+      el.dataset.bid = entry.id;
+      el.title = def?.name || entry.id;
+
+      if (def?.icon) {
+        const img = document.createElement("img");
+        img.src = def.icon;
+        img.alt = def.name || entry.id;
+        img.className = "buff-img";
+        img.draggable = false;
+        el.appendChild(img);
+      }
+
+      const timer = document.createElement("span");
+      timer.className = "buff-timer";
+      timer.textContent = Math.ceil(entry.remaining) + "s";
+      el.appendChild(timer);
+      container.appendChild(el);
+    }
   }
 
   renderInventory() {
@@ -966,11 +1024,7 @@ export class UISystem {
     if (!entry) return;
 
     if (entry.type === "skill") {
-      if (entry.skillId === "attack") {
-        this.game.combat.useAttackAbility();
-      } else if (entry.skillId === "heal") {
-        this.game.combat.useMinorHeal();
-      }
+      this.game.combat.useSkill(entry.skillId);
     } else if (entry.type === "item") {
       // Find the item in inventory and use it
       const invIndex = p.inventorySlots.findIndex(s => s && s.id === entry.itemId);
@@ -1499,29 +1553,17 @@ export class UISystem {
     const p = this.game.entities.player;
     body.textContent = "";
 
-    const classSkills = {
-      warrior: [
-        { name: "Auto Attack", key: "1", desc: "Strike your target with your weapon.", cooldown: `${p.attackCooldown}s` },
-        { name: "Minor Heal", key: "2", desc: "Heal yourself for a small amount. Costs 22 mana.", cooldown: "5.3s" }
-      ],
-      mage: [
-        { name: "Auto Attack", key: "1", desc: "Strike your target with arcane force.", cooldown: `${p.attackCooldown}s` },
-        { name: "Minor Heal", key: "2", desc: "Heal yourself for a small amount. Costs 22 mana.", cooldown: "5.3s" }
-      ],
-      rogue: [
-        { name: "Auto Attack", key: "1", desc: "Strike your target with swift precision.", cooldown: `${p.attackCooldown}s` },
-        { name: "Minor Heal", key: "2", desc: "Heal yourself for a small amount. Costs 22 mana.", cooldown: "5.3s" }
-      ]
-    };
+    const allSkills = this.game.data.skills || {};
 
-    const skills = classSkills[p.charClass] || classSkills.warrior;
-
-    const skillIdMap = { "Auto Attack": "attack", "Minor Heal": "heal" };
+    // Filter skills available to this class and level
+    const skills = Object.values(allSkills).filter(s =>
+      (!s.classes || s.classes.includes(p.charClass)) && p.level >= (s.levelReq || 1)
+    );
 
     for (const skill of skills) {
       const card = document.createElement("div");
       card.className = "skill-card";
-      card.dataset.dragSkill = skillIdMap[skill.name] || skill.name.toLowerCase();
+      card.dataset.dragSkill = skill.id;
       card.style.cursor = "grab";
 
       const header = document.createElement("div");
@@ -1531,21 +1573,30 @@ export class UISystem {
       skillNameSpan.className = "skill-name";
       skillNameSpan.textContent = skill.name;
 
-      const skillKeySpan = document.createElement("span");
-      skillKeySpan.className = "skill-key";
-      skillKeySpan.textContent = `[${skill.key}]`;
+      const skillTypeSpan = document.createElement("span");
+      skillTypeSpan.className = "skill-key";
+      skillTypeSpan.textContent = `[${skill.type}]`;
 
-      header.append(skillNameSpan, skillKeySpan);
+      header.append(skillNameSpan, skillTypeSpan);
 
       const desc = document.createElement("div");
       desc.className = "skill-desc";
-      desc.textContent = skill.desc;
+      desc.textContent = skill.description;
 
-      const cd = document.createElement("div");
-      cd.className = "skill-cooldown";
-      cd.textContent = `Cooldown: ${skill.cooldown}`;
+      const meta = document.createElement("div");
+      meta.className = "skill-cooldown";
+      const parts = [];
+      if (skill.id === "attack") {
+        parts.push(`CD: ${p.attackCooldown}s`);
+      } else if (skill.cooldown) {
+        parts.push(`CD: ${skill.cooldown}s`);
+      }
+      if (skill.manaCost) parts.push(`Mana: ${skill.manaCost}`);
+      if (skill.range) parts.push(`Range: ${skill.range}`);
+      if (skill.levelReq > 1) parts.push(`Lv ${skill.levelReq}`);
+      meta.textContent = parts.join(" · ");
 
-      card.append(header, desc, cd);
+      card.append(header, desc, meta);
       body.append(card);
     }
   }

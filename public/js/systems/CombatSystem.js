@@ -63,6 +63,80 @@ export class CombatSystem {
     this.tryPlayerAttack(true);
   }
 
+  useSkill(skillId) {
+    const skillDef = this.game.data.skills[skillId];
+    if (!skillDef) return;
+
+    // Delegate "attack" (auto-attack) and legacy "heal" to existing handlers
+    if (skillId === "attack") { this.useAttackAbility(); return; }
+    if (skillId === "heal") { this.useMinorHeal(); return; }
+
+    const player = this.game.entities.player;
+    if (player.dead) return;
+
+    // Level requirement check
+    if (player.level < (skillDef.levelReq || 1)) {
+      this.game.ui.addMessage(`Requires level ${skillDef.levelReq}.`);
+      return;
+    }
+
+    // Class restriction check
+    if (skillDef.classes && !skillDef.classes.includes(player.charClass)) {
+      this.game.ui.addMessage("Your class cannot use that skill.");
+      return;
+    }
+
+    // Cooldown check
+    const now = performance.now();
+    const cooldownMs = (skillDef.cooldown || 0) * 1000;
+    const lastUsed = this._skillCooldowns?.[skillId] || 0;
+    if (cooldownMs > 0 && now - lastUsed < cooldownMs) {
+      const remaining = ((cooldownMs - (now - lastUsed)) / 1000).toFixed(1);
+      this.game.ui.addMessage(`${skillDef.name} cooling down (${remaining}s).`);
+      return;
+    }
+
+    // Mana check
+    if ((skillDef.manaCost || 0) > player.mana) {
+      this.game.ui.addMessage("Not enough mana.");
+      return;
+    }
+
+    // Targeting check for enemy-targeted skills
+    if (skillDef.targeting === "enemy" || skillDef.targeting === "aoe") {
+      if (!this.targetEnemyId) {
+        this.game.ui.addMessage("No target.");
+        return;
+      }
+      const enemy = this.game.entities.getEnemyById(this.targetEnemyId);
+      if (!enemy || enemy.dead) {
+        this.game.ui.addMessage("Invalid target.");
+        return;
+      }
+      // Range check for targeted skills
+      const dist = distance(player.x, player.y, enemy.x, enemy.y);
+      const skillRange = skillDef.range || player.attackRange;
+      if (dist > skillRange) {
+        this.game.ui.addMessage("Out of range.");
+        return;
+      }
+    }
+
+    // Record cooldown & send to server
+    if (!this._skillCooldowns) this._skillCooldowns = {};
+    this._skillCooldowns[skillId] = now;
+    this.game.network.sendSkill(skillId, this.targetEnemyId);
+
+    // Play cast SFX
+    if (skillDef.castSfx) this.game.audio.play(skillDef.castSfx);
+    else if (skillDef.sfx) this.game.audio.play(skillDef.sfx);
+
+    // Emit particle on self for buffs/support/heals
+    if ((skillDef.targeting === "self" || skillDef.targeting === "aoe_ally") && skillDef.particle) {
+      this.game.particles?.emit(skillDef.particle, player.x, player.y);
+    }
+  }
+
   useMinorHeal() {
     const player = this.game.entities.player;
     const now = performance.now();

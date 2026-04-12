@@ -520,6 +520,7 @@ input, textarea {
   width: 270px;
   min-height: 104px;
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px;
 }
@@ -722,6 +723,66 @@ input, textarea {
   font-size: 10px;
   margin-top: 3px;
   color: var(--text-muted);
+}
+
+/* ── buff / debuff icon strips ────────────────────────── */
+
+.buff-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+  min-height: 0;
+}
+
+/* Player panel: strip spans full width below portrait + meta */
+#player-buffs {
+  flex-basis: 100%;
+}
+
+.buff-icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  border: 1.5px solid;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.45);
+}
+
+.buff-icon.is-buff {
+  border-color: #4aaf4a;
+  background: linear-gradient(145deg, #1a3a1a, #0e250e);
+  color: #7ae87a;
+}
+
+.buff-icon.is-debuff {
+  border-color: #c44040;
+  background: linear-gradient(145deg, #3a1a1a, #250e0e);
+  color: #f08080;
+}
+
+.buff-icon .buff-timer {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  font-size: 7px;
+  color: #fff;
+  text-shadow: 0 0 2px #000, 0 0 4px #000;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.buff-icon .buff-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 /* ── inventory & equipment panels ─────────────────────── */

@@ -949,3 +949,7 @@ textarea, pre, code { max-width: 100%; min-width: 0; }
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* ─── Skill type-specific groups ─────────────── */
+.skill-type-group { display: none; }
+.skill-type-group.visible { display: grid; }

@@ -14,6 +14,7 @@ const dataDir = path.join(__dirname, "..", "public", "data");
 const ITEMS = JSON.parse(fs.readFileSync(path.join(dataDir, "items.json"), "utf8"));
 const ENEMY_TYPES = JSON.parse(fs.readFileSync(path.join(dataDir, "enemies.json"), "utf8"));
 const QUEST_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "quests.json"), "utf8"));
+const SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "skills.json"), "utf8"));
 const GLOBAL_PALETTE = JSON.parse(fs.readFileSync(path.join(dataDir, "tilePalette.json"), "utf8"));
 const PROP_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "props.json"), "utf8"));
 
@@ -199,11 +200,12 @@ class ServerWorld {
       const data = loadMap(mapId);
       const collision = new CollisionMap(data);
       const enemies = this._createEnemiesForMap(data, collision);
-      this.maps.set(mapId, { _mapId: mapId, data, collision, enemies, drops: [] });
+      this.maps.set(mapId, { _mapId: mapId, data, collision, enemies, drops: [], projectiles: [] });
     }
 
     this.defaultMapId = "eldengrove";
     this.players = new Map();   // playerId → PlayerState
+    this._nextProjId = 1;
     this.tickRate = 60;         // Hz
     this.tickInterval = null;
     this.lastTick = Date.now();
@@ -459,6 +461,9 @@ class ServerWorld {
       case "swap_items":
         this.handleSwapItems(player, msg);
         break;
+      case "use_skill":
+        this.handleUseSkill(player, msg);
+        break;
       case "respawn":
         // client signals it's ready to respawn
         break;
@@ -558,6 +563,31 @@ class ServerWorld {
     if (d > player.attackRange + 30) return; // allow small latency buffer
 
     player.lastAttackAt = now;
+    const weaponDef = player.equipment?.weapon ? ITEMS[player.equipment.weapon.id] : null;
+
+    // ── Ranged weapon — create server-side projectile, defer damage ──
+    if (weaponDef?.range) {
+      const damage = Math.max(2, player.damage + randInt(-2, 4));
+      const projId = this._nextProjId++;
+      mapEntry.projectiles.push({
+        id: projId, playerId: player.id, targetEnemyId: enemy.id,
+        x: player.x, y: player.y, speed: 360, damage,
+        type: "attack",
+        hitParticle: weaponDef.hitParticle || "hit_spark",
+        hitSfx: weaponDef.hitSfx || "sword_hit",
+      });
+      this.broadcastToMap(player.mapId, {
+        type: "projectile_spawn",
+        attackerId: player.id,
+        sx: player.x, sy: player.y,
+        targetEnemyId: enemy.id,
+        speed: 360,
+        weaponId: player.equipment?.weapon?.id || null,
+      });
+      return;
+    }
+
+    // ── Melee — immediate damage ──
     const damage = Math.max(2, player.damage + randInt(-2, 4));
     enemy.hp -= damage;
 
@@ -569,6 +599,24 @@ class ServerWorld {
       enemyHp: enemy.hp,
       enemyMaxHp: enemy.maxHp
     });
+
+    // Broadcast visual effect to all OTHER players on this map
+    this.broadcastToMap(player.mapId, {
+      type: "combat_visual",
+      attackerId: player.id,
+      ax: player.x,
+      ay: player.y,
+      enemyId: enemy.id,
+      ex: enemy.x,
+      ey: enemy.y,
+      weaponId: player.equipment?.weapon?.id || null,
+      isRanged: false,
+      hitParticle: weaponDef?.hitParticle || "hit_spark",
+      hitSfx: weaponDef?.hitSfx || "sword_hit",
+      damage,
+      enemyHp: enemy.hp,
+      enemyMaxHp: enemy.maxHp
+    }, player.id);
 
     if (enemy.hp <= 0) {
       enemy.hp = 0;
@@ -605,6 +653,227 @@ class ServerWorld {
       mana: player.mana,
       maxMana: player.maxMana
     });
+
+    // Broadcast heal visual to other players
+    this.broadcastToMap(player.mapId, {
+      type: "combat_visual",
+      attackerId: player.id,
+      ax: player.x,
+      ay: player.y,
+      selfTarget: true,
+      particle: "heal",
+      sfx: "heal"
+    }, player.id);
+  }
+
+  handleUseSkill(player, msg) {
+    if (player.dead) return;
+
+    const skillId = String(msg.skillId || "");
+    const skillDef = SKILLS[skillId];
+    if (!skillDef) return;
+
+    // Delegate auto-attack & heal to existing handlers
+    if (skillId === "attack") { this.handleAttack(player, msg); return; }
+    if (skillId === "heal") { this.handleHeal(player); return; }
+
+    // Class check
+    if (skillDef.classes && !skillDef.classes.includes(player.charClass)) return;
+
+    // Level check
+    if (player.level < (skillDef.levelReq || 1)) return;
+
+    // Cooldown check
+    const now = Date.now();
+    const cooldownMs = (skillDef.cooldown || 0) * 1000;
+    if (!player.skillCooldowns) player.skillCooldowns = {};
+    const lastUsed = player.skillCooldowns[skillId] || 0;
+    if (cooldownMs > 0 && now - lastUsed < cooldownMs) {
+      this.send(player.ws, { type: "skill_result", ok: false, skillId, reason: "cooldown" });
+      return;
+    }
+
+    // Mana check
+    const manaCost = skillDef.manaCost || 0;
+    if (player.mana < manaCost) {
+      this.send(player.ws, { type: "skill_result", ok: false, skillId, reason: "mana" });
+      return;
+    }
+
+    // For enemy-targeted skills, validate target and range
+    let enemy = null;
+    if (skillDef.targeting === "enemy" || skillDef.targeting === "aoe") {
+      const mapEntry = this.maps.get(player.mapId);
+      if (!mapEntry) return;
+      enemy = mapEntry.enemies.find(e => e.id === msg.enemyId);
+      if (!enemy || enemy.dead) return;
+
+      const d = dist(player.x, player.y, enemy.x, enemy.y);
+      const skillRange = skillDef.range || player.attackRange;
+      if (d > skillRange + 30) return;
+    }
+
+    // Consume mana & record cooldown
+    player.mana -= manaCost;
+    player.skillCooldowns[skillId] = now;
+
+    // Resolve skill effects by type
+    if (skillDef.type === "attack" || skillDef.type === "debuff") {
+      if (!enemy) return;
+      const baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+      const damage = Math.max(1, baseDmg + randInt(-2, 4));
+
+      // ── Ranged skill — create server-side projectile, defer damage ──
+      if (skillDef.projectileSpeed > 0) {
+        const mapEntry = this.maps.get(player.mapId);
+        const projId = this._nextProjId++;
+        mapEntry.projectiles.push({
+          id: projId, playerId: player.id, targetEnemyId: enemy.id,
+          x: player.x, y: player.y, speed: skillDef.projectileSpeed, damage,
+          type: "skill", skillId,
+          hitParticle: skillDef.hitParticle || skillDef.particle || null,
+          hitSfx: skillDef.sfx || null,
+          damageType: skillDef.damageType || "physical",
+          debuff: skillDef.debuff || null,
+        });
+        // Confirm mana/cooldown to attacker (no damage yet)
+        this.send(player.ws, {
+          type: "skill_result", ok: true, skillId,
+          mana: player.mana, maxMana: player.maxMana,
+        });
+        // Broadcast projectile spawn to all clients
+        this.broadcastToMap(player.mapId, {
+          type: "projectile_spawn",
+          attackerId: player.id,
+          sx: player.x, sy: player.y,
+          targetEnemyId: enemy.id,
+          speed: skillDef.projectileSpeed,
+          skillId,
+          damageType: skillDef.damageType || "physical",
+        });
+        return;
+      }
+
+      // ── Instant skill — apply damage immediately ──
+      enemy.hp -= damage;
+
+      // Apply debuff to enemy if skill has one
+      let debuffApplied = null;
+      if (skillDef.debuff) {
+        if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
+        // Replace existing debuff of same id
+        enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
+        const debuffEntry = {
+          ...skillDef.debuff,
+          appliedAt: now,
+          expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
+          casterId: player.id
+        };
+        enemy.activeDebuffs.push(debuffEntry);
+        debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
+      }
+
+      this.send(player.ws, {
+        type: "skill_result",
+        ok: true,
+        skillId,
+        enemyId: enemy.id,
+        damage,
+        enemyHp: enemy.hp,
+        enemyMaxHp: enemy.maxHp,
+        mana: player.mana,
+        maxMana: player.maxMana,
+        debuff: debuffApplied
+      });
+
+      // Broadcast visual effect to all OTHER players on this map
+      this.broadcastToMap(player.mapId, {
+        type: "combat_visual",
+        attackerId: player.id,
+        ax: player.x,
+        ay: player.y,
+        enemyId: enemy.id,
+        ex: enemy.x,
+        ey: enemy.y,
+        skillId,
+        hitParticle: skillDef.hitParticle || skillDef.particle || null,
+        hitSfx: skillDef.sfx || null,
+        projectileSpeed: 0,
+        damageType: skillDef.damageType || "physical",
+        damage,
+        enemyHp: enemy.hp,
+        enemyMaxHp: enemy.maxHp
+      }, player.id);
+
+      if (enemy.hp <= 0) {
+        enemy.hp = 0;
+        this.killEnemy(enemy, player);
+      }
+    } else if (skillDef.type === "heal") {
+      const healAmount = (skillDef.healAmount || 0) + (skillDef.healPerLevel || 0) * (player.level - 1);
+      player.hp = Math.min(player.maxHp, player.hp + healAmount);
+
+      this.send(player.ws, {
+        type: "skill_result",
+        ok: true,
+        skillId,
+        healAmount,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        mana: player.mana,
+        maxMana: player.maxMana
+      });
+
+      // Broadcast heal visual to other players
+      if (skillDef.particle) {
+        this.broadcastToMap(player.mapId, {
+          type: "combat_visual",
+          attackerId: player.id,
+          ax: player.x,
+          ay: player.y,
+          selfTarget: true,
+          particle: skillDef.particle,
+          sfx: skillDef.sfx || null
+        }, player.id);
+      }
+    } else if (skillDef.type === "buff" || skillDef.type === "support") {
+      // Apply buff to player
+      let buffApplied = null;
+      if (skillDef.buff) {
+        if (!player.activeBuffs) player.activeBuffs = [];
+        // Replace existing buff of same id
+        player.activeBuffs = player.activeBuffs.filter(b => b.id !== skillDef.buff.id);
+        const buffEntry = {
+          ...skillDef.buff,
+          appliedAt: now,
+          expiresAt: now + (skillDef.buff.duration || 0) * 1000
+        };
+        player.activeBuffs.push(buffEntry);
+        buffApplied = { id: skillDef.buff.id, stat: skillDef.buff.stat, modifier: skillDef.buff.modifier, duration: skillDef.buff.duration };
+      }
+
+      this.send(player.ws, {
+        type: "skill_result",
+        ok: true,
+        skillId,
+        mana: player.mana,
+        maxMana: player.maxMana,
+        buff: buffApplied
+      });
+
+      // Broadcast buff visual to other players
+      if (skillDef.particle) {
+        this.broadcastToMap(player.mapId, {
+          type: "combat_visual",
+          attackerId: player.id,
+          ax: player.x,
+          ay: player.y,
+          selfTarget: true,
+          particle: skillDef.particle,
+          sfx: skillDef.sfx || null
+        }, player.id);
+      }
+    }
   }
 
   handleChat(player, msg) {
@@ -1095,7 +1364,10 @@ class ServerWorld {
     player.casting = {
       type: "hearthstone",
       startedAt: now,
-      duration: castTime
+      duration: castTime,
+      concentration: !!ITEMS["hearthstone"]?.concentration,
+      castX: player.x,
+      castY: player.y
     };
 
     this.send(player.ws, {
@@ -1207,7 +1479,10 @@ class ServerWorld {
       if (s === null) {
         player.hotbar[i] = null;
       } else if (s && s.type === "skill" && typeof s.skillId === "string") {
-        player.hotbar[i] = { type: "skill", skillId: s.skillId.slice(0, 32) };
+        const sid = s.skillId.slice(0, 32);
+        if (SKILLS[sid]) {
+          player.hotbar[i] = { type: "skill", skillId: sid };
+        }
       } else if (s && s.type === "item" && typeof s.itemId === "string") {
         // Validate item exists in items DB
         if (ITEMS[s.itemId]) {
@@ -1360,6 +1635,10 @@ class ServerWorld {
     const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + (trinket?.manaBonus || 0);
     const damage = player.baseDamage + (weapon?.attackBonus || 0);
 
+    // Use weapon range if present (ranged weapons), otherwise default melee range
+    const weaponDef = weapon ? ITEMS[weapon.id] : null;
+    player.attackRange = weaponDef?.range || PLAYER_BASE.attackRange;
+
     // Preserve HP/mana ratio when max changes
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
     const manaRatio = player.maxMana > 0 ? player.mana / player.maxMana : 1;
@@ -1500,6 +1779,117 @@ class ServerWorld {
     });
   }
 
+  /* ── server-side projectiles ─────────────────────────── */
+
+  updateProjectiles(mapEntry, dt) {
+    const projs = mapEntry.projectiles;
+    let write = 0;
+    for (let i = 0; i < projs.length; i++) {
+      const proj = projs[i];
+      const enemy = mapEntry.enemies.find(e => e.id === proj.targetEnemyId);
+
+      // Enemy gone or dead — projectile fizzles
+      if (!enemy || enemy.dead) continue;
+
+      // Homing: direction toward enemy
+      const dx = enemy.x - proj.x;
+      const dy = enemy.y - proj.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const step = proj.speed * dt;
+
+      // Hit check (before move) — threshold slightly larger than client
+      if (d <= 16 || step >= d) {
+        this._resolveProjectileHit(proj, enemy, mapEntry);
+        continue;
+      }
+
+      // Move toward enemy
+      proj.x += (dx / d) * step;
+      proj.y += (dy / d) * step;
+      projs[write++] = proj;
+    }
+    projs.length = write;
+  }
+
+  _resolveProjectileHit(proj, enemy, mapEntry) {
+    const player = this.players.get(proj.playerId);
+
+    // Apply damage
+    enemy.hp -= proj.damage;
+
+    // Apply debuff if skill carried one
+    let debuffApplied = null;
+    if (proj.debuff) {
+      const now = Date.now();
+      if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
+      enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== proj.debuff.id);
+      const debuffEntry = {
+        ...proj.debuff,
+        appliedAt: now,
+        expiresAt: now + (proj.debuff.duration || 0) * 1000,
+        casterId: proj.playerId
+      };
+      enemy.activeDebuffs.push(debuffEntry);
+      debuffApplied = {
+        id: proj.debuff.id, stat: proj.debuff.stat,
+        modifier: proj.debuff.modifier, duration: proj.debuff.duration
+      };
+    }
+
+    if (proj.type === "attack") {
+      // Weapon attack projectile hit
+      if (player) {
+        this.send(player.ws, {
+          type: "attack_result",
+          enemyId: enemy.id,
+          damage: proj.damage,
+          enemyHp: enemy.hp,
+          enemyMaxHp: enemy.maxHp
+        });
+      }
+      // Broadcast hit to observers (projectileHit flag — don't spawn arrow)
+      this.broadcastToMap(mapEntry._mapId, {
+        type: "combat_visual",
+        projectileHit: true,
+        attackerId: proj.playerId,
+        enemyId: enemy.id,
+        ex: enemy.x, ey: enemy.y,
+        damage: proj.damage,
+        enemyHp: enemy.hp,
+        enemyMaxHp: enemy.maxHp,
+      }, proj.playerId);
+    } else if (proj.type === "skill") {
+      // Skill projectile hit
+      if (player) {
+        this.send(player.ws, {
+          type: "projectile_hit",
+          skillId: proj.skillId,
+          enemyId: enemy.id,
+          damage: proj.damage,
+          enemyHp: enemy.hp,
+          enemyMaxHp: enemy.maxHp,
+          debuff: debuffApplied,
+        });
+      }
+      // Broadcast hit to observers
+      this.broadcastToMap(mapEntry._mapId, {
+        type: "combat_visual",
+        projectileHit: true,
+        attackerId: proj.playerId,
+        enemyId: enemy.id,
+        ex: enemy.x, ey: enemy.y,
+        damage: proj.damage,
+        enemyHp: enemy.hp,
+        enemyMaxHp: enemy.maxHp,
+      }, proj.playerId);
+    }
+
+    if (enemy.hp <= 0) {
+      enemy.hp = 0;
+      if (player) this.killEnemy(enemy, player);
+    }
+  }
+
   /* ── tick loop ──────────────────────────────────────── */
 
   tick() {
@@ -1511,6 +1901,7 @@ class ServerWorld {
 
     // Process each map independently
     for (const [mapId, mapEntry] of this.maps) {
+      this.updateProjectiles(mapEntry, dt);
       this.updateEnemyAi(mapEntry, dt, now);
       this.updateEnemyRespawns(mapEntry, now);
       this.updateDropPickups(mapEntry, mapId, now);
@@ -1518,6 +1909,7 @@ class ServerWorld {
     this.updatePlayerDeaths(now);
     this.updatePlayerRegen(dt);
     this.updatePlayerCasts(now);
+    this.updateBuffsAndDebuffs(now);
     this.broadcastWorldState();
 
     // Periodic auto-save every 60 seconds
@@ -1609,6 +2001,21 @@ class ServerWorld {
               attackerName: enemy.name,
               attackerType: enemy.type
             });
+
+            // Broadcast enemy-attacks-player visual to other players
+            const enemyDef = ENEMY_TYPES[enemy.type] || {};
+            this.broadcastToMap(mapEntry._mapId, {
+              type: "combat_visual",
+              attackerId: null,
+              enemyAttackerId: enemy.id,
+              ax: enemy.x,
+              ay: enemy.y,
+              targetPlayerId: target.id,
+              tx: target.x,
+              ty: target.y,
+              hitParticle: enemyDef.hitParticle || "player_hit",
+              hitSfx: enemyDef.hitSfx || "player_hit"
+            }, target.id);
 
             if (target.hp <= 0) {
               target.hp = 0;
@@ -1705,6 +2112,13 @@ class ServerWorld {
     for (const [, player] of this.players) {
       if (!player.casting) continue;
       if (player.dead) { player.casting = null; continue; }
+      // Concentration check — interrupt if player moved
+      if (player.casting.concentration) {
+        if (player.x !== player.casting.castX || player.y !== player.casting.castY) {
+          this._interruptCast(player, "moved");
+          continue;
+        }
+      }
       if (now - player.casting.startedAt >= player.casting.duration) {
         this._completeCast(player);
       }
@@ -1790,6 +2204,41 @@ class ServerWorld {
     });
   }
 
+  /* ── buff & debuff expiry ──────────────────────────── */
+
+  updateBuffsAndDebuffs(now) {
+    // Expire player buffs
+    for (const [, player] of this.players) {
+      if (!player.activeBuffs) continue;
+      player.activeBuffs = player.activeBuffs.filter(b => now < b.expiresAt);
+    }
+
+    // Expire enemy debuffs and tick DoTs
+    for (const [, mapEntry] of this.maps) {
+      for (const enemy of mapEntry.enemies) {
+        if (enemy.dead || !enemy.activeDebuffs || enemy.activeDebuffs.length === 0) continue;
+        // Tick DoT debuffs
+        for (const debuff of enemy.activeDebuffs) {
+          if (debuff.stat === "dot" && debuff.tickDamage) {
+            const interval = (debuff.tickInterval || 2) * 1000;
+            if (!debuff._lastTickAt) debuff._lastTickAt = debuff.appliedAt;
+            if (now - debuff._lastTickAt >= interval) {
+              debuff._lastTickAt = now;
+              const dmg = debuff.tickDamage + (debuff.tickDamagePerLevel || 0);
+              enemy.hp -= dmg;
+              if (enemy.hp <= 0) {
+                enemy.hp = 0;
+                const caster = this.players.get(debuff.casterId);
+                if (caster) this.killEnemy(enemy, caster);
+              }
+            }
+          }
+        }
+        enemy.activeDebuffs = enemy.activeDebuffs.filter(d => now < d.expiresAt);
+      }
+    }
+  }
+
   /* ── broadcasting ───────────────────────────────────── */
 
   broadcastWorldState() {
@@ -1826,7 +2275,11 @@ class ServerWorld {
           gold: player.gold || 0,
           level: player.level,
           xp: player.xp || 0,
-          damage: player.damage
+          damage: player.damage,
+          buffs: (player.activeBuffs || []).map(b => ({
+            id: b.id, stat: b.stat, modifier: b.modifier,
+            remaining: Math.max(0, (b.expiresAt - Date.now()) / 1000)
+          }))
         }
       });
     }
@@ -1835,6 +2288,7 @@ class ServerWorld {
   enemySnapshot(mapId) {
     const mapEntry = this.maps.get(mapId);
     if (!mapEntry) return [];
+    const now = Date.now();
     return mapEntry.enemies.map((e) => ({
       id: e.id,
       type: e.type,
@@ -1846,7 +2300,11 @@ class ServerWorld {
       dead: e.dead,
       color: e.color,
       radius: e.radius,
-      level: e.level || 1
+      level: e.level || 1,
+      debuffs: (e.activeDebuffs || []).map(d => ({
+        id: d.id, stat: d.stat, modifier: d.modifier,
+        remaining: Math.max(0, (d.expiresAt - now) / 1000)
+      }))
     }));
   }
 

@@ -93,6 +93,7 @@
     "type": "weapon",
     "icon": "forestBow",
     "attackBonus": 8,
+    "range": 200,
     "value": 32,
     "description": "Crafted from flexible yew. Quick and accurate.",
     "hitParticle": "hit_spark",
@@ -129,6 +130,7 @@
     "type": "weapon",
     "icon": "huntersBow",
     "attackBonus": 12,
+    "range": 250,
     "value": 55,
     "description": "A powerful bow favored by veteran hunters.",
     "hitParticle": "hit_spark",
@@ -349,6 +351,7 @@
     "permanent": true,
     "castTime": 8,
     "cooldown": 180,
+    "concentration": true,
     "description": "A warm stone that can return you to an attuned statue. Attune at any waystone statue."
   }
 }
