@@ -4,5 +4,8 @@
   "attackCooldown": 0.82,
   "maxHp": 120,
   "maxMana": 80,
-  "damage": 16
+  "damage": 16,
+  "hitParticle": "punch",
+  "hitSfx": "punch_hit",
+  "swingSfx": "punch_swing"
 }

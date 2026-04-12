@@ -868,3 +868,84 @@ textarea, pre, code { max-width: 100%; min-width: 0; }
 @media (max-width: 1060px) {
   .playerbase-grid { grid-template-columns: 1fr; }
 }
+
+/* ─── Particle color editor ───────────────────── */
+.particle-color-editor { display: flex; flex-direction: column; gap: 6px; }
+.particle-color-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0,1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.particle-color-swatch-inline {
+  width: 36px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255,255,255,0.14);
+  cursor: pointer;
+  padding: 2px;
+  background: var(--input-bg);
+}
+.particle-color-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.particle-swatch-preview {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255,255,255,0.14);
+  flex-shrink: 0;
+}
+
+/* ─── Particle preview canvas ─────────────────── */
+.particle-preview-section { display: grid; gap: 8px; }
+.particle-preview-wrap {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #08090f;
+  border: 1px solid var(--border-md);
+}
+.particle-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 200px;
+  cursor: crosshair;
+}
+.particle-preview-hint {
+  position: absolute;
+  bottom: 6px;
+  right: 10px;
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.22);
+  pointer-events: none;
+  font-family: var(--mono);
+}
+
+/* ─── SFX field (input + play button inline) ─── */
+.sfx-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 6px;
+  align-items: center;
+}
+.sfx-play-btn {
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+}
+.sfx-play-btn.playing {
+  border-color: var(--success);
+  color: var(--success);
+  box-shadow: 0 0 0 2px rgba(63,176,106,0.2);
+}
+.sfx-play-btn.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}

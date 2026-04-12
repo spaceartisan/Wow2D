@@ -741,6 +741,7 @@ class ServerWorld {
         type: "use_item_result",
         ok: true,
         index,
+        itemId: item.id,
         remainingItem: inventory[index],
         effect: "healHp",
         amount: healed,
@@ -757,6 +758,7 @@ class ServerWorld {
         type: "use_item_result",
         ok: true,
         index,
+        itemId: item.id,
         remainingItem: inventory[index],
         effect: "healMana",
         amount: restored,
@@ -1604,7 +1606,8 @@ class ServerWorld {
               damage,
               hp: target.hp,
               maxHp: target.maxHp,
-              attackerName: enemy.name
+              attackerName: enemy.name,
+              attackerType: enemy.type
             });
 
             if (target.hp <= 0) {

@@ -15,6 +15,22 @@
             128
         ]
     },
+    "crate": {
+        "blocked": true,
+        "color": [
+            128,
+            128,
+            128
+        ]
+    },
+    "barrel": {
+        "blocked": true,
+        "color": [
+            128,
+            128,
+            128
+        ]
+    },
     "flower": {
         "blocked": false,
         "color": [

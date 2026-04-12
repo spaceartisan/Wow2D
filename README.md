@@ -5,8 +5,8 @@ A browser-based top-down 2D fantasy RPG prototype inspired by early MMORPG start
 ## Tech Stack
 
 - **Client:** HTML5 Canvas (world rendering), JavaScript ES modules (game systems), CSS (HUD/layout)
-- **Server:** Node.js + Express (HTTP & static files), `ws` (WebSocket multiplayer at 20 Hz), `better-sqlite3` (SQLite with WAL mode)
-- **Data-driven:** All maps, enemies, items, NPCs, quests, and tiles are defined in JSON files under `public/data/`
+- **Server:** Node.js + Express (HTTP & static files), `ws` (WebSocket multiplayer at 60 Hz), `better-sqlite3` (SQLite with WAL mode)
+- **Data-driven:** All maps, enemies, items, NPCs, quests, particles, and tiles are defined in JSON files under `public/data/`
 
 ## Setup
 
@@ -86,6 +86,7 @@ http://localhost:3000
 - Multiple enemy types with aggro range, chase AI, leashing, and wander behavior
 - XP and leveling with stat scaling (HP, mana, damage per level)
 - Data-driven loot tables with gold and item drops
+- Data-driven combat effects: weapons, enemies, and consumables define their own particle effects and SFX via JSON
 - Death with gold penalty and shrine respawn
 
 ### Multiplayer
@@ -134,6 +135,7 @@ public/
     tilePalette.json           Global tile definitions (23 tile types)
     props.json                 Prop type definitions (blocking, color fallback)
     playerBase.json            Shared player base stats (client + server)
+    particles.json             Particle effect presets
     enemies.json               Enemy type definitions
     items.json                 Item definitions
     npcs.json                  NPC definitions
@@ -155,6 +157,7 @@ public/
       EntitySystem.js           Player, NPC, enemy, and drop management
       MinimapSystem.js          Corner minimap + full world map overlay
       NetworkSystem.js           WebSocket client + entity smoothing
+      ParticleSystem.js          Data-driven particle emitter & renderer
       QuestSystem.js            Quest state machine + NPC interaction
       UISystem.js               All HUD panels and UI rendering
       WorldSystem.js            Tile map loading, rendering, collision, portals, stairs

@@ -191,14 +191,6 @@
     ],
     "blocked": true
   },
-  "newTile": {
-    "color": [
-      128,
-      128,
-      128
-    ],
-    "blocked": false
-  },
   "bridgeWood": {
     "color": [
       128,
@@ -221,7 +213,7 @@
       128,
       128
     ],
-    "blocked": false
+    "blocked": true
   },
   "fountain": {
     "color": [
@@ -229,7 +221,7 @@
       128,
       128
     ],
-    "blocked": false
+    "blocked": true
   },
   "gateClosed": {
     "color": [
@@ -237,7 +229,7 @@
       128,
       128
     ],
-    "blocked": false
+    "blocked": true
   },
   "hedge": {
     "color": [
@@ -269,7 +261,7 @@
       128,
       128
     ],
-    "blocked": false
+    "blocked": true
   },
   "stoneFloor": {
     "color": [
@@ -285,7 +277,7 @@
       128,
       128
     ],
-    "blocked": false
+    "blocked": true
   },
   "timberWall": {
     "color": [
@@ -293,7 +285,7 @@
       128,
       128
     ],
-    "blocked": false
+    "blocked": true
   },
   "townSquare": {
     "color": [

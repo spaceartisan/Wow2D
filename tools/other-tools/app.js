@@ -97,6 +97,11 @@
     propDirty: false,
     propSpriteExists: null,
     pendingPropScanIds: [],
+
+    particles: {},
+    selectedParticleKey: null,
+    particleSearch: '',
+    particleDirty: false,
   };
 
   const els = {};
@@ -108,11 +113,15 @@
     'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
     'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNotStartedTextInput','questDialogNotStartedOptionsEditor','questDialogNotStartedOptionsEmptyState','questDialogNotStartedAddButton','questDialogActiveTextInput','questDialogActiveOptionsEditor','questDialogActiveOptionsEmptyState','questDialogActiveAddButton','questDialogReadyTextInput','questDialogReadyOptionsEditor','questDialogReadyOptionsEmptyState','questDialogReadyAddButton','questDialogCompletedTextInput','questDialogCompletedOptionsEditor','questDialogCompletedOptionsEmptyState','questDialogCompletedAddButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
     'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
-    'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton'
+    'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton',
+    'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
+    'enemyHitParticleInput','enemyHitSfxInput',
+    'itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput',
+    'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : state.tileDirty))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : state.tileDirty)))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -130,6 +139,7 @@
   function setQuestDirty(v){ state.questDirty = v; updateDirtyBadge(); }
   function setPlayerBaseDirty(v){ state.playerBaseDirty = v; updateDirtyBadge(); }
   function setPropDirty(v){ state.propDirty = v; updateDirtyBadge(); }
+  function setParticleDirty(v){ state.particleDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -156,11 +166,69 @@
     }
   }
 
+  // ── SFX preview ────────────────────────────────────────────────────────────
+  const _sfxCache = new Map();  // key → AudioBuffer (decoded, ready to play)
+  let _sfxCtx = null;
+
+  function _getSfxCtx() {
+    if (!_sfxCtx) _sfxCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _sfxCtx;
+  }
+
+  async function playSfx(key, btn) {
+    if (!key || !key.trim()) return;
+    const cacheKey = key.trim();
+
+    // Visual feedback — show loading state immediately
+    if (btn) { btn.textContent = '…'; btn.classList.remove('playing', 'error'); }
+
+    try {
+      let buffer = _sfxCache.get(cacheKey);
+      if (!buffer) {
+        const res = await fetch(`/api/sfx/${encodeURIComponent(cacheKey)}`);
+        if (!res.ok) throw new Error(`${res.status}`);
+        const arrayBuf = await res.arrayBuffer();
+        buffer = await _getSfxCtx().decodeAudioData(arrayBuf);
+        _sfxCache.set(cacheKey, buffer);
+      }
+
+      const ctx = _getSfxCtx();
+      // Resume context if it was suspended (browser autoplay policy)
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start(0);
+
+      if (btn) {
+        btn.textContent = '▶';
+        btn.classList.add('playing');
+        src.onended = () => { btn.classList.remove('playing'); };
+      }
+    } catch (err) {
+      if (btn) {
+        btn.textContent = '✕';
+        btn.classList.add('error');
+        setTimeout(() => { btn.textContent = '▶'; btn.classList.remove('error'); }, 1800);
+      }
+      console.warn(`SFX preview failed for "${cacheKey}":`, err.message);
+    }
+  }
+  // ── End SFX preview ────────────────────────────────────────────────────────
+
   function switchTab(tab) {
+    const leaving = state.activeTab;
     state.activeTab = tab;
     document.querySelectorAll('.tabbar .tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
     document.querySelectorAll('.tool-view').forEach(view => view.classList.toggle('active', view.dataset.view === tab));
     updateDirtyBadge();
+    if (tab === 'particles') {
+      _preview._resize();
+      _preview.start();
+    } else if (leaving === 'particles') {
+      _preview.stop();
+    }
   }
 
   // Tile helpers
@@ -349,10 +417,10 @@
   }
   function updateTypeFieldVisibility(type) {
     const visible = new Set();
-    if (type === 'weapon') visible.add('attackBonus');
+    if (type === 'weapon') { visible.add('attackBonus'); visible.add('hitParticle'); }
     if (type === 'armor') visible.add('hpBonus');
     if (type === 'trinket') visible.add('manaBonus');
-    if (type === 'consumable') { visible.add('effect'); visible.add('power'); }
+    if (type === 'consumable') { visible.add('effect'); visible.add('power'); visible.add('useParticle'); }
     if (type === 'hearthstone') { visible.add('permanent'); visible.add('castTime'); visible.add('cooldown'); }
     document.querySelectorAll('[data-type-field]').forEach(el => el.classList.toggle('hidden-field', !visible.has(el.dataset.typeField)));
   }
@@ -366,12 +434,19 @@
       description: els.itemDescriptionInput.value || '',
     };
     if (els.itemStackSizeInput.value !== '') obj.stackSize = Number(els.itemStackSizeInput.value);
-    if (obj.type === 'weapon' && els.itemAttackBonusInput.value !== '') obj.attackBonus = Number(els.itemAttackBonusInput.value);
+    if (obj.type === 'weapon') {
+      if (els.itemAttackBonusInput.value !== '') obj.attackBonus = Number(els.itemAttackBonusInput.value);
+      if (els.itemHitParticleInput.value.trim()) obj.hitParticle = els.itemHitParticleInput.value.trim();
+      if (els.itemHitSfxInput.value.trim()) obj.hitSfx = els.itemHitSfxInput.value.trim();
+      if (els.itemSwingSfxInput.value.trim()) obj.swingSfx = els.itemSwingSfxInput.value.trim();
+    }
     if (obj.type === 'armor' && els.itemHpBonusInput.value !== '') obj.hpBonus = Number(els.itemHpBonusInput.value);
     if (obj.type === 'trinket' && els.itemManaBonusInput.value !== '') obj.manaBonus = Number(els.itemManaBonusInput.value);
     if (obj.type === 'consumable') {
       if (els.itemEffectInput.value) obj.effect = els.itemEffectInput.value;
       if (els.itemPowerInput.value !== '') obj.power = Number(els.itemPowerInput.value);
+      if (els.itemUseParticleInput.value.trim()) obj.useParticle = els.itemUseParticleInput.value.trim();
+      if (els.itemUseSfxInput.value.trim()) obj.useSfx = els.itemUseSfxInput.value.trim();
     }
     if (obj.type === 'hearthstone') {
       obj.permanent = !!els.itemPermanentInput.checked;
@@ -407,6 +482,11 @@
     els.itemPermanentInput.checked = !!item.permanent;
     els.itemCastTimeInput.value = toNumOrEmpty(item.castTime);
     els.itemCooldownInput.value = toNumOrEmpty(item.cooldown);
+    els.itemHitParticleInput.value = item.hitParticle || '';
+    els.itemHitSfxInput.value = item.hitSfx || '';
+    els.itemSwingSfxInput.value = item.swingSfx || '';
+    els.itemUseParticleInput.value = item.useParticle || '';
+    els.itemUseSfxInput.value = item.useSfx || '';
     updateTypeFieldVisibility(els.itemTypeInput.value);
     const iconKey = els.itemIconInput.value || state.selectedItemKey;
     els.itemIconPathLabel.textContent = getItemIconDisplayPath(iconKey);
@@ -590,6 +670,11 @@
       attackCooldown: Number(els.enemyAttackCooldownInput.value || 0),
       loot: buildEnemyLootFromEditor(),
     };
+    const hitParticle = els.enemyHitParticleInput.value.trim();
+    const hitSfx = els.enemyHitSfxInput.value.trim();
+    if (hitParticle) obj.hitParticle = hitParticle;
+    if (hitSfx) obj.hitSfx = hitSfx;
+    return obj;
   }
   function renderEnemyPanel() {
     const enemy = getSelectedEnemyEntry();
@@ -617,6 +702,8 @@
     els.enemyAggroRangeInput.value = toNumOrEmpty(enemy.aggroRange);
     els.enemyAttackRangeInput.value = toNumOrEmpty(enemy.attackRange);
     els.enemyAttackCooldownInput.value = toNumOrEmpty(enemy.attackCooldown);
+    els.enemyHitParticleInput.value = enemy.hitParticle || '';
+    els.enemyHitSfxInput.value = enemy.hitSfx || '';
     els.enemyColorPreview.style.background = enemy.color || '#808080';
     renderEnemyLootEditor();
     els.enemySpritePathLabel.textContent = getEntitySpriteDisplayPath(state.selectedEnemyKey);
@@ -1287,6 +1374,9 @@
     els.pbMoveSpeedInput.value = pb.moveSpeed ?? '';
     els.pbAttackRangeInput.value = pb.attackRange ?? '';
     els.pbAttackCooldownInput.value = pb.attackCooldown ?? '';
+    els.pbHitParticleInput.value = pb.hitParticle || '';
+    els.pbHitSfxInput.value = pb.hitSfx || '';
+    els.pbSwingSfxInput.value = pb.swingSfx || '';
     renderPlayerBaseJsonPreview();
   }
   function syncPlayerBaseFromForm() {
@@ -1298,6 +1388,12 @@
     pb.maxHp = Number(els.pbMaxHpInput.value) || 0;
     pb.maxMana = Number(els.pbMaxManaInput.value) || 0;
     pb.damage = Number(els.pbDamageInput.value) || 0;
+    const hitParticle = els.pbHitParticleInput.value.trim();
+    const hitSfx = els.pbHitSfxInput.value.trim();
+    const swingSfx = els.pbSwingSfxInput.value.trim();
+    if (hitParticle) pb.hitParticle = hitParticle; else delete pb.hitParticle;
+    if (hitSfx) pb.hitSfx = hitSfx; else delete pb.hitSfx;
+    if (swingSfx) pb.swingSfx = swingSfx; else delete pb.swingSfx;
     setPlayerBaseDirty(true);
     renderPlayerBaseJsonPreview();
   }
@@ -1481,10 +1577,355 @@
     els.scanConfirmButton.addEventListener('click', confirmScanAdditions);
   }
 
+  // Particles
+  const DEFAULT_NEW_PARTICLE = { count:[4,8], lifetime:[0.2,0.5], speed:[40,120], angle:[0,360], size:[2,5], sizeEnd:0, color:['#ffffff','#ffeeaa'], gravity:0, friction:0.92, fadeOut:true, blendMode:'lighter' };
+
+  // ── Self-contained preview engine ──────────────────────────────────────────
+  // Mirrors ParticleSystem logic exactly but needs no import, no game ref,
+  // no fetch — works directly from the live preset object in state.
+  const _preview = {
+    particles: [],
+    maxParticles: 1500,
+    rafId: null,
+    lastTime: null,
+    autoEmitInterval: 1.2,   // seconds between auto-bursts
+    autoEmitAccum: 0,
+    ctx: null,
+    canvas: null,
+
+    _rand(min, max) { return min + Math.random() * (max - min); },
+
+    init(canvas) {
+      this.canvas = canvas;
+      this.ctx = canvas.getContext('2d');
+      this._resize();
+    },
+
+    _resize() {
+      if (!this.canvas) return;
+      const rect = this.canvas.getBoundingClientRect();
+      this.canvas.width  = rect.width  * devicePixelRatio;
+      this.canvas.height = rect.height * devicePixelRatio;
+      if (this.ctx) this.ctx.scale(devicePixelRatio, devicePixelRatio);
+    },
+
+    emit(cfg, x, y) {
+      if (!cfg) return;
+      const count = (this._rand(cfg.count[0], cfg.count[1])) | 0;
+      const colors = cfg.color;
+      for (let i = 0; i < count; i++) {
+        if (this.particles.length >= this.maxParticles) break;
+        const angleDeg = this._rand(cfg.angle[0], cfg.angle[1]);
+        const angleRad = angleDeg * Math.PI / 180;
+        const speed    = this._rand(cfg.speed[0],    cfg.speed[1]);
+        const life     = this._rand(cfg.lifetime[0], cfg.lifetime[1]);
+        const size     = this._rand(cfg.size[0],     cfg.size[1]);
+        this.particles.push({
+          x, y,
+          vx: Math.cos(angleRad) * speed,
+          vy: Math.sin(angleRad) * speed,
+          life, maxLife: life, size,
+          sizeEnd:   cfg.sizeEnd  ?? 0,
+          color:     colors[(Math.random() * colors.length) | 0],
+          gravity:   cfg.gravity  || 0,
+          friction:  cfg.friction ?? 1,
+          fadeOut:   cfg.fadeOut  !== false,
+          blendMode: cfg.blendMode || 'source-over',
+        });
+      }
+    },
+
+    update(dt) {
+      const ps = this.particles;
+      let w = 0;
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
+        p.life -= dt;
+        if (p.life <= 0) continue;
+        p.vy += p.gravity  * dt;
+        p.vx *= p.friction;
+        p.vy *= p.friction;
+        p.x  += p.vx * dt;
+        p.y  += p.vy * dt;
+        ps[w++] = p;
+      }
+      ps.length = w;
+    },
+
+    draw() {
+      if (!this.ctx || !this.canvas) return;
+      const ctx = this.ctx;
+      const W = this.canvas.width  / devicePixelRatio;
+      const H = this.canvas.height / devicePixelRatio;
+      // Fade trail effect — cheaper than clearRect and looks great
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#08090f';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+
+      if (this.particles.length === 0) return;
+      const prevAlpha = ctx.globalAlpha;
+      const prevBlend = ctx.globalCompositeOperation;
+      let currentBlend = null;
+
+      for (let i = 0; i < this.particles.length; i++) {
+        const p = this.particles[i];
+        const t    = 1 - p.life / p.maxLife;
+        const size = p.size + (p.sizeEnd - p.size) * t;
+        if (size <= 0) continue;
+        const alpha = p.fadeOut ? p.life / p.maxLife : 1;
+        if (p.blendMode !== currentBlend) {
+          currentBlend = p.blendMode;
+          ctx.globalCompositeOperation = currentBlend;
+        }
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle   = p.color;
+        ctx.fillRect(p.x - size * 0.5, p.y - size * 0.5, size, size);
+      }
+      ctx.globalAlpha = prevAlpha;
+      ctx.globalCompositeOperation = prevBlend;
+    },
+
+    clear() { this.particles.length = 0; },
+
+    _loop(ts) {
+      this.rafId = requestAnimationFrame(t => this._loop(t));
+      const dt = Math.min((ts - (this.lastTime || ts)) / 1000, 0.1);
+      this.lastTime = ts;
+
+      // Auto-emit burst on interval
+      if (state.activeTab === 'particles' && state.selectedParticleKey) {
+        this.autoEmitAccum += dt;
+        if (this.autoEmitAccum >= this.autoEmitInterval) {
+          this.autoEmitAccum = 0;
+          const cfg = state.particles[state.selectedParticleKey];
+          if (cfg && this.canvas) {
+            const W = this.canvas.width  / devicePixelRatio;
+            const H = this.canvas.height / devicePixelRatio;
+            this.emit(cfg, W / 2, H / 2);
+          }
+        }
+      }
+
+      this.update(dt);
+      this.draw();
+    },
+
+    start() {
+      if (this.rafId) return;
+      this.lastTime = null;
+      this.autoEmitAccum = 0;
+      this.rafId = requestAnimationFrame(t => this._loop(t));
+    },
+
+    stop() {
+      if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
+      // Do one final clear draw so the canvas doesn't linger
+      if (this.ctx && this.canvas) {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+      this.clear();
+    },
+
+    emitAtCenter() {
+      const cfg = state.selectedParticleKey ? state.particles[state.selectedParticleKey] : null;
+      if (!cfg || !this.canvas) return;
+      const W = this.canvas.width  / devicePixelRatio;
+      const H = this.canvas.height / devicePixelRatio;
+      this.emit(cfg, W / 2, H / 2);
+      this.autoEmitAccum = 0; // reset timer so next auto-burst is a full interval away
+    },
+
+    emitAt(canvasX, canvasY) {
+      const cfg = state.selectedParticleKey ? state.particles[state.selectedParticleKey] : null;
+      if (!cfg) return;
+      this.emit(cfg, canvasX, canvasY);
+      this.autoEmitAccum = 0;
+    },
+  };
+  // ── End preview engine ──────────────────────────────────────────────────────
+
+  function getVisibleParticleKeys() { return Object.keys(state.particles).filter(k => k.toLowerCase().includes(state.particleSearch.toLowerCase())).sort((a,b)=>a.localeCompare(b)); }
+  function getSelectedParticleEntry() { return state.selectedParticleKey ? state.particles[state.selectedParticleKey] || null : null; }
+  function ensureUniqueParticleKey(baseKey){ let c=baseKey, i=2; while(state.particles[c]) c=`${baseKey}_${i++}`; return c; }
+
+  function renderParticleColorSwatches(colors) {
+    els.particleColorSwatchRow.innerHTML = '';
+    (colors || []).forEach(hex => {
+      const s = document.createElement('div');
+      s.className = 'particle-swatch-preview';
+      s.style.background = hex;
+      s.title = hex;
+      els.particleColorSwatchRow.appendChild(s);
+    });
+  }
+  function renderParticleColorEditor(colors) {
+    els.particleColorEditor.innerHTML = '';
+    const arr = Array.isArray(colors) ? colors : [];
+    els.particleColorEmptyState.classList.toggle('hidden', arr.length > 0);
+    arr.forEach((hex, index) => {
+      const row = document.createElement('div');
+      row.className = 'particle-color-row';
+      row.innerHTML = `
+        <input class="particle-color-swatch-inline" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#ffffff'}" />
+        <input class="particle-color-text-input" type="text" value="${hex}" />
+        <button class="button danger small" type="button">Remove</button>
+      `;
+      const picker = row.querySelector('.particle-color-swatch-inline');
+      const text = row.querySelector('.particle-color-text-input');
+      const updateColor = (val) => {
+        const entry = getSelectedParticleEntry(); if (!entry) return;
+        entry.color[index] = val;
+        setParticleDirty(true);
+        renderParticleColorSwatches(entry.color);
+        renderParticleJsonPreview();
+      };
+      picker.addEventListener('input', e => { text.value = e.target.value; updateColor(e.target.value); });
+      text.addEventListener('input', e => {
+        const v = e.target.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(v)) { picker.value = v; updateColor(v); }
+        else { const entry = getSelectedParticleEntry(); if (entry) { entry.color[index] = v; setParticleDirty(true); renderParticleJsonPreview(); } }
+      });
+      row.querySelector('.button').addEventListener('click', () => {
+        const entry = getSelectedParticleEntry(); if (!entry) return;
+        entry.color.splice(index, 1); setParticleDirty(true); renderParticlePanel();
+      });
+      els.particleColorEditor.appendChild(row);
+    });
+  }
+  function renderParticleJsonPreview() {
+    const entry = getSelectedParticleEntry();
+    els.particleJsonPreview.textContent = entry ? JSON.stringify({ [state.selectedParticleKey]: entry }, null, 2) : '';
+  }
+  function renderParticleList() {
+    const visibleKeys = getVisibleParticleKeys();
+    const allKeys = Object.keys(state.particles);
+    els.particleEntryCount.textContent = String(allKeys.length);
+    els.particleAdditiveCount.textContent = String(allKeys.filter(k => state.particles[k]?.blendMode === 'lighter').length);
+    els.particleList.innerHTML = '';
+    if (!visibleKeys.length) { const empty=document.createElement('div'); empty.className='subtle'; empty.textContent='No matching presets.'; els.particleList.appendChild(empty); return; }
+    for (const key of visibleKeys) {
+      const entry = state.particles[key] || {};
+      const colors = Array.isArray(entry.color) ? entry.color : [];
+      const primaryColor = colors[0] || '#888';
+      const button = document.createElement('button');
+      button.className = 'tile-list-item' + (key === state.selectedParticleKey ? ' active' : '');
+      button.type = 'button';
+      button.innerHTML = `
+        <span class="swatch" style="background:${primaryColor}"></span>
+        <span class="tile-text">
+          <strong class="tile-name">${key}</strong>
+          <span class="tile-meta">${entry.blendMode || 'source-over'} • count ${(entry.count||[0])[0]}–${(entry.count||[0,0])[1]} • ${colors.length} color${colors.length!==1?'s':''}</span>
+        </span>`;
+      button.addEventListener('click', () => { state.selectedParticleKey = key; renderParticlePanel(); renderParticleList(); });
+      els.particleList.appendChild(button);
+    }
+  }
+  function renderParticlePanel() {
+    const entry = getSelectedParticleEntry();
+    if (!entry) {
+      els.selectedParticleLabel.textContent = 'Nothing selected';
+      els.particleEmptyState.classList.remove('hidden');
+      els.particleForm.classList.add('hidden');
+      els.particleJsonPreview.textContent = '';
+      return;
+    }
+    els.selectedParticleLabel.textContent = state.selectedParticleKey;
+    els.particleEmptyState.classList.add('hidden');
+    els.particleForm.classList.remove('hidden');
+    els.particleIdInput.value = state.selectedParticleKey;
+    els.particleBlendModeInput.value = entry.blendMode || 'source-over';
+    els.particleFadeOutInput.checked = entry.fadeOut !== false;
+    els.particleCountMinInput.value = entry.count?.[0] ?? '';
+    els.particleCountMaxInput.value = entry.count?.[1] ?? '';
+    els.particleLifetimeMinInput.value = entry.lifetime?.[0] ?? '';
+    els.particleLifetimeMaxInput.value = entry.lifetime?.[1] ?? '';
+    els.particleSpeedMinInput.value = entry.speed?.[0] ?? '';
+    els.particleSpeedMaxInput.value = entry.speed?.[1] ?? '';
+    els.particleAngleMinInput.value = entry.angle?.[0] ?? '';
+    els.particleAngleMaxInput.value = entry.angle?.[1] ?? '';
+    els.particleGravityInput.value = entry.gravity ?? 0;
+    els.particleFrictionInput.value = entry.friction ?? 1;
+    els.particleSizeMinInput.value = entry.size?.[0] ?? '';
+    els.particleSizeMaxInput.value = entry.size?.[1] ?? '';
+    els.particleSizeEndInput.value = entry.sizeEnd ?? 0;
+    renderParticleColorEditor(entry.color || []);
+    renderParticleColorSwatches(entry.color || []);
+    renderParticleJsonPreview();
+  }
+  function syncSelectedParticleFromForm() {
+    const entry = getSelectedParticleEntry(); if (!entry) return;
+    const newKey = (els.particleIdInput.value || '').trim() || state.selectedParticleKey;
+    if (newKey !== state.selectedParticleKey) {
+      if (state.particles[newKey]) return;
+      const oldKey = state.selectedParticleKey; const newParticles = {};
+      Object.keys(state.particles).forEach(k => { newParticles[k === oldKey ? newKey : k] = state.particles[k]; });
+      state.particles = newParticles; state.selectedParticleKey = newKey;
+    }
+    entry.blendMode = els.particleBlendModeInput.value;
+    entry.fadeOut = els.particleFadeOutInput.checked;
+    entry.count = [Number(els.particleCountMinInput.value||0), Number(els.particleCountMaxInput.value||0)];
+    entry.lifetime = [Number(els.particleLifetimeMinInput.value||0), Number(els.particleLifetimeMaxInput.value||0)];
+    entry.speed = [Number(els.particleSpeedMinInput.value||0), Number(els.particleSpeedMaxInput.value||0)];
+    entry.angle = [Number(els.particleAngleMinInput.value||0), Number(els.particleAngleMaxInput.value||0)];
+    entry.gravity = Number(els.particleGravityInput.value||0);
+    entry.friction = Number(els.particleFrictionInput.value||1);
+    entry.size = [Number(els.particleSizeMinInput.value||0), Number(els.particleSizeMaxInput.value||0)];
+    entry.sizeEnd = Number(els.particleSizeEndInput.value||0);
+    setParticleDirty(true);
+    renderParticleList();
+    renderParticleJsonPreview();
+  }
+  function renderParticleDiagnostics(items=[], summary='No validation run yet') {
+    els.particleValidationSummary.textContent = summary; els.particleDiagnosticsList.innerHTML = '';
+    if (!items.length) { els.particleDiagnosticsList.className='diagnostics-list empty-diagnostics'; els.particleDiagnosticsList.innerHTML='<p>No messages yet.</p>'; return; }
+    els.particleDiagnosticsList.className='diagnostics-list';
+    for (const item of items) { const div=document.createElement('div'); div.className=`diagnostic-item ${item.level||'info'}`; div.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`; els.particleDiagnosticsList.appendChild(div); }
+  }
+  function renderParticles() { renderParticleList(); renderParticlePanel(); }
+  async function loadParticles() {
+    const result = await apiFetch('/api/particles');
+    state.particles = result.particles || {};
+    const keys = Object.keys(state.particles);
+    state.selectedParticleKey = keys.includes(state.selectedParticleKey) ? state.selectedParticleKey : (keys[0] || null);
+    setParticleDirty(false); renderParticles(); renderParticleDiagnostics([{level:'info', title:'Particles loaded', message:result.path}], `Loaded ${keys.length} presets from disk`);
+  }
+  async function saveParticles() {
+    const result = await apiFetch('/api/particles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({particles: state.particles}) });
+    setParticleDirty(false); renderParticleDiagnostics([{level:'info', title:'Saved successfully', message:result.path}], `Saved ${Object.keys(state.particles).length} presets to disk`);
+  }
+  function validateParticles() {
+    const messages=[]; const entries=Object.entries(state.particles);
+    const VALID_BLENDS = new Set(['lighter','source-over','multiply','screen','overlay']);
+    if (!entries.length) messages.push({level:'warning', title:'No presets', message:'particles.json is empty.'});
+    for (const [key, entry] of entries) {
+      if (!key.trim()) { messages.push({level:'error', title:'Blank key', message:'A preset has an empty name.'}); continue; }
+      for (const field of ['count','lifetime','speed','angle','size']) {
+        if (!Array.isArray(entry[field]) || entry[field].length !== 2) messages.push({level:'error', title:`${key}: ${field}`, message:`${field} must be [min, max].`});
+        else if (entry[field][0] > entry[field][1]) messages.push({level:'warning', title:`${key}: ${field} range`, message:`${field}[0] is greater than ${field}[1].`});
+      }
+      if (typeof entry.sizeEnd !== 'number') messages.push({level:'error', title:`${key}: sizeEnd`, message:'sizeEnd must be a number.'});
+      if (!Array.isArray(entry.color) || !entry.color.length) messages.push({level:'error', title:`${key}: color`, message:'color must be a non-empty array.'});
+      else entry.color.forEach((c,i) => { if(typeof c !== 'string') messages.push({level:'warning', title:`${key}: color[${i}]`, message:'Color entries should be strings.'}); });
+      if (typeof entry.gravity !== 'number') messages.push({level:'error', title:`${key}: gravity`, message:'gravity must be a number.'});
+      if (typeof entry.friction !== 'number' || entry.friction < 0 || entry.friction > 1) messages.push({level:'warning', title:`${key}: friction`, message:'friction should be a number between 0 and 1.'});
+      if (typeof entry.fadeOut !== 'boolean') messages.push({level:'warning', title:`${key}: fadeOut`, message:'fadeOut should be a boolean.'});
+      if (!VALID_BLENDS.has(entry.blendMode)) messages.push({level:'warning', title:`${key}: blendMode`, message:`blendMode "${entry.blendMode}" is unusual. Common values: lighter, source-over.`});
+    }
+    if (!messages.length) messages.push({level:'info', title:'Validation passed', message:'No schema problems detected in particles.json.'});
+    const errorCount=messages.filter(m=>m.level==='error').length; const warningCount=messages.filter(m=>m.level==='warning').length;
+    renderParticleDiagnostics(messages, errorCount||warningCount ? `${errorCount} error(s), ${warningCount} warning(s)` : 'Validation passed');
+  }
+  function addParticle() { const key=ensureUniqueParticleKey('newParticle'); state.particles[key]=JSON.parse(JSON.stringify(DEFAULT_NEW_PARTICLE)); state.selectedParticleKey=key; setParticleDirty(true); renderParticles(); }
+  function duplicateParticle() { const entry=getSelectedParticleEntry(); if(!entry) return; const key=ensureUniqueParticleKey(`${state.selectedParticleKey}_copy`); state.particles[key]=JSON.parse(JSON.stringify(entry)); state.selectedParticleKey=key; setParticleDirty(true); renderParticles(); }
+  function deleteParticle() { const entry=getSelectedParticleEntry(); if(!entry) return; if(!window.confirm(`Delete preset "${state.selectedParticleKey}"?`)) return; delete state.particles[state.selectedParticleKey]; state.selectedParticleKey=Object.keys(state.particles)[0]||null; setParticleDirty(true); renderParticles(); }
+  function addParticleColor() { const entry=getSelectedParticleEntry(); if(!entry) return; if(!Array.isArray(entry.color)) entry.color=[]; entry.color.push('#ffffff'); setParticleDirty(true); renderParticlePanel(); }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : loadPalette()))))));
-    els.saveButton.addEventListener('click', () => state.activeTab === 'items' ? saveItems() : (state.activeTab === 'enemies' ? saveEnemies() : (state.activeTab === 'npcs' ? saveNpcs() : (state.activeTab === 'quests' ? saveQuests() : (state.activeTab === 'playerBase' ? savePlayerBase() : (state.activeTab === 'props' ? saveProps() : savePalette()))))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : loadPalette())))))));
+    els.saveButton.addEventListener('click', () => state.activeTab === 'items' ? saveItems() : (state.activeTab === 'enemies' ? saveEnemies() : (state.activeTab === 'npcs' ? saveNpcs() : (state.activeTab === 'quests' ? saveQuests() : (state.activeTab === 'playerBase' ? savePlayerBase() : (state.activeTab === 'props' ? saveProps() : (state.activeTab === 'particles' ? saveParticles() : savePalette())))))));;
     els.reloadButton.addEventListener('click', loadPalette);
     els.validateButton.addEventListener('click', validatePalette);
     els.scanTilesButton.addEventListener('click', scanTilesFolder);
@@ -1509,7 +1950,7 @@
     els.duplicateItemButton.addEventListener('click', duplicateItem);
     els.deleteItemButton.addEventListener('click', deleteItem);
     els.itemSearchInput.addEventListener('input', e => { state.itemSearch = e.target.value || ''; renderItemList(); });
-    ['itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHpBonusInput','itemManaBonusInput','itemEffectInput','itemPowerInput','itemCastTimeInput','itemCooldownInput'].forEach(id => els[id].addEventListener('input', syncSelectedItemFromForm));
+    ['itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHpBonusInput','itemManaBonusInput','itemEffectInput','itemPowerInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput'].forEach(id => els[id].addEventListener('input', syncSelectedItemFromForm));
     els.itemPermanentInput.addEventListener('change', syncSelectedItemFromForm);
     els.itemTypeInput.addEventListener('change', () => { updateTypeFieldVisibility(els.itemTypeInput.value); syncSelectedItemFromForm(); });
     els.itemIconPreviewImage.addEventListener('load', () => setItemIconStatus(true));
@@ -1521,7 +1962,7 @@
     els.duplicateEnemyButton.addEventListener('click', duplicateEnemy);
     els.deleteEnemyButton.addEventListener('click', deleteEnemy);
     els.enemySearchInput.addEventListener('input', e => { state.enemySearch = e.target.value || ''; renderEnemyList(); });
-    ['enemyIdInput','enemyNameInput','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput'].forEach(id => els[id].addEventListener('input', syncSelectedEnemyFromForm));
+    ['enemyIdInput','enemyNameInput','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyHitParticleInput','enemyHitSfxInput'].forEach(id => els[id].addEventListener('input', syncSelectedEnemyFromForm));
     els.enemyLootAddButton.addEventListener('click', addEnemyLootEntry);
     els.enemyPreviewImage.addEventListener('load', () => setEnemySpriteStatus(true));
     els.enemyPreviewImage.addEventListener('error', () => setEnemySpriteStatus(false));
@@ -1557,7 +1998,7 @@
 
     els.reloadPlayerBaseButton.addEventListener('click', loadPlayerBase);
     els.validatePlayerBaseButton.addEventListener('click', validatePlayerBase);
-    ['pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput'].forEach(id => els[id].addEventListener('input', syncPlayerBaseFromForm));
+    ['pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput'].forEach(id => els[id].addEventListener('input', syncPlayerBaseFromForm));
 
     els.reloadPropsButton.addEventListener('click', loadProps);
     els.validatePropsButton.addEventListener('click', validateProps);
@@ -1573,13 +2014,41 @@
     els.propSpritePreviewImage.addEventListener('load', () => setPropSpriteStatus(true));
     els.propSpritePreviewImage.addEventListener('error', () => setPropSpriteStatus(false));
 
+    els.reloadParticlesButton.addEventListener('click', loadParticles);
+    els.validateParticlesButton.addEventListener('click', validateParticles);
+    els.addParticleButton.addEventListener('click', addParticle);
+    els.duplicateParticleButton.addEventListener('click', duplicateParticle);
+    els.deleteParticleButton.addEventListener('click', deleteParticle);
+    els.particleColorAddButton.addEventListener('click', addParticleColor);
+    els.particleSearchInput.addEventListener('input', e => { state.particleSearch = e.target.value || ''; renderParticleList(); });
+    ['particleIdInput','particleBlendModeInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput'].forEach(id => els[id].addEventListener('input', syncSelectedParticleFromForm));
+    els.particleBlendModeInput.addEventListener('change', syncSelectedParticleFromForm);
+    els.particleFadeOutInput.addEventListener('change', syncSelectedParticleFromForm);
+    els.particleEmitButton.addEventListener('click', () => _preview.emitAtCenter());
+    els.particleClearButton.addEventListener('click', () => _preview.clear());
+    els.particlePreviewCanvas.addEventListener('click', e => {
+      const rect = els.particlePreviewCanvas.getBoundingClientRect();
+      _preview.emitAt(e.clientX - rect.left, e.clientY - rect.top);
+    });
+
+    // SFX play buttons — single delegated listener covers all tabs
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('.sfx-play-btn');
+      if (!btn) return;
+      const inputId = btn.dataset.sfxInput;
+      const input = inputId ? document.getElementById(inputId) : null;
+      const key = input ? input.value.trim() : '';
+      playSfx(key, btn);
+    });
+
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
     bindEls();
     bindEvents();
+    _preview.init(els.particlePreviewCanvas);
     switchTab('tilePalette');
     updateDirtyBadge();
     renderTiles();
@@ -1588,7 +2057,8 @@
     renderNpcs();
     renderQuests();
     renderProps();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps()]); }
+    renderParticles();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -1596,6 +2066,7 @@
       renderNpcDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderQuestDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderPlayerBaseDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderParticleDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 

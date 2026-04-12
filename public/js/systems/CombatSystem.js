@@ -1,4 +1,5 @@
 import { distance } from "../utils.js";
+import { PLAYER_BASE } from "../config.js";
 
 export class CombatSystem {
   constructor(game) {
@@ -139,6 +140,11 @@ export class CombatSystem {
     this.lastPlayerAttackAt = now;
     // send attack request to server instead of applying damage locally
     this.game.network.sendAttack(enemy.id);
-    this.game.audio.play("sword_swing");
+
+    // Use weapon-specific swing SFX, fall back to playerBase default
+    const weapon = this.game.entities.player.equipment?.weapon;
+    const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
+    const swingSfx = weaponDef?.swingSfx || PLAYER_BASE.swingSfx || "sword_swing";
+    this.game.audio.play(swingSfx);
   }
 }

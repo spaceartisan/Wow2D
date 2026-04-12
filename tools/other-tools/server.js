@@ -42,6 +42,13 @@ const QUESTS_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/quests.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/quests.json'),
 ];
+const PARTICLES_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/particles.json'),
+  path.resolve(process.cwd(), '../../public/data/particles.json'),
+  path.resolve(process.cwd(), 'public/data/particles.json'),
+  path.resolve(process.cwd(), '../public/data/particles.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/particles.json'),
+];
 const PROPS_CANDIDATES = [
   path.resolve(__dirname, '../../public/data/props.json'),
   path.resolve(process.cwd(), '../../public/data/props.json'),
@@ -84,6 +91,13 @@ const ITEM_ICON_DIR_CANDIDATES = [
   path.resolve(process.cwd(), '../public/assets/sprites/icons'),
   path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/icons'),
 ];
+const SFX_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sfx'),
+  path.resolve(process.cwd(), '../../public/assets/sfx'),
+  path.resolve(process.cwd(), 'public/assets/sfx'),
+  path.resolve(process.cwd(), '../public/assets/sfx'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sfx'),
+];
 
 function firstExisting(candidates) {
   for (const candidate of candidates) if (fs.existsSync(candidate)) return candidate;
@@ -94,12 +108,14 @@ function resolveExistingItemsPath() { return firstExisting(ITEMS_CANDIDATES); }
 function resolveExistingEnemiesPath() { return firstExisting(ENEMIES_CANDIDATES); }
 function resolveExistingNpcsPath() { return firstExisting(NPCS_CANDIDATES); }
 function resolveExistingQuestsPath() { return firstExisting(QUESTS_CANDIDATES); }
+function resolveExistingParticlesPath() { return firstExisting(PARTICLES_CANDIDATES); }
 function resolveExistingPropsPath() { return firstExisting(PROPS_CANDIDATES); }
 function resolveExistingPropSpriteDir() { return firstExisting(PROP_SPRITE_DIR_CANDIDATES); }
 function resolveExistingPlayerBasePath() { return firstExisting(PLAYER_BASE_CANDIDATES); }
 function resolveExistingTileSpriteDir() { return firstExisting(TILE_SPRITE_DIR_CANDIDATES); }
 function resolveExistingEntitySpriteDir() { return firstExisting(ENTITY_SPRITE_DIR_CANDIDATES); }
 function resolveExistingItemIconDir() { return firstExisting(ITEM_ICON_DIR_CANDIDATES); }
+function resolveExistingSfxDir() { return firstExisting(SFX_DIR_CANDIDATES); }
 
 function listTileSpriteIds() {
   const dir = resolveExistingTileSpriteDir();
@@ -213,6 +229,26 @@ function validateQuests(quests) {
   return null;
 }
 
+function validateParticles(particles) {
+  if (!particles || typeof particles !== 'object' || Array.isArray(particles)) return 'particles must be an object keyed by preset name.';
+  const BLEND_MODES = new Set(['lighter', 'source-over', 'multiply', 'screen', 'overlay']);
+  for (const [key, entry] of Object.entries(particles)) {
+    if (!key.trim()) return 'Preset names cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    for (const field of ['count', 'lifetime', 'speed', 'angle', 'size']) {
+      if (!Array.isArray(entry[field]) || entry[field].length !== 2) return `Entry for "${key}": ${field} must be [min, max].`;
+      if (typeof entry[field][0] !== 'number' || typeof entry[field][1] !== 'number') return `Entry for "${key}": ${field} values must be numbers.`;
+    }
+    if (typeof entry.sizeEnd !== 'number') return `Entry for "${key}": sizeEnd must be a number.`;
+    if (!Array.isArray(entry.color) || !entry.color.length) return `Entry for "${key}": color must be a non-empty array of hex strings.`;
+    if (typeof entry.gravity !== 'number') return `Entry for "${key}": gravity must be a number.`;
+    if (typeof entry.friction !== 'number') return `Entry for "${key}": friction must be a number.`;
+    if (typeof entry.fadeOut !== 'boolean') return `Entry for "${key}": fadeOut must be a boolean.`;
+    if (typeof entry.blendMode !== 'string') return `Entry for "${key}": blendMode must be a string.`;
+  }
+  return null;
+}
+
 function validateProps(props) {
   if (!props || typeof props !== 'object' || Array.isArray(props)) return 'props must be an object keyed by prop type.';
   for (const [key, entry] of Object.entries(props)) {
@@ -256,7 +292,43 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname.startsWith('/api/sfx/') && req.method === 'GET') {
+    try {
+      const sfxKey = pathname.replace('/api/sfx/', '').trim();
+      if (!sfxKey) return sendText(res, 400, 'Missing sfx key');
+      const sfxDir = resolveExistingSfxDir();
+      const AUDIO_EXTS = ['.ogg', '.mp3', '.wav'];
+      const AUDIO_MIME = { '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
+      for (const ext of AUDIO_EXTS) {
+        const candidate = path.join(sfxDir, sfxKey.replace(/\.[^.]+$/, '') + ext);
+        const normalizedDir = path.normalize(sfxDir);
+        const normalizedFile = path.normalize(candidate);
+        if (!normalizedFile.startsWith(normalizedDir)) return sendText(res, 403, 'Forbidden');
+        if (fs.existsSync(candidate)) {
+          const data = await fs.promises.readFile(candidate);
+          res.writeHead(200, { 'Content-Type': AUDIO_MIME[ext], 'Content-Length': data.length });
+          return res.end(data);
+        }
+      }
+      return sendText(res, 404, `SFX "${sfxKey}" not found (tried ${AUDIO_EXTS.join(', ')})`);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname === '/api/particles' && req.method === 'GET') {
+    try { return sendJson(res, 200, { particles: JSON.parse(await fs.promises.readFile(resolveExistingParticlesPath(), 'utf8')), path: resolveExistingParticlesPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingParticlesPath() }); }
+  }
+  if (pathname === '/api/particles' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateParticles(body.particles);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingParticlesPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.particles, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingParticlesPath() }); }
+  }
 
   if (pathname === '/api/props' && req.method === 'GET') {
     try { return sendJson(res, 200, { props: JSON.parse(await fs.promises.readFile(resolveExistingPropsPath(), 'utf8')), path: resolveExistingPropsPath() }); }
@@ -422,8 +494,10 @@ server.listen(PORT, () => {
   console.log(`Quests target: ${resolveExistingQuestsPath()}`);
   console.log(`Props target: ${resolveExistingPropsPath()}`);
   console.log(`Prop sprite dir: ${resolveExistingPropSpriteDir()}`);
+  console.log(`Particles target: ${resolveExistingParticlesPath()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);
   console.log(`Tile sprite dir: ${resolveExistingTileSpriteDir()}`);
   console.log(`Entity sprite dir: ${resolveExistingEntitySpriteDir()}`);
   console.log(`Item icon dir: ${resolveExistingItemIconDir()}`);
+  console.log(`SFX dir:       ${resolveExistingSfxDir()}`);
 });

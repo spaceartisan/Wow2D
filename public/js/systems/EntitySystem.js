@@ -32,6 +32,9 @@ export class EntitySystem {
       baseDamage: PLAYER_BASE.damage,
       attackRange: PLAYER_BASE.attackRange,
       attackCooldown: PLAYER_BASE.attackCooldown,
+      _baseHitParticle: PLAYER_BASE.hitParticle || "hit_spark",
+      _baseHitSfx: PLAYER_BASE.hitSfx || "sword_hit",
+      _baseSwingSfx: PLAYER_BASE.swingSfx || "sword_swing",
       gold: 12,
       dead: false,
       deathUntil: 0,
@@ -241,6 +244,7 @@ export class EntitySystem {
       player.mana = player.maxMana;
       this.game.ui.addMessage(`Level up! You reached level ${player.level}.`);
       this.game.audio.play("level_up");
+      this.game.particles.emit("levelup", player.x, player.y);
       this.recalculateDerivedStats();
     }
   }

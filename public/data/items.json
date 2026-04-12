@@ -70,7 +70,10 @@
     "icon": "rustySword",
     "attackBonus": 2,
     "value": 8,
-    "description": "Dull and pitted, but still sharp enough to cut."
+    "description": "Dull and pitted, but still sharp enough to cut.",
+    "hitParticle": "hit_spark",
+    "hitSfx": "sword_hit",
+    "swingSfx": "sword_swing"
   },
   "noviceBlade": {
     "id": "noviceBlade",
@@ -79,7 +82,10 @@
     "icon": "noviceBlade",
     "attackBonus": 5,
     "value": 20,
-    "description": "A sturdy blade forged for new adventurers."
+    "description": "A sturdy blade forged for new adventurers.",
+    "hitParticle": "hit_spark",
+    "hitSfx": "sword_hit",
+    "swingSfx": "sword_swing"
   },
   "forestBow": {
     "id": "forestBow",
@@ -88,7 +94,10 @@
     "icon": "forestBow",
     "attackBonus": 8,
     "value": 32,
-    "description": "Crafted from flexible yew. Quick and accurate."
+    "description": "Crafted from flexible yew. Quick and accurate.",
+    "hitParticle": "hit_spark",
+    "hitSfx": "arrow_hit",
+    "swingSfx": "bow_shoot"
   },
   "darkwoodStaff": {
     "id": "darkwoodStaff",
@@ -97,7 +106,10 @@
     "icon": "darkwoodStaff",
     "attackBonus": 10,
     "value": 40,
-    "description": "Dense darkwood humming with faint energy."
+    "description": "Dense darkwood humming with faint energy.",
+    "hitParticle": "arcane_hit",
+    "hitSfx": "magic_hit",
+    "swingSfx": "staff_swing"
   },
   "steelLongsword": {
     "id": "steelLongsword",
@@ -106,7 +118,10 @@
     "icon": "steelLongsword",
     "attackBonus": 14,
     "value": 65,
-    "description": "Balanced steel with a keen edge. A warrior's companion."
+    "description": "Balanced steel with a keen edge. A warrior's companion.",
+    "hitParticle": "hit_spark",
+    "hitSfx": "sword_hit",
+    "swingSfx": "sword_swing"
   },
   "huntersBow": {
     "id": "huntersBow",
@@ -115,7 +130,10 @@
     "icon": "huntersBow",
     "attackBonus": 12,
     "value": 55,
-    "description": "A powerful bow favored by veteran hunters."
+    "description": "A powerful bow favored by veteran hunters.",
+    "hitParticle": "hit_spark",
+    "hitSfx": "arrow_hit",
+    "swingSfx": "bow_shoot"
   },
   "banditDagger": {
     "id": "banditDagger",
@@ -124,7 +142,10 @@
     "icon": "banditDagger",
     "attackBonus": 7,
     "value": 28,
-    "description": "A jagged blade taken from a bandit. Fast but cruel."
+    "description": "A jagged blade taken from a bandit. Fast but cruel.",
+    "hitParticle": "hit_spark",
+    "hitSfx": "sword_hit",
+    "swingSfx": "sword_swing"
   },
   "eldenwoodStaff": {
     "id": "eldenwoodStaff",
@@ -133,7 +154,10 @@
     "icon": "eldenwoodStaff",
     "attackBonus": 16,
     "value": 80,
-    "description": "Ancient wood that amplifies arcane power."
+    "description": "Ancient wood that amplifies arcane power.",
+    "hitParticle": "arcane_hit",
+    "hitSfx": "magic_hit",
+    "swingSfx": "staff_swing"
   },
 
   "tornShirt": {
@@ -246,7 +270,9 @@
     "power": 40,
     "value": 8,
     "stackSize": 20,
-    "description": "Restores 40 HP when used."
+    "description": "Restores 40 HP when used.",
+    "useParticle": "heal",
+    "useSfx": "potion_drink"
   },
   "healingPotion": {
     "id": "healingPotion",
@@ -257,7 +283,9 @@
     "power": 80,
     "value": 18,
     "stackSize": 20,
-    "description": "Restores 80 HP when used."
+    "description": "Restores 80 HP when used.",
+    "useParticle": "heal",
+    "useSfx": "potion_drink"
   },
   "greaterHealingPotion": {
     "id": "greaterHealingPotion",
@@ -268,7 +296,9 @@
     "power": 150,
     "value": 35,
     "stackSize": 20,
-    "description": "Restores 150 HP when used."
+    "description": "Restores 150 HP when used.",
+    "useParticle": "heal",
+    "useSfx": "potion_drink"
   },
   "minorManaPotion": {
     "id": "minorManaPotion",
@@ -279,7 +309,9 @@
     "power": 30,
     "value": 8,
     "stackSize": 20,
-    "description": "Restores 30 mana when used."
+    "description": "Restores 30 mana when used.",
+    "useParticle": "mana_restore",
+    "useSfx": "potion_drink"
   },
   "manaPotion": {
     "id": "manaPotion",
@@ -290,7 +322,9 @@
     "power": 60,
     "value": 18,
     "stackSize": 20,
-    "description": "Restores 60 mana when used."
+    "description": "Restores 60 mana when used.",
+    "useParticle": "mana_restore",
+    "useSfx": "potion_drink"
   },
   "antidote": {
     "id": "antidote",
@@ -301,7 +335,9 @@
     "power": 25,
     "value": 6,
     "stackSize": 20,
-    "description": "A bitter brew that cures ailments and restores 25 HP."
+    "description": "A bitter brew that cures ailments and restores 25 HP.",
+    "useParticle": "heal",
+    "useSfx": "potion_drink"
   },
 
   "hearthstone": {

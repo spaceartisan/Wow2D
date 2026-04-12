@@ -22,7 +22,10 @@ export class AudioManager {
     this._sfxFiles = [
       "sword_swing", "sword_hit", "heal", "pickup",
       "quest_complete", "player_death", "level_up",
-      "ui_click", "enemy_death", "chat_msg", "error", "footstep"
+      "ui_click", "enemy_death", "chat_msg", "error", "footstep",
+      "casting", "player_hit",
+      "arrow_hit", "bow_shoot", "magic_hit", "staff_swing",
+      "bite_hit", "punch_hit", "punch_swing", "potion_drink"
     ];
 
     this._loaded = false;

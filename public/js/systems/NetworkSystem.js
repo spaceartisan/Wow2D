@@ -115,18 +115,6 @@ export class NetworkSystem {
     this._correctionX = 0;
     this._correctionY = 0;
     this._correctionRate = 0.2; // fraction of error applied per frame
-
-    /* ── Diagnostics ─────────────────────────────────── */
-    this._diagInterval = 3000;  // log every 3 seconds
-    this._diagNext = 0;
-    this._diagLerpHits = 0;     // frames where bracket was found
-    this._diagLerpMisses = 0;   // frames where fallback was used
-    this._diagTooFew = 0;       // entities with < 2 snapshots
-    this._diagTickJitter = [];  // ms between consecutive state msgs
-    this._diagLastStateTime = 0;
-    this._diagCorrections = 0;  // count of server reconciliation corrections
-    this._diagCorrectionDist = 0; // sum of correction magnitudes
-    this._diagSnaps = 0;        // count of hard snaps (large desync)
   }
 
   connect() {
@@ -523,12 +511,6 @@ export class NetworkSystem {
     const tick = msg.tick || (this._serverTick + 1);
     this._serverTick = tick;
 
-    // Track tick arrival jitter for diagnostics
-    if (this._diagLastStateTime > 0) {
-      this._diagTickJitter.push(now - this._diagLastStateTime);
-    }
-    this._diagLastStateTime = now;
-
     // Record tick → client-time mapping for interpolation
     this._tickTimeMap.push({ tick, time: now });
     if (this._tickTimeMap.length > this._tickTimeMapLen) {
@@ -610,13 +592,10 @@ export class NetworkSystem {
             this._correctionX = 0;
             this._correctionY = 0;
             this._predBuffer.length = 0;
-            this._diagSnaps++;
           } else if (errMag > 0.5) {
             // Server disagreed — accumulate smooth correction
             this._correctionX += errX;
             this._correctionY += errY;
-            this._diagCorrections++;
-            this._diagCorrectionDist += errMag;
           }
         } else if (this._predBuffer.length === 0) {
           // No prediction buffer (first connect, map change, etc)
@@ -627,7 +606,6 @@ export class NetworkSystem {
           if (drift > 80) {
             player.x = msg.you.x;
             player.y = msg.you.y;
-            this._diagSnaps++;
           }
         }
       }
@@ -662,7 +640,17 @@ export class NetworkSystem {
       maxHp: msg.enemyMaxHp
     });
     this.game.ui.addMessage(`You strike for ${msg.damage} damage.`);
-    this.game.audio.play("sword_hit");
+
+    // Look up equipped weapon's effects, fall back to playerBase defaults
+    const weapon = this.game.entities.player.equipment?.weapon;
+    const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
+    const playerBase = this.game.entities.player;
+    const hitParticle = weaponDef?.hitParticle || playerBase._baseHitParticle;
+    const hitSfx = weaponDef?.hitSfx || playerBase._baseHitSfx;
+
+    this.game.audio.play(hitSfx);
+    const enemy = this.game.entities.enemies.find(e => e.id === msg.enemyId);
+    if (enemy) this.game.particles.emit(hitParticle, enemy.x, enemy.y);
   }
 
   onEnemyKilled(msg) {
@@ -673,12 +661,22 @@ export class NetworkSystem {
     this.game.combat.clearTarget();
     this.game.ui.addMessage(`Enemy slain! +${msg.xpReward} XP`);
     this.game.audio.play("enemy_death");
+    const dead = this.game.entities.enemies.find(e => e.id === msg.enemyId);
+    if (dead) this.game.particles.emit("death", dead.x, dead.y);
   }
 
   onPlayerDamaged(msg) {
     const player = this.game.entities.player;
     player.hp = msg.hp;
     this.game.ui.addMessage(`${msg.attackerName} hits you for ${msg.damage}.`);
+
+    // Look up the attacking enemy's effects from enemies.json
+    const enemyDef = msg.attackerType ? this.game.data.enemies[msg.attackerType] : null;
+    const hitParticle = enemyDef?.hitParticle || "player_hit";
+    const hitSfx = enemyDef?.hitSfx || "player_hit";
+
+    this.game.audio.play(hitSfx);
+    this.game.particles.emit(hitParticle, player.x, player.y);
   }
 
   onPlayerDied() {
@@ -688,6 +686,7 @@ export class NetworkSystem {
     // Gold penalty is now server-authoritative; don't modify locally
     this.game.ui.addMessage("You died.");
     this.game.audio.play("player_death");
+    this.game.particles.emit("death", player.x, player.y);
   }
 
   onPlayerRespawned(msg) {
@@ -738,6 +737,8 @@ export class NetworkSystem {
     player.mana = msg.mana;
     player.maxMana = msg.maxMana;
     this.game.ui.addMessage(`Minor Heal restores ${msg.healAmount} HP.`);
+    const p = this.game.entities.player;
+    this.game.particles.emit("heal", p.x, p.y);
   }
 
   onChat(msg) {
@@ -771,6 +772,7 @@ export class NetworkSystem {
 
   onMapChanged(msg) {
     this._resetEntities(msg);
+    this.game.particles.clear();
 
     this.game.combat.clearTarget();
 
@@ -812,7 +814,13 @@ export class NetworkSystem {
     } else if (msg.effect === "healMana") {
       this.game.ui.addMessage(`Potion restores ${msg.amount} mana.`);
     }
-    this.game.audio.play("pickup");
+
+    // Look up consumed item's effects from items.json
+    const itemDef = msg.itemId ? this.game.data.items[msg.itemId] : null;
+    const useParticle = itemDef?.useParticle;
+    const useSfx = itemDef?.useSfx;
+    if (useSfx) this.game.audio.play(useSfx);
+    if (useParticle) this.game.particles.emit(useParticle, player.x, player.y);
   }
 
   onSellItemResult(msg) {
@@ -939,10 +947,20 @@ export class NetworkSystem {
 
   onHearthstoneCastStart(msg) {
     this.game.ui.showCastBar(msg.castTime, `Hearthstone: ${msg.destination}`);
+    this.game.audio.play("casting");
+    // Emit casting particles repeatedly while channeling
+    const player = this.game.entities.player;
+    this.game.particles.emit("casting", player.x, player.y);
+    this._castingInterval = setInterval(() => {
+      const p = this.game.entities.player;
+      if (p) this.game.particles.emit("casting", p.x, p.y);
+    }, 250);
   }
 
   onHearthstoneCastCancelled(msg) {
     this.game.ui.hideCastBar();
+    clearInterval(this._castingInterval);
+    this._castingInterval = null;
     if (msg.reason === "damaged") {
       this.game.ui.addMessage("Hearthstone interrupted!");
     } else if (msg.reason === "manual") {
@@ -952,6 +970,8 @@ export class NetworkSystem {
 
   onHearthstoneTeleport(msg) {
     this.game.ui.hideCastBar();
+    clearInterval(this._castingInterval);
+    this._castingInterval = null;
     const player = this.game.entities.player;
     player.hearthstone = msg.hearthstone;
 
@@ -1139,12 +1159,6 @@ export class NetworkSystem {
     const currentTick = this._timeToTick(now);
     const renderTick = currentTick - this._interpTicks;
 
-    // ── Periodic diagnostics ──
-    if (now >= this._diagNext) {
-      this._logDiagnostics(now, currentTick, renderTick);
-      this._diagNext = now + this._diagInterval;
-    }
-
     // ── Enemies ──
     this._interpolateEntities(
       this._enemySnaps, this._latestEnemyMap,
@@ -1198,7 +1212,6 @@ export class NetworkSystem {
 
       if (buf.length < 2) {
         // Not enough snapshots yet — use latest position directly
-        this._diagTooFew++;
         result.push(ent);
         continue;
       }
@@ -1273,10 +1286,8 @@ export class NetworkSystem {
           }
         }
         // else: gap is zero — keep latest position
-        this._diagLerpMisses++;
       } else {
         // Only 1 snapshot — nothing to extrapolate from
-        this._diagLerpMisses++;
       }
 
       result.push(ent);
@@ -1314,57 +1325,5 @@ export class NetworkSystem {
         if (!ids.has(id)) smoothMap.delete(id);
       }
     }
-  }
-
-  /* ── Diagnostics logger ────────────────────────────── */
-
-  _logDiagnostics(now, currentTick, renderTick) {
-    const jitter = this._diagTickJitter;
-    let jitterAvg = 0, jitterMin = 0, jitterMax = 0, jitterStd = 0;
-    if (jitter.length > 0) {
-      jitterMin = Math.min(...jitter);
-      jitterMax = Math.max(...jitter);
-      jitterAvg = jitter.reduce((a, b) => a + b, 0) / jitter.length;
-      const variance = jitter.reduce((s, v) => s + (v - jitterAvg) ** 2, 0) / jitter.length;
-      jitterStd = Math.sqrt(variance);
-    }
-
-    const totalLerp = this._diagLerpHits + this._diagLerpMisses + this._diagTooFew;
-    const lerpPct = totalLerp > 0 ? ((this._diagLerpHits / totalLerp) * 100).toFixed(1) : '—';
-
-    const enemyBufs = [...this._enemySnaps.values()];
-    const playerBufs = [...this._playerSnaps.values()];
-    const avgBuf = (bufs) => bufs.length === 0 ? 0
-      : (bufs.reduce((s, b) => s + b.length, 0) / bufs.length).toFixed(1);
-
-    console.log(
-      `%c[NetDiag]%c  tick=%d  render=%.1f  interpTicks=%d  interpMs=%d\n` +
-      `  tickJitter: avg=%.1fms  min=%.0fms  max=%.0fms  σ=%.1fms  (n=%d)\n` +
-      `  lerp: hits=%d  misses=%d  tooFew=%d  hitRate=%s%%\n` +
-      `  prediction: corrections=%d  avgDist=%.1fpx  snaps=%d  pendingBuf=%d  correction=(%.1f,%.1f)\n` +
-      `  buffers: enemies=%d (avg depth %s)  players=%d (avg depth %s)\n` +
-      `  tickTimeMap entries=%d  serverTick=%d  bufLen=%d`,
-      'color:#d4a943;font-weight:bold', 'color:inherit',
-      this._serverTick, renderTick, this._interpTicks, this._interpTicks * this._tickMs,
-      jitterAvg, jitterMin, jitterMax, jitterStd, jitter.length,
-      this._diagLerpHits, this._diagLerpMisses, this._diagTooFew, lerpPct,
-      this._diagCorrections,
-      this._diagCorrections > 0 ? this._diagCorrectionDist / this._diagCorrections : 0,
-      this._diagSnaps,
-      this._predBuffer.length,
-      this._correctionX, this._correctionY,
-      this._enemySnaps.size, avgBuf(enemyBufs),
-      this._playerSnaps.size, avgBuf(playerBufs),
-      this._tickTimeMap.length, this._serverTick, this._bufLen
-    );
-
-    // Reset counters
-    this._diagLerpHits = 0;
-    this._diagLerpMisses = 0;
-    this._diagTooFew = 0;
-    this._diagTickJitter.length = 0;
-    this._diagCorrections = 0;
-    this._diagCorrectionDist = 0;
-    this._diagSnaps = 0;
   }
 }

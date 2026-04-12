@@ -13,6 +13,8 @@
     "aggroRange": 210,
     "attackRange": 34,
     "attackCooldown": 1.35,
+    "hitParticle": "bite",
+    "hitSfx": "bite_hit",
     "loot": [
       { "itemId": "wolfPelt", "chance": 0.52 },
       { "itemId": "wolfFang", "chance": 0.30 },
@@ -34,6 +36,8 @@
     "aggroRange": 210,
     "attackRange": 34,
     "attackCooldown": 1.35,
+    "hitParticle": "bite",
+    "hitSfx": "bite_hit",
     "loot": [
       { "itemId": "boarTusk", "chance": 0.48 },
       { "itemId": "boarHide", "chance": 0.25 },
@@ -56,6 +60,8 @@
     "aggroRange": 240,
     "attackRange": 36,
     "attackCooldown": 1.2,
+    "hitParticle": "hit_spark",
+    "hitSfx": "sword_hit",
     "loot": [
       { "itemId": "banditBadge", "chance": 0.40 },
       { "itemId": "banditCoin", "chance": 0.30 },

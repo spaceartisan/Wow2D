@@ -8,6 +8,7 @@ import { SpriteManager } from "../systems/SpriteManager.js";
 import { UISystem } from "../systems/UISystem.js";
 import { WorldSystem } from "../systems/WorldSystem.js";
 import { MinimapSystem } from "../systems/MinimapSystem.js";
+import { ParticleSystem } from "../systems/ParticleSystem.js";
 import { clamp } from "../utils.js";
 
 export class Game {
@@ -69,6 +70,9 @@ export class Game {
     this.combat = new CombatSystem(this);
     this.ui = new UISystem(this);
     this.minimap = new MinimapSystem(this);
+
+    this.particles = new ParticleSystem(this);
+    await this.particles.load();
 
     // Init audio (needs user gesture — canvas click counts)
     this.audio.init();
@@ -172,6 +176,7 @@ export class Game {
 
     this.entities.update(dt);
     this.combat.update(dt);
+    this.particles.update(dt);
     this.checkPortals();
     this.checkStairs(dt);
 
@@ -380,6 +385,7 @@ export class Game {
     this.world.drawTerrain(ctx, cam, this.canvas, this.sprites);
     this.world.drawObjects(ctx, cam, this.canvas, this.sprites);
     this.entities.draw(ctx, cam, this.sprites);
+    this.particles.draw(ctx, cam);
     this.drawInteractionPrompt();
 
     // Maps — minimap always, full map when toggled

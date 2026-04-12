@@ -28,6 +28,7 @@
       <button class="tab" data-tab="quests">Quests</button>
       <button class="tab" data-tab="playerBase">Player Base</button>
       <button class="tab" data-tab="props">Props</button>
+      <button class="tab" data-tab="particles">Particles</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -324,6 +325,39 @@
                     <input id="itemPermanentInput" type="checkbox" />
                     <span>Permanent</span>
                   </label>
+                  <div class="split-grid three-columns type-field" data-type-field="hitParticle">
+                    <label class="field">
+                      <span>Hit Particle <span class="subtle">(preset)</span></span>
+                      <input id="itemHitParticleInput" type="text" placeholder="e.g. hit_spark" />
+                    </label>
+                    <div class="field">
+                      <span class="field-label">Hit SFX</span>
+                      <div class="sfx-field">
+                        <input id="itemHitSfxInput" type="text" placeholder="e.g. sword_hit" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="itemHitSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <span class="field-label">Swing SFX</span>
+                      <div class="sfx-field">
+                        <input id="itemSwingSfxInput" type="text" placeholder="e.g. sword_swing" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="itemSwingSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="split-grid two-columns type-field" data-type-field="useParticle">
+                    <label class="field">
+                      <span>Use Particle <span class="subtle">(preset)</span></span>
+                      <input id="itemUseParticleInput" type="text" placeholder="e.g. heal" />
+                    </label>
+                    <div class="field">
+                      <span class="field-label">Use SFX</span>
+                      <div class="sfx-field">
+                        <input id="itemUseSfxInput" type="text" placeholder="e.g. potion_drink" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="itemUseSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
                 <section class="inline-json">
@@ -456,6 +490,25 @@
                   <label class="field"><span>Attack Range</span><input id="enemyAttackRangeInput" type="number" step="1" /></label>
                   <label class="field"><span>Attack Cooldown (s)</span><input id="enemyAttackCooldownInput" type="number" step="0.01" /></label>
                 </div>
+
+                <section class="field-group loot-editor-group">
+                  <div class="inline-json-header">
+                    <h4>FX &amp; Audio <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0">(optional)</span></h4>
+                  </div>
+                  <div class="split-grid two-columns">
+                    <label class="field">
+                      <span>Hit Particle <span class="subtle">(preset name)</span></span>
+                      <input id="enemyHitParticleInput" type="text" placeholder="e.g. bite" />
+                    </label>
+                    <div class="field">
+                      <span class="field-label">Hit SFX <span class="subtle">(sfx key)</span></span>
+                      <div class="sfx-field">
+                        <input id="enemyHitSfxInput" type="text" placeholder="e.g. bite_hit" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="enemyHitSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
                 <section class="field-group loot-editor-group">
                   <div class="inline-json-header">
@@ -852,6 +905,30 @@
                   </div>
                 </div>
 
+                <div class="playerbase-stat-group">
+                  <div class="playerbase-stat-label">Unarmed FX &amp; Audio <span style="opacity:0.6;font-weight:400;text-transform:none;letter-spacing:0">(fallback when no weapon equipped)</span></div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Hit Particle <span class="subtle">(preset)</span></span>
+                      <input id="pbHitParticleInput" type="text" placeholder="e.g. punch" />
+                    </label>
+                    <div class="field">
+                      <span class="field-label">Hit SFX</span>
+                      <div class="sfx-field">
+                        <input id="pbHitSfxInput" type="text" placeholder="e.g. punch_hit" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="pbHitSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <span class="field-label">Swing SFX</span>
+                      <div class="sfx-field">
+                        <input id="pbSwingSfxInput" type="text" placeholder="e.g. punch_swing" />
+                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="pbSwingSfxInput" title="Preview sound">▶</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <section class="inline-json">
                   <div class="inline-json-header">
                     <h4>JSON Preview</h4>
@@ -996,6 +1073,198 @@
                 <span id="propValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="propDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="particles">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Particles</h2>
+            <div class="inline-actions">
+              <button id="addParticleButton" class="button secondary small">Add</button>
+              <button id="duplicateParticleButton" class="button secondary small">Duplicate</button>
+              <button id="deleteParticleButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="particleSearchInput" type="text" placeholder="Find preset name" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Presets</span>
+                <strong id="particleEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Additive</span>
+                <strong id="particleAdditiveCount">0</strong>
+              </div>
+            </div>
+            <div id="particleList" class="tile-list" role="listbox" aria-label="Particle preset entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Particles Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/particles.json</code> — no sprites needed, drawn procedurally by <code>ParticleSystem</code></p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateParticlesButton" class="button secondary">Validate</button>
+              <button id="reloadParticlesButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Preset</h3>
+                <span id="selectedParticleLabel" class="mono subtle">Nothing selected</span>
+              </div>
+
+              <div id="particleEmptyState" class="empty-state">
+                <p>Select a preset from the list to begin editing.</p>
+              </div>
+
+              <form id="particleForm" class="editor-form hidden" autocomplete="off">
+                <label class="field">
+                  <span>Preset Name</span>
+                  <input id="particleIdInput" type="text" />
+                </label>
+
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Blend Mode</span>
+                    <select id="particleBlendModeInput">
+                      <option value="lighter">lighter (additive glow)</option>
+                      <option value="source-over">source-over (normal)</option>
+                      <option value="multiply">multiply</option>
+                      <option value="screen">screen</option>
+                    </select>
+                  </label>
+                  <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                    <input id="particleFadeOutInput" type="checkbox" />
+                    <span>Fade Out</span>
+                  </label>
+                </div>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Spawn</h4></div>
+                  <div class="split-grid four-columns">
+                    <label class="field">
+                      <span>Count Min</span>
+                      <input id="particleCountMinInput" type="number" step="1" min="1" />
+                    </label>
+                    <label class="field">
+                      <span>Count Max</span>
+                      <input id="particleCountMaxInput" type="number" step="1" min="1" />
+                    </label>
+                    <label class="field">
+                      <span>Lifetime Min (s)</span>
+                      <input id="particleLifetimeMinInput" type="number" step="0.01" min="0" />
+                    </label>
+                    <label class="field">
+                      <span>Lifetime Max (s)</span>
+                      <input id="particleLifetimeMaxInput" type="number" step="0.01" min="0" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Motion</h4></div>
+                  <div class="split-grid four-columns">
+                    <label class="field">
+                      <span>Speed Min (px/s)</span>
+                      <input id="particleSpeedMinInput" type="number" step="1" />
+                    </label>
+                    <label class="field">
+                      <span>Speed Max (px/s)</span>
+                      <input id="particleSpeedMaxInput" type="number" step="1" />
+                    </label>
+                    <label class="field">
+                      <span>Angle Min (°)</span>
+                      <input id="particleAngleMinInput" type="number" step="1" />
+                    </label>
+                    <label class="field">
+                      <span>Angle Max (°)</span>
+                      <input id="particleAngleMaxInput" type="number" step="1" />
+                    </label>
+                  </div>
+                  <div class="split-grid two-columns">
+                    <label class="field">
+                      <span>Gravity (px/s²) <span class="subtle">negative = float up</span></span>
+                      <input id="particleGravityInput" type="number" step="1" />
+                    </label>
+                    <label class="field">
+                      <span>Friction <span class="subtle">0–1, e.g. 0.95</span></span>
+                      <input id="particleFrictionInput" type="number" step="0.01" min="0" max="1" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Size</h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Size Min (px)</span>
+                      <input id="particleSizeMinInput" type="number" step="0.5" min="0" />
+                    </label>
+                    <label class="field">
+                      <span>Size Max (px)</span>
+                      <input id="particleSizeMaxInput" type="number" step="0.5" min="0" />
+                    </label>
+                    <label class="field">
+                      <span>Size End <span class="subtle">0 = shrink away</span></span>
+                      <input id="particleSizeEndInput" type="number" step="0.5" min="0" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header row-between">
+                    <h4>Colors <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">Each particle picks one at random</span></h4>
+                    <button id="particleColorAddButton" type="button" class="button secondary small">Add Color</button>
+                  </div>
+                  <div id="particleColorEditor" class="particle-color-editor"></div>
+                  <p id="particleColorEmptyState" class="subtle linked-empty">No colors yet.</p>
+                  <div id="particleColorSwatchRow" class="particle-color-swatch-row"></div>
+                </section>
+
+                <section class="particle-preview-section">
+                  <div class="inline-json-header row-between">
+                    <h4>Live Preview</h4>
+                    <div class="inline-actions">
+                      <button id="particleEmitButton" type="button" class="button secondary small">Emit</button>
+                      <button id="particleClearButton" type="button" class="button secondary small">Clear</button>
+                    </div>
+                  </div>
+                  <div class="particle-preview-wrap">
+                    <canvas id="particlePreviewCanvas" class="particle-preview-canvas"></canvas>
+                    <span class="particle-preview-hint">Auto-emits every 1.2 s · click canvas to burst</span>
+                  </div>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="particleJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="particleValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="particleDiagnosticsList" class="diagnostics-list empty-diagnostics">
                 <p>No messages yet.</p>
               </div>
             </section>
