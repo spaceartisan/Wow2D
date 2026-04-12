@@ -53,7 +53,7 @@ export class AudioManager {
   async _loadSfx() {
     const promises = this._sfxFiles.map(async (name) => {
       try {
-        const resp = await fetch(`assets/sfx/${name}.wav`);
+        const resp = await fetch(`/assets/sfx/${name}.wav`);
         const arrBuf = await resp.arrayBuffer();
         this._sfxBuffers[name] = await this.ctx.decodeAudioData(arrBuf);
       } catch (e) {
@@ -83,13 +83,13 @@ export class AudioManager {
     this.stopBgm();
 
     this._currentBgm = name;
-    const audio = new Audio(`assets/bgm/${name}.mp3`);
+    const audio = new Audio(`/assets/bgm/${name}.mp3`);
     audio.loop = true;
 
     // Fall back to .wav if .mp3 fails to load
     audio.addEventListener('error', () => {
       if (audio !== this._bgmElement) return;
-      audio.src = `assets/bgm/${name}.wav`;
+      audio.src = `/assets/bgm/${name}.wav`;
     }, { once: true });
 
     this._bgmElement = audio;

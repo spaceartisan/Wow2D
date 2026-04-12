@@ -276,11 +276,12 @@ export class MinimapSystem {
 
     // ── Legend ──
     const lx = ox + 6;
-    let ly = oy + drawH - 54;
+    let ly = oy + drawH - 68;
     ctx.font = "10px Trebuchet MS";
     ctx.textAlign = "left";
     const legend = [
       ["#ffffff", "● You"],
+      ["#ff4444", "● Enemy"],
       ["#4488ff", "◆ Portal"],
       ["#44dd66", "◆ Waystone"],
       ["#ffcc00", "! Available"],

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="#1a160d" stroke="#8c7449" stroke-width="3"/>
+  <!-- Inner glow -->
+  <circle cx="32" cy="32" r="24" fill="none" stroke="#5c4d30" stroke-width="1"/>
+  <!-- Sword blade -->
+  <path d="M32 8 L35 32 L32 52 L29 32 Z" fill="#c0c8d8" stroke="#8899aa" stroke-width="0.5"/>
+  <!-- Blade highlight -->
+  <path d="M32 8 L33 32 L32 50 Z" fill="#dde4f0" opacity="0.6"/>
+  <!-- Crossguard -->
+  <path d="M22 33 Q27 30 32 32 Q37 30 42 33 Q37 36 32 34 Q27 36 22 33 Z" fill="#d4a943" stroke="#a07828" stroke-width="0.5"/>
+  <!-- Grip -->
+  <rect x="30" y="34" width="4" height="10" rx="1" fill="#6b3a2a"/>
+  <rect x="30.5" y="35" width="3" height="2" rx="0.5" fill="#8c5535" opacity="0.6"/>
+  <rect x="30.5" y="39" width="3" height="2" rx="0.5" fill="#8c5535" opacity="0.6"/>
+  <!-- Pommel -->
+  <circle cx="32" cy="46" r="3" fill="#d4a943" stroke="#a07828" stroke-width="0.5"/>
+  <circle cx="32" cy="46" r="1.2" fill="#ffd866"/>
+  <!-- Blade tip glow -->
+  <circle cx="32" cy="10" r="3" fill="#ffd866" opacity="0.25"/>
+</svg>

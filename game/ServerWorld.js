@@ -195,7 +195,7 @@ class ServerWorld {
   constructor() {
     // Load all maps
     this.maps = new Map();       // mapId → { data, collision, enemies[], drops[] }
-    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern", "southmere"]) {
+    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern", "southmere", "stonegate"]) {
       const data = loadMap(mapId);
       const collision = new CollisionMap(data);
       const enemies = this._createEnemiesForMap(data, collision);
@@ -204,7 +204,7 @@ class ServerWorld {
 
     this.defaultMapId = "eldengrove";
     this.players = new Map();   // playerId → PlayerState
-    this.tickRate = 20;         // Hz
+    this.tickRate = 60;         // Hz
     this.tickInterval = null;
     this.lastTick = Date.now();
     this.tickCount = 0;          // monotonic counter sent with every state
@@ -473,6 +473,9 @@ class ServerWorld {
     const x = Number(msg.x);
     const y = Number(msg.y);
     const floor = Math.max(0, Math.min(10, Number(msg.floor) || 0));
+
+    // Track sequence for client-side prediction reconciliation
+    if (msg.seq !== undefined) player.lastAckSeq = msg.seq;
 
     // basic validation: don't teleport too far per tick
     // Allow larger jump when floor changes (stair teleport to partner stairs)
@@ -1787,19 +1790,26 @@ class ServerWorld {
   /* ── broadcasting ───────────────────────────────────── */
 
   broadcastWorldState() {
-    // Group players by map for efficient per-map snapshots
+    // Cache per-map snapshots so we build each only once
+    const enemyCache = new Map();   // mapId → enemy snapshot
+    const playerCache = new Map();  // mapId → player snapshot
+    const dropCache = new Map();    // mapId → drop snapshot
+
     for (const [, player] of this.players) {
       const mapId = player.mapId;
-      const enemies = this.enemySnapshot(mapId);
-      const players = this.playersOnMap(mapId);
-      const drops = this.dropsSnapshot(mapId);
+
+      if (!enemyCache.has(mapId)) {
+        enemyCache.set(mapId, this.enemySnapshot(mapId));
+        playerCache.set(mapId, this.playersOnMap(mapId));
+        dropCache.set(mapId, this.dropsSnapshot(mapId));
+      }
 
       this.send(player.ws, {
         type: "state",
         tick: this.tickCount,
-        enemies,
-        players,
-        drops,
+        enemies: enemyCache.get(mapId),
+        players: playerCache.get(mapId),
+        drops: dropCache.get(mapId),
         you: {
           id: player.id,
           hp: player.hp,
@@ -1809,6 +1819,7 @@ class ServerWorld {
           dead: player.dead,
           x: player.x,
           y: player.y,
+          ackSeq: player.lastAckSeq || 0,
           gold: player.gold || 0,
           level: player.level,
           xp: player.xp || 0,

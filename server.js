@@ -248,7 +248,13 @@ const startServer = (port) => {
         classCounts,
         totalGold,
         mapPopulation,
-        maps: Array.from(world.maps.keys())
+        maps: Array.from(world.maps.keys()),
+        mapSpawns: Object.fromEntries(
+          Array.from(world.maps.entries()).map(([id, m]) => {
+            const sp = m.data.spawnPoint || [0, 0];
+            return [id, { tx: sp[0], ty: sp[1] }];
+          })
+        )
       });
     });
 

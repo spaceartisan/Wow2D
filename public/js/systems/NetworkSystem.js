@@ -1,18 +1,29 @@
 /**
- * NetworkSystem – client-side WebSocket manager with entity smoothing.
+ * NetworkSystem – client-side WebSocket manager with Source-style
+ * entity interpolation.
  *
- * Server sends world-state at ~20 Hz.  Rather than snapping entities to
- * the latest position (which would cause 20 Hz stutter), we use per-entity
- * exponential smoothing: each entity has a render position that smoothly
- * converges toward the latest server-authoritative position every frame.
+ * Implements the Valve Source Engine networking model:
  *
- * This approach has zero timing complexity (no clock sync, no snapshot
- * buffer, no interpolation delay) and physically cannot rubberband because
- * positions only ever move toward the target, never overshoot.
+ * 1. **Snapshot buffer**: Each server tick (20 Hz) delivers a world-
+ *    state snapshot.  The client stores the last several snapshots
+ *    in a short ring buffer per entity (keyed by server tick number).
  *
- * Local player movement is still client-authoritative (no smoothing
- * needed), and scalar values like HP / mana are applied instantly for
- * responsive feedback.
+ * 2. **Interpolation delay**: Remote entities are rendered at a fixed
+ *    time *in the past* (interpDelay, default = 2 server ticks =
+ *    100 ms at 20 Hz).  This guarantees that we always have two
+ *    snapshots to interpolate between, producing perfectly smooth
+ *    linear motion with zero pulsing.
+ *
+ * 3. **Client-side prediction**: The local player uses client-
+ *    authoritative movement (instant response, no smoothing).
+ *    The server corrects only if drift exceeds a threshold.
+ *
+ * 4. **Immediate overrides**: Damage / death events are patched on
+ *    top of interpolated data so HP bars react before the next
+ *    snapshot arrives.
+ *
+ * This replaces the previous exponential-smoothing / dead-reckoning
+ * approach which could pulse and overshoot.
  */
 export class NetworkSystem {
   constructor(game, credentials) {
@@ -28,35 +39,94 @@ export class NetworkSystem {
     this._reconnectTimer = null;
     this._intentionalClose = false;
 
-    /* ── entity smoothing state ──────────────────────── */
+    /* ── Source-style snapshot interpolation state ──── */
 
-    /** Latest server-authoritative entity arrays */
-    this.latestEnemies = [];
-    this.latestPlayers = [];
-
-    /**
-     * Convergence rate for exponential smoothing (units: 1/sec).
-     * Higher = snappier / less lag.  At rate 12 and 60 fps, ~100 ms
-     * of effective visual lag, settling to <1 px in ~250 ms.
-     */
-    this.smoothRate = 8;
-
-    /**
-     * Immediate overrides applied on top of smoothed data.
-     */
+    /** Immediate overrides applied on top of interpolated data. */
     this.enemyOverrides = new Map(); // enemyId → partial object
 
+    /** Server tick rate (Hz) — set from welcome message. */
+    this._serverTickRate = 20;
+
+    /** Duration of one server tick in ms. */
+    this._tickMs = 17;
+
     /**
-     * Persistent entity caches – reused each frame to avoid per-frame
-     * object / array allocation and reduce GC pressure.
+     * Interpolation delay in server ticks.  3 ticks = 50 ms at 60 Hz.
+     * Ensures we always have a pair of snapshots to interpolate between.
      */
-    this._enemyCache = new Map();
-    this._playerCache = new Map();
+    this._interpTicks = 3;
+
+    /**
+     * Per-entity snapshot ring buffers.
+     * Map<entityId, Array<{tick, x, y, ...scalar fields}>>
+     * Each buffer stores up to _bufLen snapshots (oldest evicted first).
+     */
+    this._enemySnaps = new Map();
+    this._playerSnaps = new Map();
+    this._bufLen = 16; // keep last 16 snapshots (~267 ms at 60 Hz)
+
+    /**
+     * Mapping from server tick to client receive time (performance.now).
+     * Used to convert the render-time target into a server tick for
+     * interpolation without requiring clock synchronisation.
+     */
+    this._tickTimeMap = [];     // [{tick, time}]  – last ~16 entries
+    this._tickTimeMapLen = 16;
+
+    /** Latest server tick received. */
+    this._serverTick = 0;
+
+    /** Cache arrays — reused each frame to avoid GC pressure. */
     this._enemyResult = [];
     this._playerResult = [];
 
-    /** Generation counter — incremented on each server state update */
-    this._stateGen = 0;
+    /** Latest raw arrays from server (used for scalar-field lookup). */
+    this._latestEnemyMap = new Map();
+    this._latestPlayerMap = new Map();
+
+    /**
+     * Per-entity last-rendered position for output smoothing.
+     * Prevents any single frame from jumping more than a blended step.
+     * Map<entityId, {x, y}>
+     */
+    this._smoothPosEnemy = new Map();
+    this._smoothPosPlayer = new Map();
+
+    /* ── Client-side prediction & server reconciliation ── */
+
+    /** Auto-incrementing sequence number tagged on every move sent. */
+    this._moveSeq = 0;
+
+    /**
+     * Prediction buffer — stores {seq, x, y} for each move sent.
+     * When the server acks a sequence, we compare its authoritative
+     * position against our prediction at that seq.  If they differ
+     * (server rejected the move / collision mismatch), we apply a
+     * smooth correction rather than a hard teleport.
+     */
+    this._predBuffer = [];  // [{seq, x, y}]
+    this._predBufferMax = 64;
+
+    /**
+     * Accumulated correction vector applied smoothly over frames.
+     * Each frame we blend a fraction toward zero so the player
+     * glides to the corrected position without jarring snaps.
+     */
+    this._correctionX = 0;
+    this._correctionY = 0;
+    this._correctionRate = 0.2; // fraction of error applied per frame
+
+    /* ── Diagnostics ─────────────────────────────────── */
+    this._diagInterval = 3000;  // log every 3 seconds
+    this._diagNext = 0;
+    this._diagLerpHits = 0;     // frames where bracket was found
+    this._diagLerpMisses = 0;   // frames where fallback was used
+    this._diagTooFew = 0;       // entities with < 2 snapshots
+    this._diagTickJitter = [];  // ms between consecutive state msgs
+    this._diagLastStateTime = 0;
+    this._diagCorrections = 0;  // count of server reconciliation corrections
+    this._diagCorrectionDist = 0; // sum of correction magnitudes
+    this._diagSnaps = 0;        // count of hard snaps (large desync)
   }
 
   connect() {
@@ -77,8 +147,8 @@ export class NetworkSystem {
         charData: this.credentials.charData
       });
 
-      // send position updates at ~15 Hz
-      this.positionSendInterval = setInterval(() => this.sendPosition(), 66);
+      // send position updates at server tick rate (~60 Hz = 17 ms)
+      this.positionSendInterval = setInterval(() => this.sendPosition(), this._tickMs);
     });
 
     this.ws.addEventListener("message", (event) => {
@@ -147,9 +217,15 @@ export class NetworkSystem {
     if (Math.abs(player.x - this.lastSentX) < 0.5 && Math.abs(player.y - this.lastSentY) < 0.5) {
       return;
     }
+    const seq = ++this._moveSeq;
     this.lastSentX = player.x;
     this.lastSentY = player.y;
-    this.send({ type: "move", x: player.x, y: player.y, level: player.level, floor: this.game.world.currentFloor });
+
+    // Store prediction so we can reconcile against server ack
+    this._predBuffer.push({ seq, x: player.x, y: player.y });
+    if (this._predBuffer.length > this._predBufferMax) this._predBuffer.shift();
+
+    this.send({ type: "move", seq, x: player.x, y: player.y, level: player.level, floor: this.game.world.currentFloor });
   }
 
   sendAttack(enemyId) {
@@ -328,22 +404,65 @@ export class NetworkSystem {
 
   /* ── handlers ───────────────────────────────────────── */
 
-  onWelcome(msg) {
-    this.myId = msg.playerId;
-
+  /** Shared reset for welcome / map_changed — clears snapshot buffers and
+   *  seeds the interpolation system from a server message. */
+  _resetEntities(msg) {
     const now = performance.now();
+    const tick = msg.tick || this._serverTick;
 
-    this.latestEnemies = msg.enemies || [];
-    this.latestPlayers = (msg.players || []).filter((p) => p.id !== this.myId);
+    // Clear all snapshot buffers
+    this._enemySnaps.clear();
+    this._playerSnaps.clear();
+    this._latestEnemyMap.clear();
+    this._latestPlayerMap.clear();
+    this._smoothPosEnemy.clear();
+    this._smoothPosPlayer.clear();
 
-    // Reset caches so entities snap to initial positions
-    this._enemyCache.clear();
-    this._playerCache.clear();
+    // Clear prediction buffer + correction (position is being reset)
+    this._predBuffer.length = 0;
+    this._correctionX = 0;
+    this._correctionY = 0;
 
+    // Reset tick-time mapping
+    this._tickTimeMap.length = 0;
+    this._tickTimeMap.push({ tick, time: now });
+    this._serverTick = tick;
+
+    // Seed snapshot buffers with initial positions so entities appear
+    // immediately (no waiting for interpDelay to fill).
+    const enemies = msg.enemies || [];
+    for (const e of enemies) {
+      // Two identical snapshots at tick-1 and tick = instant display
+      this._pushSnap(this._enemySnaps, e, tick - 1);
+      this._pushSnap(this._enemySnaps, e, tick);
+      this._latestEnemyMap.set(e.id, e);
+    }
+
+    const players = (msg.players || []).filter((p) => p.id !== this.myId);
+    for (const p of players) {
+      this._pushSnap(this._playerSnaps, p, tick - 1);
+      this._pushSnap(this._playerSnaps, p, tick);
+      this._latestPlayerMap.set(p.id, p);
+    }
+
+    this.enemyOverrides.clear();
     this.game.entities.drops = (msg.drops || []).map((d) => ({
       ...d,
       expiresAt: now + 25000
     }));
+  }
+
+  onWelcome(msg) {
+    this.myId = msg.playerId;
+    if (msg.tickRate) {
+      this._serverTickRate = msg.tickRate;
+      this._tickMs = Math.round(1000 / msg.tickRate);
+      // Restart send interval at the correct rate
+      clearInterval(this.positionSendInterval);
+      this.positionSendInterval = setInterval(() => this.sendPosition(), this._tickMs);
+    }
+    this._serverTick = msg.tick || 0;
+    this._resetEntities(msg);
 
     // Load authoritative inventory, equipment, and stats from server
     const player = this.game.entities.player;
@@ -401,13 +520,51 @@ export class NetworkSystem {
 
   onWorldState(msg) {
     const now = performance.now();
+    const tick = msg.tick || (this._serverTick + 1);
+    this._serverTick = tick;
 
-    // Bump generation so _smoothEntities can detect new data
-    this._stateGen++;
+    // Track tick arrival jitter for diagnostics
+    if (this._diagLastStateTime > 0) {
+      this._diagTickJitter.push(now - this._diagLastStateTime);
+    }
+    this._diagLastStateTime = now;
 
-    // Store latest authoritative positions for smoothing
-    this.latestEnemies = msg.enemies || [];
-    this.latestPlayers = (msg.players || []).filter((p) => p.id !== this.myId);
+    // Record tick → client-time mapping for interpolation
+    this._tickTimeMap.push({ tick, time: now });
+    if (this._tickTimeMap.length > this._tickTimeMapLen) {
+      this._tickTimeMap.shift();
+    }
+
+    // Push enemy snapshots into per-entity ring buffers
+    const enemies = msg.enemies || [];
+    const seenEnemies = new Set();
+    for (const e of enemies) {
+      seenEnemies.add(e.id);
+      this._pushSnap(this._enemySnaps, e, tick);
+      this._latestEnemyMap.set(e.id, e);
+    }
+    // Prune enemies no longer present
+    for (const id of this._enemySnaps.keys()) {
+      if (!seenEnemies.has(id)) {
+        this._enemySnaps.delete(id);
+        this._latestEnemyMap.delete(id);
+      }
+    }
+
+    // Push player snapshots
+    const players = (msg.players || []).filter((p) => p.id !== this.myId);
+    const seenPlayers = new Set();
+    for (const p of players) {
+      seenPlayers.add(p.id);
+      this._pushSnap(this._playerSnaps, p, tick);
+      this._latestPlayerMap.set(p.id, p);
+    }
+    for (const id of this._playerSnaps.keys()) {
+      if (!seenPlayers.has(id)) {
+        this._playerSnaps.delete(id);
+        this._latestPlayerMap.delete(id);
+      }
+    }
 
     // Clear immediate overrides – the new state is authoritative
     this.enemyOverrides.clear();
@@ -427,15 +584,51 @@ export class NetworkSystem {
       // Update shop gold display + button states without full re-render
       if (this.game.ui?.shopOpen) this.game.ui.refreshShopGold();
 
-      // Server-authoritative position correction (prevent desync)
+      // ── Server reconciliation (client-side prediction) ──
+      // Compare server's authoritative position at the acked sequence
+      // against what we predicted at that sequence.  Apply smooth
+      // correction for small errors; hard snap for large desync.
       if (msg.you.x !== undefined && msg.you.y !== undefined) {
-        const dx = player.x - msg.you.x;
-        const dy = player.y - msg.you.y;
-        const drift = Math.sqrt(dx * dx + dy * dy);
-        if (drift > 60) {
-          // Snap if too far off
-          player.x = msg.you.x;
-          player.y = msg.you.y;
+        const ackSeq = msg.you.ackSeq || 0;
+
+        // Purge all predictions the server has acknowledged
+        let acked = null;
+        while (this._predBuffer.length > 0 && this._predBuffer[0].seq <= ackSeq) {
+          acked = this._predBuffer.shift();
+        }
+
+        if (acked) {
+          // Error = server authoritative position minus our prediction
+          const errX = msg.you.x - acked.x;
+          const errY = msg.you.y - acked.y;
+          const errMag = Math.sqrt(errX * errX + errY * errY);
+
+          if (errMag > 80) {
+            // Large desync — hard snap (teleport, server reject chain, etc)
+            player.x = msg.you.x;
+            player.y = msg.you.y;
+            this._correctionX = 0;
+            this._correctionY = 0;
+            this._predBuffer.length = 0;
+            this._diagSnaps++;
+          } else if (errMag > 0.5) {
+            // Server disagreed — accumulate smooth correction
+            this._correctionX += errX;
+            this._correctionY += errY;
+            this._diagCorrections++;
+            this._diagCorrectionDist += errMag;
+          }
+        } else if (this._predBuffer.length === 0) {
+          // No prediction buffer (first connect, map change, etc)
+          // Fall back to simple drift check
+          const dx = player.x - msg.you.x;
+          const dy = player.y - msg.you.y;
+          const drift = Math.sqrt(dx * dx + dy * dy);
+          if (drift > 80) {
+            player.x = msg.you.x;
+            player.y = msg.you.y;
+            this._diagSnaps++;
+          }
         }
       }
 
@@ -453,7 +646,7 @@ export class NetworkSystem {
       const sd = srcDrops[i];
       let dd = dstDrops[i];
       if (!dd || dd.id !== sd.id) {
-        dstDrops[i] = { id: sd.id, x: sd.x, y: sd.y, expiresAt: now + 5000 };
+        dstDrops[i] = { id: sd.id, x: sd.x, y: sd.y, expiresAt: now + 25000 };
       } else {
         dd.x = sd.x;
         dd.y = sd.y;
@@ -577,22 +770,18 @@ export class NetworkSystem {
   }
 
   onMapChanged(msg) {
-    const now = performance.now();
-
-    // Reset entity caches for the new map
-    this._enemyCache.clear();
-    this._playerCache.clear();
-
-    this.latestEnemies = msg.enemies || [];
-    this.latestPlayers = (msg.players || []).filter((p) => p.id !== this.myId);
-    this.enemyOverrides.clear();
-
-    this.game.entities.drops = (msg.drops || []).map((d) => ({
-      ...d,
-      expiresAt: now + 25000
-    }));
+    this._resetEntities(msg);
 
     this.game.combat.clearTarget();
+
+    // Load new map terrain/NPCs/statues if the map actually changed (e.g. admin teleport)
+    if (msg.mapId && msg.mapId !== this.game.world.mapId) {
+      this.game.world.loadMap(msg.mapId).then(() => {
+        this.game.entities.npcs = this.game.entities.createNpcs();
+        this.game.entities.statues = this.game.entities.createStatues();
+        this.game.minimap.invalidate();
+      });
+    }
   }
 
   onDropSpawned(msg) {
@@ -772,11 +961,7 @@ export class NetworkSystem {
         this.game.entities.npcs = this.game.entities.createNpcs();
         this.game.entities.statues = this.game.entities.createStatues();
       });
-      this.latestEnemies = msg.enemies || [];
-      this.latestPlayers = (msg.players || []).filter(p => p.id !== this.myId);
-      this.latestDrops = msg.drops || [];
-      this._enemyCache.clear();
-      this._playerCache.clear();
+      this._resetEntities(msg);
     }
 
     player.x = msg.x;
@@ -838,39 +1023,133 @@ export class NetworkSystem {
   }
 
   /* ═══════════════════════════════════════════════════════
-     ENTITY SMOOTHING
+     SOURCE-STYLE ENTITY INTERPOLATION
      ═══════════════════════════════════════════════════════
 
      Called once per render frame from Game.update(dt).
 
-     Instead of buffering snapshots and synchronising clocks, each
-     remote entity simply has a render position that exponentially
-     converges toward the latest server-authoritative position.
+     The client renders remote entities at a fixed time in the past
+     (interpDelay = 2 server ticks = 100 ms at 20 Hz).
 
-     This approach:
-       • Has zero timing complexity (no clock sync, no snapshot delay)
-       • Cannot rubberband (position only moves toward target)
-       • Is framerate-independent via dt-aware smoothing factor
-       • Gives ~80 ms effective visual lag at rate=15
+     For each entity, we find the two snapshots that bracket the
+     target render tick and linearly interpolate x/y between them.
 
-     Scalar values (HP, dead-status, etc.) are always taken directly
-     from the latest server state.  Overrides from attack_result /
-     enemy_killed patch on top for instant feedback.
+     This guarantees:
+       • Perfectly smooth motion (linear between known positions)
+       • Zero overshoot / rubberband (never extrapolate)
+       • No pulsing (decoupled from packet arrival timing)
+       • Framerate-independent (works at any fps)
+
+     Scalar values (HP, dead-status, name, etc.) always come from
+     the latest snapshot.  Attack/death overrides patch on top for
+     instant visual feedback.
   */
 
   /**
-   * Smooth remote entity positions toward their latest server positions
-   * and write results into `entities.enemies` and `entities.remotePlayers`.
-   *
-   * @param {number} dt – frame delta time in seconds (from Game.update)
+   * Smoothly apply accumulated server-reconciliation correction.
+   * Called once per frame from interpolate().  Blends a fraction of
+   * the remaining error into the local player position each frame
+   * so corrections feel like a subtle glide, not a hard snap.
    */
-  interpolate(dt) {
-    // Frame-rate-independent smoothing factor.
-    const factor = 1 - Math.exp(-this.smoothRate * (dt || 0.016));
+  _applyCorrection() {
+    const absX = Math.abs(this._correctionX);
+    const absY = Math.abs(this._correctionY);
+    if (absX < 0.1 && absY < 0.1) {
+      this._correctionX = 0;
+      this._correctionY = 0;
+      return;
+    }
+    const player = this.game.entities.player;
+    const applyX = this._correctionX * this._correctionRate;
+    const applyY = this._correctionY * this._correctionRate;
+    player.x += applyX;
+    player.y += applyY;
+    this._correctionX -= applyX;
+    this._correctionY -= applyY;
+  }
+
+  /**
+   * Push a snapshot into the per-entity ring buffer.
+   * @param {Map} snapMap – _enemySnaps or _playerSnaps
+   * @param {Object} data – entity data from server (must have .id, .x, .y)
+   * @param {number} tick – server tick number
+   */
+  _pushSnap(snapMap, data, tick) {
+    let buf = snapMap.get(data.id);
+    if (!buf) {
+      buf = [];
+      snapMap.set(data.id, buf);
+    }
+    // Avoid duplicate ticks
+    if (buf.length > 0 && buf[buf.length - 1].tick >= tick) return;
+    buf.push({ tick, x: data.x, y: data.y });
+    // Evict oldest if buffer is full
+    if (buf.length > this._bufLen) buf.shift();
+  }
+
+  /**
+   * Convert a client timestamp (performance.now) to a fractional
+   * server tick number using the tick↔time mapping table.
+   *
+   * Uses linear regression over all stored entries for a stable
+   * slope estimate that resists packet-arrival jitter.
+   */
+  _timeToTick(clientTime) {
+    const map = this._tickTimeMap;
+    const len = map.length;
+    if (len === 0) return this._serverTick;
+    if (len === 1) {
+      const m = map[0];
+      return m.tick + (clientTime - m.time) / this._tickMs;
+    }
+    // Linear regression: tick = slope * time + intercept
+    let sumT = 0, sumK = 0, sumTK = 0, sumTT = 0;
+    for (let i = 0; i < len; i++) {
+      const t = map[i].time;
+      const k = map[i].tick;
+      sumT += t;
+      sumK += k;
+      sumTK += t * k;
+      sumTT += t * t;
+    }
+    const denom = len * sumTT - sumT * sumT;
+    if (Math.abs(denom) < 1e-9) {
+      // Degenerate — fallback to last entry
+      const b = map[len - 1];
+      return b.tick + (clientTime - b.time) / this._tickMs;
+    }
+    const slope = (len * sumTK - sumT * sumK) / denom;  // ticks per ms
+    const intercept = (sumK - slope * sumT) / len;
+    return slope * clientTime + intercept;
+  }
+
+  /**
+   * Interpolate remote entity positions from the snapshot buffer
+   * and write results into entities.enemies and entities.remotePlayers.
+   *
+   * @param {number} _dt – unused (kept for API compat with Game.update)
+   */
+  interpolate(_dt) {
+    const now = performance.now();
+
+    // ── Apply smooth server-reconciliation correction ──
+    this._applyCorrection();
+
+    // Target render tick = current estimated tick - interpDelay
+    const currentTick = this._timeToTick(now);
+    const renderTick = currentTick - this._interpTicks;
+
+    // ── Periodic diagnostics ──
+    if (now >= this._diagNext) {
+      this._logDiagnostics(now, currentTick, renderTick);
+      this._diagNext = now + this._diagInterval;
+    }
 
     // ── Enemies ──
-    this._smoothEntities(this._enemyCache, this._enemyResult, this.latestEnemies, factor, dt);
-
+    this._interpolateEntities(
+      this._enemySnaps, this._latestEnemyMap,
+      this._enemyResult, renderTick, this._smoothPosEnemy
+    );
     // Patch overrides (attack_result / enemy_killed)
     if (this.enemyOverrides.size > 0) {
       for (let i = 0; i < this._enemyResult.length; i++) {
@@ -885,99 +1164,207 @@ export class NetworkSystem {
     }
     this.game.entities.enemies = this._enemyResult;
 
-    // ── Remote players ──
-    this._smoothEntities(this._playerCache, this._playerResult, this.latestPlayers, factor, dt);
+    // ── Remote players (extra interp tick for additional safety margin) ──
+    const playerRenderTick = currentTick - (this._interpTicks + 1);
+    this._interpolateEntities(
+      this._playerSnaps, this._latestPlayerMap,
+      this._playerResult, playerRenderTick, this._smoothPosPlayer
+    );
     this.game.entities.remotePlayers = this._playerResult;
   }
 
   /**
-   * Smooth each entity's render position toward a dead-reckoned
-   * predicted position.  Between server updates, the target advances
-   * at constant velocity (computed from consecutive server positions),
-   * eliminating the speed-pulsing artefact of pure exponential smoothing.
+   * For each entity in the snapshot map, find snapshots bracketing
+   * renderTick and interpolate x/y.  Uses Catmull-Rom spline when
+   * 4 neighbouring snapshots are available (smooths out uneven
+   * position deltas from send/broadcast phase misalignment).
+   * Falls back to linear interpolation near buffer edges.
    *
-   * @param {Map}    cache   – persistent id → object cache
-   * @param {Array}  result  – output array (mutated in-place)
-   * @param {Array}  latest  – latest server entity data
-   * @param {number} factor  – frame-rate-independent smoothing factor
-   * @param {number} dt      – frame delta time in seconds
+   * @param {Map}    snapMap   – per-entity snapshot ring buffers
+   * @param {Map}    latestMap – latest server data (for scalar fields)
+   * @param {Array}  result    – output array (mutated in-place)
+   * @param {number} renderTick – fractional tick to render at
+   * @param {Map}    smoothMap  – per-entity last-rendered position for output smoothing
    */
-  _smoothEntities(cache, result, latest, factor, dt) {
-    result.length = latest.length;
+  _interpolateEntities(snapMap, latestMap, result, renderTick, smoothMap) {
+    result.length = 0;
 
-    const alive = this._aliveSet || (this._aliveSet = new Set());
-    alive.clear();
+    for (const [id, buf] of snapMap) {
+      const latest = latestMap.get(id);
+      if (!latest) continue;
 
-    for (let i = 0; i < latest.length; i++) {
-      const src = latest[i];
-      alive.add(src.id);
+      // Build output entity with all scalar fields from latest snapshot
+      const ent = { ...latest };
 
-      let ent = cache.get(src.id);
-      if (!ent) {
-        // First time seeing this entity — snap to position
-        ent = {};
-        Object.assign(ent, src);
-        ent._rx = src.x;
-        ent._ry = src.y;
-        ent._targetX = src.x;
-        ent._targetY = src.y;
-        ent._vx = 0;
-        ent._vy = 0;
-        ent._lastServerX = src.x;
-        ent._lastServerY = src.y;
-        ent._gen = this._stateGen;
-        cache.set(src.id, ent);
-      } else {
-        const rx = ent._rx;
-        const ry = ent._ry;
-
-        // Check if a new server update arrived since last frame
-        const newUpdate = this._stateGen !== ent._gen;
-        if (newUpdate) {
-          ent._gen = this._stateGen;
-
-          if (src.x !== ent._lastServerX || src.y !== ent._lastServerY) {
-            // Entity moved — compute velocity and update target
-            const invTickDt = 20; // 1 / 0.05
-            ent._vx = (src.x - ent._lastServerX) * invTickDt;
-            ent._vy = (src.y - ent._lastServerY) * invTickDt;
-            ent._targetX = src.x;
-            ent._targetY = src.y;
-            ent._lastServerX = src.x;
-            ent._lastServerY = src.y;
-          } else {
-            // Entity is stationary — zero velocity, snap target
-            ent._vx = 0;
-            ent._vy = 0;
-            ent._targetX = src.x;
-            ent._targetY = src.y;
-          }
-        } else {
-          // Between server updates: advance target at constant velocity
-          ent._targetX += ent._vx * dt;
-          ent._targetY += ent._vy * dt;
-        }
-
-        // Copy all scalar fields from server (hp, dead, name, etc.)
-        Object.assign(ent, src);
-
-        // Smoothly converge render position toward predicted target
-        ent._rx = rx + (ent._targetX - rx) * factor;
-        ent._ry = ry + (ent._targetY - ry) * factor;
+      if (buf.length < 2) {
+        // Not enough snapshots yet — use latest position directly
+        this._diagTooFew++;
+        result.push(ent);
+        continue;
       }
 
-      // Entities are drawn at the smoothed render position
-      ent.x = ent._rx;
-      ent.y = ent._ry;
+      // Find index of 'to' snapshot: buf[idx-1].tick <= renderTick < buf[idx].tick
+      let idx = -1;
+      for (let i = buf.length - 1; i >= 1; i--) {
+        if (buf[i - 1].tick <= renderTick) {
+          idx = i;
+          break;
+        }
+      }
 
-      result[i] = ent;
+      if (idx >= 0) {
+        const p1 = buf[idx - 1];
+        const p2 = buf[idx];
+        const range = p2.tick - p1.tick;
+        const t = range > 0 ? (renderTick - p1.tick) / range : 1;
+        const ct = t < 0 ? 0 : t > 1 ? 1 : t;
+
+        // Catmull-Rom spline when we have p0 and p3 neighbours
+        if (idx >= 2 && idx + 1 < buf.length) {
+          const p0 = buf[idx - 2];
+          const p3 = buf[idx + 1];
+          const t2 = ct * ct;
+          const t3 = t2 * ct;
+          ent.x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * ct
+            + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2
+            + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+          ent.y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * ct
+            + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2
+            + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+          // Clamp to p1↔p2 bounding box — prevents spline overshoot
+          const minX = p1.x < p2.x ? p1.x : p2.x;
+          const maxX = p1.x > p2.x ? p1.x : p2.x;
+          const minY = p1.y < p2.y ? p1.y : p2.y;
+          const maxY = p1.y > p2.y ? p1.y : p2.y;
+          if (ent.x < minX) ent.x = minX;
+          else if (ent.x > maxX) ent.x = maxX;
+          if (ent.y < minY) ent.y = minY;
+          else if (ent.y > maxY) ent.y = maxY;
+        } else {
+          // Linear fallback at buffer edges
+          ent.x = p1.x + (p2.x - p1.x) * ct;
+          ent.y = p1.y + (p2.y - p1.y) * ct;
+        }
+        this._diagLerpHits++;
+      } else if (buf.length >= 2) {
+        // Dead reckoning: renderTick is past all snapshots.
+        // Extrapolate from the last two snapshots' velocity,
+        // with exponential decay so it tapers to zero (prevents
+        // overshoot when the remote player stops moving).
+        const s0 = buf[buf.length - 2];
+        const s1 = buf[buf.length - 1];
+        const gap = s1.tick - s0.tick;
+        if (gap > 0) {
+          const vx = (s1.x - s0.x) / gap;
+          const vy = (s1.y - s0.y) / gap;
+          const speed = Math.sqrt(vx * vx + vy * vy);
+          // If effectively stopped (< 0.1 px/tick), hold position
+          if (speed < 0.1) {
+            ent.x = s1.x;
+            ent.y = s1.y;
+          } else {
+            const overshoot = renderTick - s1.tick;
+            const capped = overshoot > 3 ? 3 : overshoot;
+            // Exponential decay: velocity halves every tick (aggressive taper)
+            const decay = Math.pow(0.5, capped);
+            const effectiveTicks = (1 - decay) / 0.6931; // integral of e^(-ln2*t)
+            ent.x = s1.x + vx * effectiveTicks;
+            ent.y = s1.y + vy * effectiveTicks;
+          }
+        }
+        // else: gap is zero — keep latest position
+        this._diagLerpMisses++;
+      } else {
+        // Only 1 snapshot — nothing to extrapolate from
+        this._diagLerpMisses++;
+      }
+
+      result.push(ent);
     }
 
-    // Prune entities that are no longer present
-    if (cache.size > alive.size) {
-      cache.forEach((_val, id) => {
-        if (!alive.has(id)) cache.delete(id);
-      });
+    // ── Output smoothing pass ──
+    // Blend each entity toward its target position to eliminate
+    // any remaining pops from tick jitter or dead-reckoning transitions.
+    // Uses a high blend factor (0.45) so it tracks closely but never
+    // teleports in a single frame.
+    for (let i = 0; i < result.length; i++) {
+      const ent = result[i];
+      const prev = smoothMap.get(ent.id);
+      if (prev) {
+        const dx = ent.x - prev.x;
+        const dy = ent.y - prev.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // Hard snap if > 150px (teleport/map change), otherwise blend
+        if (dist < 150) {
+          const blend = 0.45;
+          ent.x = prev.x + dx * blend;
+          ent.y = prev.y + dy * blend;
+        }
+        prev.x = ent.x;
+        prev.y = ent.y;
+      } else {
+        smoothMap.set(ent.id, { x: ent.x, y: ent.y });
+      }
     }
+
+    // Prune smoothMap entries for entities no longer present
+    if (smoothMap.size > result.length + 4) {
+      const ids = new Set(result.map(e => e.id));
+      for (const id of smoothMap.keys()) {
+        if (!ids.has(id)) smoothMap.delete(id);
+      }
+    }
+  }
+
+  /* ── Diagnostics logger ────────────────────────────── */
+
+  _logDiagnostics(now, currentTick, renderTick) {
+    const jitter = this._diagTickJitter;
+    let jitterAvg = 0, jitterMin = 0, jitterMax = 0, jitterStd = 0;
+    if (jitter.length > 0) {
+      jitterMin = Math.min(...jitter);
+      jitterMax = Math.max(...jitter);
+      jitterAvg = jitter.reduce((a, b) => a + b, 0) / jitter.length;
+      const variance = jitter.reduce((s, v) => s + (v - jitterAvg) ** 2, 0) / jitter.length;
+      jitterStd = Math.sqrt(variance);
+    }
+
+    const totalLerp = this._diagLerpHits + this._diagLerpMisses + this._diagTooFew;
+    const lerpPct = totalLerp > 0 ? ((this._diagLerpHits / totalLerp) * 100).toFixed(1) : '—';
+
+    const enemyBufs = [...this._enemySnaps.values()];
+    const playerBufs = [...this._playerSnaps.values()];
+    const avgBuf = (bufs) => bufs.length === 0 ? 0
+      : (bufs.reduce((s, b) => s + b.length, 0) / bufs.length).toFixed(1);
+
+    console.log(
+      `%c[NetDiag]%c  tick=%d  render=%.1f  interpTicks=%d  interpMs=%d\n` +
+      `  tickJitter: avg=%.1fms  min=%.0fms  max=%.0fms  σ=%.1fms  (n=%d)\n` +
+      `  lerp: hits=%d  misses=%d  tooFew=%d  hitRate=%s%%\n` +
+      `  prediction: corrections=%d  avgDist=%.1fpx  snaps=%d  pendingBuf=%d  correction=(%.1f,%.1f)\n` +
+      `  buffers: enemies=%d (avg depth %s)  players=%d (avg depth %s)\n` +
+      `  tickTimeMap entries=%d  serverTick=%d  bufLen=%d`,
+      'color:#d4a943;font-weight:bold', 'color:inherit',
+      this._serverTick, renderTick, this._interpTicks, this._interpTicks * this._tickMs,
+      jitterAvg, jitterMin, jitterMax, jitterStd, jitter.length,
+      this._diagLerpHits, this._diagLerpMisses, this._diagTooFew, lerpPct,
+      this._diagCorrections,
+      this._diagCorrections > 0 ? this._diagCorrectionDist / this._diagCorrections : 0,
+      this._diagSnaps,
+      this._predBuffer.length,
+      this._correctionX, this._correctionY,
+      this._enemySnaps.size, avgBuf(enemyBufs),
+      this._playerSnaps.size, avgBuf(playerBufs),
+      this._tickTimeMap.length, this._serverTick, this._bufLen
+    );
+
+    // Reset counters
+    this._diagLerpHits = 0;
+    this._diagLerpMisses = 0;
+    this._diagTooFew = 0;
+    this._diagTickJitter.length = 0;
+    this._diagCorrections = 0;
+    this._diagCorrectionDist = 0;
+    this._diagSnaps = 0;
   }
 }

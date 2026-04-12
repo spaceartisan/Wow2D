@@ -113,7 +113,6 @@ export class EntitySystem {
   update(dt) {
     this.updatePlayerMovement(dt);
     this.updateRegeneration(dt);
-    this.handlePlayerDeathState();
   }
 
   updatePlayerMovement(dt) {
@@ -308,16 +307,6 @@ export class EntitySystem {
     player.maxMana = maxMana;
     player.hp = clamp(player.maxHp * hpRatio, 1, player.maxHp);
     player.mana = clamp(player.maxMana * manaRatio, 0, player.maxMana);
-  }
-
-  handlePlayerDeathState() {
-    // death/respawn is now driven by server messages in NetworkSystem.
-    // This only drives the visual death overlay timer on the client.
-    const player = this.player;
-    if (!player.dead) {
-      return;
-    }
-    // the server will send a you_respawned message; no local timer needed
   }
 
   draw(ctx, camera, sprites) {

@@ -186,21 +186,52 @@ async function revivePlayer(id) {
   }
 }
 
-function showTeleportModal(playerId, name) {
+let _mapSpawns = null;
+
+async function showTeleportModal(playerId, name) {
+  const [waystones, statsData] = await Promise.all([getWaystones(), api("GET", "/admin/api/stats")]);
+  const allMaps = statsData.maps || [];
+  _mapSpawns = statsData.mapSpawns || {};
+  const firstSpawn = _mapSpawns[allMaps[0]] || { tx: 0, ty: 0 };
+  const wsOptions = waystones.map(w =>
+    `<option value='${esc(JSON.stringify(w))}'>${esc(w.statueName)} (${formatMapName(w.mapId)}) [${w.tx}, ${w.ty}]</option>`
+  ).join("");
+
   openModal(`Teleport ${name}`, `
+    <label>Waystone</label>
+    <select id="tp-waystone" onchange="onTpWaystoneChange()">
+      <option value="">— Custom Location —</option>
+      ${wsOptions}
+    </select>
     <label>Map</label>
-    <select id="tp-map">
-      <option value="eldengrove">Eldengrove</option>
-      <option value="darkwood">Darkwood</option>
-      <option value="moonfall_cavern">Moonfall Cavern</option>
-      <option value="southmere">Southmere</option>
+    <select id="tp-map" onchange="onTpMapChange()">${allMaps.map(m =>
+      `<option value="${m}">${formatMapName(m)}</option>`).join("")}
     </select>
     <label>Tile X</label>
-    <input type="number" id="tp-x" value="20" min="0">
+    <input type="number" id="tp-x" value="${firstSpawn.tx}" min="0">
     <label>Tile Y</label>
-    <input type="number" id="tp-y" value="20" min="0">
+    <input type="number" id="tp-y" value="${firstSpawn.ty}" min="0">
     <button class="btn" onclick="doTeleport('${esc(playerId)}')">Teleport</button>
   `);
+}
+
+function onTpWaystoneChange() {
+  const val = document.getElementById("tp-waystone").value;
+  if (!val) { onTpMapChange(); return; }
+  const ws = JSON.parse(val);
+  document.getElementById("tp-map").value = ws.mapId;
+  document.getElementById("tp-x").value = ws.tx;
+  document.getElementById("tp-y").value = ws.ty;
+}
+
+function onTpMapChange() {
+  const mapId = document.getElementById("tp-map").value;
+  const spawn = _mapSpawns && _mapSpawns[mapId];
+  if (spawn) {
+    document.getElementById("tp-x").value = spawn.tx;
+    document.getElementById("tp-y").value = spawn.ty;
+  }
+  document.getElementById("tp-waystone").value = "";
 }
 
 async function doTeleport(playerId) {

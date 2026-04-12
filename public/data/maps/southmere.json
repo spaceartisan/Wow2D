@@ -17922,6 +17922,16 @@
       "targetTx": 97,
       "targetTy": 122,
       "label": "To Eldengrove"
+    },
+    {
+      "x": 80,
+      "y": 125,
+      "w": 5,
+      "h": 2,
+      "targetMap": "stonegate",
+      "targetTx": 64,
+      "targetTy": 3,
+      "label": "To Stonegate"
     }
   ]
 }
