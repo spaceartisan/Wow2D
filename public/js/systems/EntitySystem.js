@@ -157,7 +157,13 @@ export class EntitySystem {
     }
 
     const dir = normalize(moveX, moveY);
-    this.moveEntityWithCollision(player, dir.x * player.moveSpeed, dir.y * player.moveSpeed, dt);
+    let speedMult = 1;
+    if (player.activeBuffs) {
+      for (const b of player.activeBuffs) {
+        if (b.stat === 'moveSpeed') speedMult += b.modifier;
+      }
+    }
+    this.moveEntityWithCollision(player, dir.x * player.moveSpeed * speedMult, dir.y * player.moveSpeed * speedMult, dt);
   }
 
   updateRegeneration(dt) {
@@ -318,6 +324,18 @@ export class EntitySystem {
 
     const slot = this._equipSlotForItem(item);
     if (!slot) return;
+
+    // Prevent equipping offHand when a 2H weapon is in mainHand (unless bow + quiver)
+    if (slot === "offHand") {
+      const mainWeapon = this.player.equipment.mainHand;
+      const mainDef = mainWeapon ? this.game.data.items[mainWeapon.id] : null;
+      if (mainDef?.handed === 2) {
+        if (!(mainDef.requiresQuiver && item.type === "quiver")) {
+          this.game.ui.addMessage("Cannot equip off-hand with a two-handed weapon.");
+          return;
+        }
+      }
+    }
 
     const oldItem = this.player.equipment[slot];
     this.player.equipment[slot] = item;

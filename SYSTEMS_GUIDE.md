@@ -75,8 +75,8 @@ Each tick, the server sends every connected player a `state` message:
 {
   "type": "state",
   "tick": <integer>,
-  "enemies": [{ "id", "type", "x", "y", "hp", "maxHp", "dead", "activeDebuffs" }],
-  "players": [{ "id", "name", "x", "y", "level", "charClass", "dead", "activeBuffs" }],
+  "enemies": [{ "id", "type", "x", "y", "hp", "maxHp", "dead", "floor", "activeDebuffs" }],
+  "players": [{ "id", "name", "x", "y", "level", "charClass", "dead", "floor", "activeBuffs" }],
   "drops":   [{ "id", "x", "y" }],
   "you": {
     "x", "y", "hp", "maxHp", "mana", "maxMana", "gold", "level", "xp",
@@ -97,6 +97,7 @@ Each tick, the server sends every connected player a `state` message:
   id, type, x, y,
   hp, maxHp,
   dead: Boolean,
+  floor: Number,   // 0 = ground, 1+ = upper floors
   activeDebuffs: [{ id, stat, modifier, duration, expiresAt, ... }]
 }
 ```
@@ -286,7 +287,7 @@ Players and enemies have a default radius of **15–16 px** for collision checks
 
 **File:** `game/ServerWorld.js` — `_moveEnemy()`
 
-Enemies use the same `CollisionMap` but with **separate X/Y axis movement**:
+Enemies use the same `CollisionMap` but with **separate X/Y axis movement** and floor-aware collision (`enemy.floor` is passed to `isBlocked()`):
 
 1. Try moving full `(newX, newY)` — accept if not blocked.
 2. Try X only `(newX, oldY)` — accept (axis slide).
@@ -490,6 +491,7 @@ Each alive enemy runs a simple state machine every tick.
 Scan all players on same map where:
   - player.dead === false
   - player.mapId === currentMap
+  - player.floor === enemy.floor  (floor match required)
   - dist(enemy, player) ≤ enemy.aggroRange
   - player is NOT in a safe zone (checked via collision.isSafeZone)
 ```
@@ -501,6 +503,7 @@ Nearest qualifying player becomes the target.
 Target is dropped when:
 - Target player is dead
 - Target player left the map
+- Target is on a different floor than the enemy
 - `dist(enemy, target) > aggroRange × 1.6`
 - Target is in a safe zone
 
@@ -908,7 +911,7 @@ The raw float values are kept for smooth lerp accumulation.
 1. clearRect (full canvas)
 2. world.drawTerrain()       — ground tiles
 3. world.drawObjects()       — static objects (trees, rocks, buildings)
-4. entities.draw()           — player, remote players, enemies, NPCs, statues
+4. entities.draw()           — player, remote players, enemies, NPCs, statues (all filtered by current floor)
 5. projectiles.draw()        — arrows, skill projectiles (with trails)
 6. particles.draw()          — all live particles (additive blending)
 7. drawInteractionPrompt()   — "Press E" tooltip near NPCs/statues
@@ -1061,7 +1064,7 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 
 | `type` | Key payload fields | Sent by |
 |--------|--------------------|---------|
-| `player_joined` | `player{id, name, charClass, level, x, y, hp, maxHp, dead}` | `addPlayer()`, `handleMapChange()` |
+| `player_joined` | `player{id, name, charClass, level, x, y, hp, maxHp, dead, floor}` | `addPlayer()`, `handleMapChange()` |
 | `player_left` | `playerId` | `removePlayer()`, `handleMapChange()` |
 | `drop_spawned` | `drop{id, x, y}` | `killEnemy()` |
 | `drop_removed` | `dropId` | `updateDropPickups()` |

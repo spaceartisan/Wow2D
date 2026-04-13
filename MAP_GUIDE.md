@@ -157,12 +157,18 @@ Enemy spawns reference types defined in `public/data/enemies.json`.
   {
     "type": "bandit",
     "positions": [[45, 42], [50, 50]]
+  },
+  {
+    "type": "skeleton",
+    "positions": [[8, 12], [10, 14]],
+    "floor": 1
   }
 ]
 ```
 
 - `type` — Must match a key in `enemies.json`
 - `positions` — Array of `[tx, ty]` spawn tile coordinates
+- `floor` — *(optional)* Floor level for this spawn group. `0` = ground (default), `1` = 2nd floor, etc. Enemies spawned on a given floor only aggro players on the same floor and use floor-aware collision.
 
 Each position spawns one enemy. The server reads stats (HP, damage, speed, XP, loot table) from `enemies.json`. Enemies respawn at their original position after death.
 
@@ -189,13 +195,15 @@ Waystones let players attune their hearthstone for teleport-to-town.
 
 ```json
 "statues": [
-  { "id": "swamplands_waystone", "name": "Swamplands Waystone", "tx": 10, "ty": 40 }
+  { "id": "swamplands_waystone", "name": "Swamplands Waystone", "tx": 10, "ty": 40 },
+  { "id": "inn_upper_waystone", "name": "Inn Upper Waystone", "tx": 19, "ty": 30, "floor": 1 }
 ]
 ```
 
 - `id` — Unique identifier (used by the hearthstone system)
 - `name` — Display name
 - `tx`, `ty` — Tile position
+- `floor` — *(optional)* Floor level. `0` = ground (default), `1` = 2nd floor, etc. Waystones are only visible and interactable when the player is on the same floor.
 
 ## Buildings
 

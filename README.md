@@ -68,11 +68,11 @@ http://localhost:3000
 - Buildings with tile-by-tile layouts and multi-floor interiors (stairs to go up/down)
 - Props (trees, rocks, flowers, etc.) with data-driven blocking via `props.json`
 - Safe zones
-- Waystone system — attune your hearthstone to teleport back to town
+- Waystone system — attune your hearthstone to teleport back to town (floor-aware placement)
 - Procedural map generation via `generate-maps.js`
 
 ### Minimap & World Map
-- Corner minimap (bottom-right) shows nearby terrain, enemies (red), other players (cyan), and your position (white)
+- Corner minimap (bottom-right) shows nearby terrain, enemies (red), other players (cyan), and your position (white) — all filtered by current floor
 - Full world map (M key) displays the entire map with:
   - Player position (blinking white dot)
   - Portals (blue diamonds with labels)
@@ -83,11 +83,11 @@ http://localhost:3000
 ### Combat & Progression
 - Target-then-engage combat: left-click to select a target, right-click or hotbar attack to engage auto-attack with chase
 - Server-authoritative hit resolution
-- Multiple enemy types with aggro range, chase AI, leashing, and wander behavior
+- Multiple enemy types with aggro range, chase AI, leashing, and wander behavior (floor-aware: enemies only aggro players on the same floor)
 - XP and leveling with stat scaling (HP, mana, damage per level)
 - Data-driven loot tables with gold and item drops
 - Data-driven combat effects: weapons, enemies, and consumables define their own particle effects and SFX via JSON
-- Data-driven skill system: class-restricted abilities (attacks, heals, buffs, debuffs, support) defined in skills.json
+- Data-driven skill system: class-restricted abilities (attacks, heals, buffs, debuffs, support) defined in skills.json with per-skill icons
 - 9-slot equipment system: mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet
 - 1-handed and 2-handed weapons with automatic offHand management
 - Ranged weapon support: bows require quivers with finite arrows; refill via arrow bundles
@@ -114,7 +114,7 @@ http://localhost:3000
 ### UI
 - Fantasy-themed HUD with health/mana bars, XP bar, minimap
 - Target panel with HP bar (different style for friendly vs enemy targets)
-- 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear
+- 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear; hover tooltips for skills and items
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
 - Inventory (20 slots) with click-to-use/equip, drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
 - Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
@@ -122,6 +122,7 @@ http://localhost:3000
 - Quest tracker, quest log, character sheet, and skills panel
 - NPC dialog system with quest accept/turn-in flow
 - Floor indicator when inside multi-story buildings
+- Skill icons in skills panel and hotbar (data-driven from skills.json `icon` field)
 
 ## Project Structure
 
@@ -143,7 +144,7 @@ public/
     props.json                 Prop type definitions (blocking, color fallback)
     playerBase.json            Shared player base stats (client + server)
     particles.json             Particle effect presets (burst + continuous emitters)
-    skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support)
+    skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support) with icon references
     statusEffects.json         Buff/debuff display metadata and icon paths
     enemies.json               Enemy type definitions
     items.json                 Item definitions (weapons, armor, shields, helmets, pants, boots, rings, amulets, quivers, consumables, junk)
@@ -171,13 +172,14 @@ public/
       QuestSystem.js            Quest state machine + NPC interaction
       UISystem.js               All HUD panels and UI rendering
       WorldSystem.js            Tile map loading, rendering, collision, portals, stairs
-      SpriteManager.js          Data-driven sprite preloading from palettes/props.json
+      SpriteManager.js          Data-driven sprite preloading from palettes/props.json/skills.json
   assets/
     bgm/                       Background music files
     icons/                     Item icon images
     sfx/                       Sound effect files
     sprites/
       entities/                Entity sprites (player, NPC, enemy, arrow)
+      skills/                  Skill ability icons (32×32 pixel-art PNGs)
       status/                  Buff/debuff status effect icons (32×32 pixel-art PNGs)
 ```
 

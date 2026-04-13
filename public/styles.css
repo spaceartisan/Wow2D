@@ -941,6 +941,44 @@ input, textarea {
   color: #c8a84e !important;
 }
 
+/* ── inventory context menu ───────────────────────────── */
+
+.item-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 120px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 4px 0;
+  pointer-events: auto;
+}
+
+.item-ctx-option {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-main);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.item-ctx-option:hover {
+  background: rgba(212, 169, 67, 0.18);
+  color: var(--accent-gold-bright);
+}
+
+.item-ctx-option.ctx-danger {
+  color: var(--danger);
+}
+
+.item-ctx-option.ctx-danger:hover {
+  background: rgba(168, 48, 48, 0.22);
+  color: #ff6b6b;
+}
+
 /* ── shop panel ───────────────────────────────────────── */
 
 #shop-panel {

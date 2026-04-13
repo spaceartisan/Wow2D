@@ -509,6 +509,9 @@ class ServerWorld {
       case "swap_items":
         this.handleSwapItems(player, msg);
         break;
+      case "drop_item":
+        this.handleDropItem(player, msg);
+        break;
       case "use_skill":
         this.handleUseSkill(player, msg);
         break;
@@ -532,7 +535,8 @@ class ServerWorld {
 
     // basic validation: don't teleport too far per tick
     // Allow larger jump when floor changes (stair teleport to partner stairs)
-    const maxDist = (floor !== player.floor) ? 300 : 80;
+    const spdMult = this._getPlayerSpeedMult(player);
+    const maxDist = (floor !== player.floor) ? 300 : Math.ceil(80 * spdMult);
     const d = dist(player.x, player.y, x, y);
     if (d > maxDist) return;
 
@@ -647,7 +651,9 @@ class ServerWorld {
     }
 
     // ── Melee — immediate damage ──
-    const damage = Math.max(2, player.damage + randInt(-2, 4));
+    const dmgMult = this._getPlayerDamageMultiplier(player);
+    const takenMult = this._getEnemyDamageTakenMult(enemy);
+    const damage = Math.max(2, Math.round((player.damage + randInt(-2, 4)) * dmgMult * takenMult));
     enemy.hp -= damage;
 
     // tell attacker about the hit
@@ -742,6 +748,27 @@ class ServerWorld {
     // Level check
     if (player.level < (skillDef.levelReq || 1)) return;
 
+    // Weapon requirement check
+    if (skillDef.requiresWeapon && !player.equipment?.mainHand) {
+      this.send(player.ws, { type: "skill_result", ok: false, skillId, reason: "Requires a weapon!" });
+      return;
+    }
+    if (skillDef.requiresShield) {
+      const offHand = player.equipment?.offHand;
+      if (!offHand || offHand.type !== "shield") {
+        this.send(player.ws, { type: "skill_result", ok: false, skillId, reason: "Requires a shield!" });
+        return;
+      }
+    }
+    if (skillDef.requiresWeaponType) {
+      const weapon = player.equipment?.mainHand;
+      const wDef = weapon ? ITEMS[weapon.id] : null;
+      if (!wDef || !skillDef.requiresWeaponType.includes(wDef.weaponType)) {
+        this.send(player.ws, { type: "skill_result", ok: false, skillId, reason: "Requires " + skillDef.requiresWeaponType.join(" or ") + "!" });
+        return;
+      }
+    }
+
     // Cooldown check
     const now = Date.now();
     const cooldownMs = (skillDef.cooldown || 0) * 1000;
@@ -811,8 +838,12 @@ class ServerWorld {
       }
 
       // ── Instant skill — apply damage immediately ──
-      const baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
-      const damage = Math.max(1, baseDmg + randInt(-2, 4));
+      let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+      // Physical melee skills scale with weapon/base damage
+      if (!skillDef.range && skillDef.damageType === 'physical') baseDmg += player.damage;
+      const dmgMult = this._getPlayerDamageMultiplier(player);
+      const takenMult = this._getEnemyDamageTakenMult(enemy);
+      const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
       enemy.hp -= damage;
 
       // Apply debuff to enemy if skill has one
@@ -906,6 +937,10 @@ class ServerWorld {
           appliedAt: now,
           expiresAt: now + (skillDef.buff.duration || 0) * 1000
         };
+        // Initialize absorb remaining for mana shield
+        if (skillDef.buff.absorbAmount !== undefined) {
+          buffEntry.absorbRemaining = (skillDef.buff.absorbAmount || 0) + (skillDef.buff.absorbPerLevel || 0) * (player.level - 1);
+        }
         player.activeBuffs.push(buffEntry);
         buffApplied = { id: skillDef.buff.id, stat: skillDef.buff.stat, modifier: skillDef.buff.modifier, duration: skillDef.buff.duration };
       }
@@ -1284,9 +1319,35 @@ class ServerWorld {
         if (weaponDef.requiresQuiver && player.equipment.offHand.type === "quiver") {
           // bow allows quiver to stay
         } else {
-          const emptyIdx = inventory.indexOf(null);
+          // After the swap, inventory[index] will hold the old mainhand (or null).
+          // If old mainhand is null, index itself is free for the offhand.
+          const oldMainHand = player.equipment.mainHand;
+          if (!oldMainHand) {
+            // No old weapon → inventory[index] will be null after swap → use it
+            // Do the full swap here: equip new weapon, put offhand in inventory[index]
+            player.equipment.mainHand = item;
+            inventory[index] = player.equipment.offHand;
+            player.equipment.offHand = null;
+            this._recalcStats(player);
+            this.send(player.ws, {
+              type: "equip_item_result", ok: true, index, slot,
+              newItem: item, oldItem: null,
+              equipment: { ...player.equipment },
+              inventory: [...inventory],
+              hp: player.hp, maxHp: player.maxHp,
+              mana: player.mana, maxMana: player.maxMana, damage: player.damage
+            });
+            return;
+          }
+          // Old mainhand exists → need a separate free slot for offhand
+          const emptyIdx = inventory.findIndex((s, i) => s === null && i !== index);
           if (emptyIdx === -1) {
-            this.send(player.ws, { type: "equip_item_result", ok: false, reason: "Inventory full — unequip off-hand first." });
+            this.send(player.ws, {
+              type: "equip_item_result", ok: false,
+              reason: "Inventory full — unequip off-hand first.",
+              equipment: { ...player.equipment },
+              inventory: [...inventory]
+            });
             return;
           }
           inventory[emptyIdx] = player.equipment.offHand;
@@ -1300,7 +1361,12 @@ class ServerWorld {
         if (mainDef.requiresQuiver && item.type === "quiver") {
           // allow quiver with bow
         } else {
-          this.send(player.ws, { type: "equip_item_result", ok: false, reason: "Cannot equip off-hand with a two-handed weapon." });
+          this.send(player.ws, {
+            type: "equip_item_result", ok: false,
+            reason: "Cannot equip off-hand with a two-handed weapon.",
+            equipment: { ...player.equipment },
+            inventory: [...inventory]
+          });
           return;
         }
       }
@@ -1319,6 +1385,7 @@ class ServerWorld {
 
     this._recalcStats(player);
 
+    // Build full inventory snapshot for client so auto-unequips are reflected
     this.send(player.ws, {
       type: "equip_item_result",
       ok: true,
@@ -1326,6 +1393,8 @@ class ServerWorld {
       slot,
       newItem: item,
       oldItem,
+      equipment: { ...player.equipment },
+      inventory: [...inventory],
       hp: player.hp,
       maxHp: player.maxHp,
       mana: player.mana,
@@ -1722,6 +1791,28 @@ class ServerWorld {
     });
   }
 
+  handleDropItem(player, msg) {
+    if (player.dead) return;
+    const index = Number(msg.index);
+    if (!Number.isInteger(index) || index < 0 || index >= 20) return;
+
+    const item = player.inventory[index];
+    if (!item) return;
+
+    // Prevent dropping permanent items (e.g. hearthstone)
+    const template = ITEMS[item.id];
+    if (template?.permanent) {
+      this.send(player.ws, { type: "drop_item_result", ok: false, reason: "Cannot drop that item." });
+      return;
+    }
+
+    player.inventory[index] = null;
+    this.send(player.ws, {
+      type: "drop_item_result", ok: true, index,
+      inventory: [...player.inventory]
+    });
+  }
+
   _completeCast(player) {
     if (!player.casting || player.casting.type !== "hearthstone") return;
 
@@ -1982,14 +2073,16 @@ class ServerWorld {
 
     // Compute damage at hit time using player's current stats
     let damage;
+    const dmgMult = player ? this._getPlayerDamageMultiplier(player) : 1;
+    const takenMult = this._getEnemyDamageTakenMult(enemy);
     if (proj.type === "attack") {
       const dmgStat = player ? player.damage : 10;
-      damage = Math.max(2, dmgStat + randInt(-2, 4));
+      damage = Math.max(2, Math.round((dmgStat + randInt(-2, 4)) * dmgMult * takenMult));
     } else {
       const skillDef = SKILLS[proj.skillId];
       const level = player ? player.level : 1;
       const baseDmg = (skillDef?.damage || 0) + (skillDef?.damagePerLevel || 0) * (level - 1);
-      damage = Math.max(1, baseDmg + randInt(-2, 4));
+      damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
     }
     enemy.hp -= damage;
 
@@ -2123,6 +2216,8 @@ class ServerWorld {
   updateEnemyAi(mapEntry, dt, now) {
     for (const enemy of mapEntry.enemies) {
       if (enemy.dead) continue;
+      // Skip AI if stunned
+      if (this._isEnemyStunned(enemy)) continue;
 
       // find nearest alive player on this map
       let closestPlayer = null;
@@ -2160,11 +2255,15 @@ class ServerWorld {
 
           if (d > enemy.attackRange) {
             const dir = normalize(target.x - enemy.x, target.y - enemy.y);
-            this._moveEnemy(enemy, dir.x * enemy.speed, dir.y * enemy.speed, dt, mapEntry.collision);
+            const spdMult = this._getEnemySpeedMult(enemy);
+            this._moveEnemy(enemy, dir.x * enemy.speed * spdMult, dir.y * enemy.speed * spdMult, dt, mapEntry.collision);
           } else if (now - enemy.lastAttackAt > enemy.attackCooldown * 1000) {
             // attack player
             enemy.lastAttackAt = now;
-            const damage = Math.max(1, enemy.damage + randInt(-2, 2));
+            const edmgMult = this._getEnemyDamageMult(enemy);
+            let damage = Math.max(1, Math.round((enemy.damage + randInt(-2, 2)) * edmgMult));
+            // Mana Shield absorption
+            damage = this._applyManaShield(target, damage);
             target.hp -= damage;
 
             // Interrupt casts on damage
@@ -2244,6 +2343,87 @@ class ServerWorld {
     if (!collision.isBlocked(enemy.x, ny, enemy.radius, floor)) enemy.y = ny;
   }
 
+  // ── buff / debuff stat helpers ─────────────────────────
+
+  _getPlayerDamageMultiplier(player) {
+    let mult = 1;
+    if (player.activeBuffs) {
+      for (const b of player.activeBuffs) {
+        if (b.stat === 'damage') mult += b.modifier;
+      }
+    }
+    return mult;
+  }
+
+  _getPlayerSpeedMult(player) {
+    let mult = 1;
+    if (player.activeBuffs) {
+      for (const b of player.activeBuffs) {
+        if (b.stat === 'moveSpeed') mult += b.modifier;
+      }
+    }
+    return mult;
+  }
+
+  _getEffectiveMaxMana(player) {
+    let maxMana = player.maxMana;
+    if (player.activeBuffs) {
+      for (const b of player.activeBuffs) {
+        if (b.stat === 'maxMana') maxMana = Math.round(maxMana * (1 + b.modifier));
+      }
+    }
+    return maxMana;
+  }
+
+  _getEnemyDamageTakenMult(enemy) {
+    let mult = 1;
+    if (enemy.activeDebuffs) {
+      for (const d of enemy.activeDebuffs) {
+        if (d.stat === 'damageTaken') mult += d.modifier;
+      }
+    }
+    return mult;
+  }
+
+  _isEnemyStunned(enemy) {
+    if (!enemy.activeDebuffs) return false;
+    return enemy.activeDebuffs.some(d => d.stat === 'stunned');
+  }
+
+  _getEnemySpeedMult(enemy) {
+    let mult = 1;
+    if (enemy.activeDebuffs) {
+      for (const d of enemy.activeDebuffs) {
+        if (d.stat === 'moveSpeed') mult += d.modifier;
+      }
+    }
+    return Math.max(0.1, mult);
+  }
+
+  _getEnemyDamageMult(enemy) {
+    let mult = 1;
+    if (enemy.activeDebuffs) {
+      for (const d of enemy.activeDebuffs) {
+        if (d.stat === 'damage') mult += d.modifier;
+      }
+    }
+    return Math.max(0.1, mult);
+  }
+
+  _applyManaShield(player, damage) {
+    if (!player.activeBuffs) return damage;
+    const shield = player.activeBuffs.find(b => b.stat === 'manaShield');
+    if (!shield || !shield.absorbRemaining || shield.absorbRemaining <= 0) return damage;
+    const absorbed = Math.min(damage, shield.absorbRemaining, player.mana);
+    shield.absorbRemaining -= absorbed;
+    player.mana -= absorbed;
+    damage -= absorbed;
+    if (shield.absorbRemaining <= 0) {
+      player.activeBuffs = player.activeBuffs.filter(b => b.stat !== 'manaShield');
+    }
+    return Math.max(0, damage);
+  }
+
   updateEnemyRespawns(mapEntry, now) {
     for (const enemy of mapEntry.enemies) {
       if (!enemy.dead || now < enemy.deadUntil) continue;
@@ -2283,7 +2463,8 @@ class ServerWorld {
   updatePlayerRegen(dt) {
     for (const [, player] of this.players) {
       if (player.dead) continue;
-      player.mana = Math.min(player.maxMana, player.mana + 7 * dt);
+      const effMaxMana = this._getEffectiveMaxMana(player);
+      player.mana = Math.min(effMaxMana, player.mana + 7 * dt);
       player.hp = Math.min(player.maxHp, player.hp + 1.8 * dt);
     }
   }
@@ -2447,7 +2628,7 @@ class ServerWorld {
           hp: player.hp,
           maxHp: player.maxHp,
           mana: player.mana,
-          maxMana: player.maxMana,
+          maxMana: this._getEffectiveMaxMana(player),
           dead: player.dead,
           x: player.x,
           y: player.y,
@@ -2455,10 +2636,11 @@ class ServerWorld {
           gold: player.gold || 0,
           level: player.level,
           xp: player.xp || 0,
-          damage: player.damage,
+          damage: Math.round(player.damage * this._getPlayerDamageMultiplier(player)),
           buffs: (player.activeBuffs || []).map(b => ({
             id: b.id, stat: b.stat, modifier: b.modifier,
-            remaining: Math.max(0, (b.expiresAt - Date.now()) / 1000)
+            remaining: Math.max(0, (b.expiresAt - Date.now()) / 1000),
+            ...(b.absorbRemaining !== undefined ? { absorbRemaining: b.absorbRemaining } : {})
           }))
         }
       });

@@ -240,6 +240,10 @@ export class NetworkSystem {
     this.send({ type: "sell_item", index });
   }
 
+  sendDropItem(index) {
+    this.send({ type: "drop_item", index });
+  }
+
   sendBuyItem(itemId, npcId) {
     this.send({ type: "buy_item", itemId, npcId });
   }
@@ -381,6 +385,9 @@ export class NetworkSystem {
         break;
       case "swap_result":
         this.onSwapResult(msg);
+        break;
+      case "drop_item_result":
+        this.onDropItemResult(msg);
         break;
       case "skill_result":
         this.onSkillResult(msg);
@@ -948,6 +955,7 @@ export class NetworkSystem {
     this.game.particles.clear();
 
     this.game.combat.clearTarget();
+    this.game.ui.closeAllPanels();
 
     // Load new map terrain/NPCs/statues if the map actually changed (e.g. admin teleport)
     if (msg.mapId && msg.mapId !== this.game.world.mapId) {
@@ -1039,14 +1047,39 @@ export class NetworkSystem {
 
   onEquipItemResult(msg) {
     if (!msg.ok) {
-      // Server rejected — revert client-side equip
+      // Server rejected — revert by syncing full state if provided
+      if (msg.equipment) {
+        const player = this.game.entities.player;
+        for (const slot of Object.keys(player.equipment)) {
+          player.equipment[slot] = msg.equipment[slot] || null;
+        }
+        if (msg.inventory) {
+          for (let i = 0; i < player.inventorySlots.length; i++) {
+            player.inventorySlots[i] = msg.inventory[i] || null;
+          }
+        }
+        this.game.ui._inventoryDirty = true;
+        this.game.ui._equipmentDirty = true;
+      }
       this.game.ui.addMessage(msg.reason || "Cannot equip that right now.");
       return;
     }
     const player = this.game.entities.player;
-    // Server is authoritative — apply the swap
-    player.equipment[msg.slot] = msg.newItem || null;
-    player.inventorySlots[msg.index] = msg.oldItem || null;
+    // Server sends full equipment/inventory to handle auto-unequips (e.g. 2H offhand)
+    if (msg.equipment) {
+      for (const slot of Object.keys(player.equipment)) {
+        player.equipment[slot] = msg.equipment[slot] || null;
+      }
+    } else {
+      player.equipment[msg.slot] = msg.newItem || null;
+    }
+    if (msg.inventory) {
+      for (let i = 0; i < player.inventorySlots.length; i++) {
+        player.inventorySlots[i] = msg.inventory[i] || null;
+      }
+    } else {
+      player.inventorySlots[msg.index] = msg.oldItem || null;
+    }
     player.hp = msg.hp;
     player.maxHp = msg.maxHp;
     player.mana = msg.mana;
@@ -1160,6 +1193,7 @@ export class NetworkSystem {
 
   onHearthstoneTeleport(msg) {
     this.game.ui.hideCastBar();
+    this.game.ui.closeAllPanels();
     clearInterval(this._castingInterval);
     this._castingInterval = null;
     const player = this.game.entities.player;
@@ -1232,6 +1266,24 @@ export class NetworkSystem {
     this.game.ui._inventoryDirty = true;
     this.game.ui._bankDirty = true;
     this.game.ui._hotbarDirty = true;
+  }
+
+  onDropItemResult(msg) {
+    if (!msg.ok) {
+      this.game.ui.addMessage(msg.reason || "Cannot drop that item.");
+      return;
+    }
+    const player = this.game.entities.player;
+    if (msg.inventory) {
+      for (let i = 0; i < player.inventorySlots.length; i++) {
+        player.inventorySlots[i] = msg.inventory[i] || null;
+      }
+    } else {
+      player.inventorySlots[msg.index] = null;
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
+    this.game.ui.addMessage("Item dropped.");
   }
 
   /* ═══════════════════════════════════════════════════════

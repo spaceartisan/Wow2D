@@ -63,6 +63,9 @@ export class UISystem {
     this._drag = null; // { container, index, item, skillId, ghost }
     this.hotbarLocked = false;
 
+    /* ── Context menu state ─────────────────────────────── */
+    this._ctxMenu = null; // DOM element for the active context menu
+
 
     /* ── Chat state ────────────────────────────────────── */
     this.chatMessages = [];     // { channel, text, timestamp }
@@ -80,6 +83,7 @@ export class UISystem {
     this.bindGameMenu();
     this.initDraggable();
     this.initDragDrop();
+    this.initInventoryContextMenu();
     this.renderHotbar();
   }
 
@@ -91,16 +95,34 @@ export class UISystem {
   }
 
   destroy() {
+    // Close all visible panels before removing listeners
+    this.closeAllPanels();
+    this._closeContextMenu();
     // Remove ALL tracked DOM listeners so they don't stack on re-enter
     for (const { el, evt, fn } of this._domHandlers) {
       el.removeEventListener(evt, fn);
     }
     this._domHandlers = [];
+    if (this._onCtxDismiss) document.removeEventListener("mousedown", this._onCtxDismiss);
+    if (this._onCtxEsc) document.removeEventListener("keydown", this._onCtxEsc);
     if (this.dragManager) {
       this.dragManager.destroy();
       this.dragManager = null;
     }
     this._destroyDragDrop();
+  }
+
+  closeAllPanels() {
+    if (this.inventoryOpen) this.toggleInventory();
+    if (this.equipmentOpen) this.toggleEquipment();
+    if (this.npcDialogOpen) this.closeNpcDialog();
+    if (this.shopOpen) this.closeShop();
+    if (this.bankOpen) this.closeBank();
+    if (this.questLogOpen) this.toggleQuestLog();
+    if (this.charSheetOpen) this.toggleCharSheet();
+    if (this.skillsOpen) this.toggleSkills();
+    this.el.gameMenuPanel.classList.add("hidden");
+    this.el.targetPanel.classList.add("hidden");
   }
 
   initDraggable() {
@@ -419,6 +441,8 @@ export class UISystem {
     if (this.inventoryOpen) {
       this._inventoryDirty = true;
       this.renderInventory();
+    } else {
+      this._closeContextMenu();
     }
   }
 
@@ -1206,13 +1230,9 @@ export class UISystem {
   }
 
   _handleDragEnd(e) {
-    // Click without drag – treat as item use/equip
+    // Click without drag – no longer auto-equips; context menu handles actions
     if (this._dragPending && !this._drag) {
-      const pd = this._dragPending;
       this._dragPending = null;
-      if (pd.source === "item" && pd.container === "inventory") {
-        this._handleInventoryItemClick(pd.index, pd.item);
-      }
       return;
     }
 
@@ -1291,19 +1311,98 @@ export class UISystem {
     this._dragPending = null;
   }
 
-  _handleInventoryItemClick(index, item) {
+  /* ── Inventory Context Menu ──────────────────────────── */
+
+  initInventoryContextMenu() {
+    // Close context menu on any left-click or Escape
+    this._onCtxDismiss = (e) => {
+      if (this._ctxMenu && !this._ctxMenu.contains(e.target)) this._closeContextMenu();
+    };
+    this._onCtxEsc = (e) => {
+      if (e.key === "Escape") this._closeContextMenu();
+    };
+    document.addEventListener("mousedown", this._onCtxDismiss);
+    document.addEventListener("keydown", this._onCtxEsc);
+
+    // Right-click on inventory grid
+    this._on(this.el.inventoryGrid, "contextmenu", (e) => {
+      e.preventDefault();
+      const slotEl = e.target.closest("[data-container='inventory'][data-index]");
+      if (!slotEl) return;
+      const index = parseInt(slotEl.dataset.index, 10);
+      const item = this.game.entities.player.inventorySlots[index];
+      if (!item) return;
+      this._showItemContextMenu(e.clientX, e.clientY, index, item);
+    });
+  }
+
+  _showItemContextMenu(x, y, index, item) {
+    this._closeContextMenu();
+
     const EQUIPPABLE = new Set(["weapon","shield","quiver","armor","helmet","pants","boots","ring","amulet"]);
-    if (EQUIPPABLE.has(item.type)) {
-      this.game.entities.equipItemAtIndex(index);
-      if (this.game.network) this.game.network.sendEquipItem(index);
-      this._inventoryDirty = true;
-      this._equipmentDirty = true;
-      this.renderInventory();
-      this.renderEquipment();
-    } else if (item.type === "consumable") {
-      if (this.game.network) this.game.network.sendUseItem(index);
+    const itemDef = this.game.data?.items?.[item.id];
+    const isPermanent = itemDef?.permanent;
+
+    const menu = document.createElement("div");
+    menu.className = "item-context-menu";
+
+    const addOption = (label, callback, cls) => {
+      const opt = document.createElement("div");
+      opt.className = "item-ctx-option" + (cls ? " " + cls : "");
+      opt.textContent = label;
+      opt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._closeContextMenu();
+        callback();
+      });
+      menu.append(opt);
+    };
+
+    // Use option — consumables and hearthstone
+    if (item.type === "consumable") {
+      addOption("Use", () => {
+        if (this.game.network) this.game.network.sendUseItem(index);
+      });
     } else if (item.type === "hearthstone") {
-      if (this.game.network) this.game.network.sendUseHearthstone();
+      addOption("Use", () => {
+        if (this.game.network) this.game.network.sendUseHearthstone();
+      });
+    }
+
+    // Equip option — equippable gear
+    if (EQUIPPABLE.has(item.type)) {
+      addOption("Equip", () => {
+        this.game.entities.equipItemAtIndex(index);
+        if (this.game.network) this.game.network.sendEquipItem(index);
+        this._inventoryDirty = true;
+        this._equipmentDirty = true;
+      });
+    }
+
+    // Drop option — everything except permanent items
+    if (!isPermanent) {
+      addOption("Drop", () => {
+        if (this.game.network) this.game.network.sendDropItem(index);
+      }, "ctx-danger");
+    }
+
+    // Position the menu
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    document.body.append(menu);
+
+    // Clamp to viewport
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 4}px`;
+    if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 4}px`;
+
+    this._ctxMenu = menu;
+  }
+
+  _closeContextMenu() {
+    if (this._ctxMenu) {
+      this._ctxMenu.remove();
+      this._ctxMenu = null;
     }
   }
 

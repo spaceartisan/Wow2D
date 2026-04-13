@@ -54,16 +54,33 @@ export class AudioManager {
   }
 
   async _loadSfx() {
-    const promises = this._sfxFiles.map(async (name) => {
+    const BATCH = 4;
+    for (let i = 0; i < this._sfxFiles.length; i += BATCH) {
+      const batch = this._sfxFiles.slice(i, i + BATCH);
+      await Promise.all(batch.map(name => this._loadOneSfx(name)));
+    }
+  }
+
+  async _loadOneSfx(name, retries = 1) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const resp = await fetch(`/assets/sfx/${name}.wav`);
+        if (!resp.ok) {
+          console.warn(`AudioManager: ${name}.wav HTTP ${resp.status}`);
+          continue;
+        }
         const arrBuf = await resp.arrayBuffer();
+        if (!arrBuf.byteLength) {
+          console.warn(`AudioManager: ${name}.wav empty response`);
+          continue;
+        }
         this._sfxBuffers[name] = await this.ctx.decodeAudioData(arrBuf);
+        return;
       } catch (e) {
+        if (attempt < retries) continue;
         console.warn(`AudioManager: failed to load ${name}.wav`, e);
       }
-    });
-    await Promise.all(promises);
+    }
   }
 
   /** Play a one-shot SFX by name (e.g. "sword_hit"). */

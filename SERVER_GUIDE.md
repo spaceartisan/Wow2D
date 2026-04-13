@@ -183,8 +183,8 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `auth_error` | Bad token | `error` |
 | `kicked` | Duplicate login | `reason` |
 | `welcome` | Join success | `playerId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana` |
-| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, damage }` |
-| `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead }` |
+| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, damage }` — enemies and players include `floor` field |
+| `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead, floor }` |
 | `player_left` | Player leaves map | `playerId` |
 | `map_changed` | Portal transition | `mapId, enemies, players, drops` |
 | `attack_result` | Attack resolves | `enemyId, damage, enemyHp, enemyMaxHp` |
@@ -314,6 +314,7 @@ Stored in `world.maps` — a `Map<mapId, MapEntry>`:
   name: "Timber Wolf",
   x, y,                   // Current world position
   spawnX, spawnY,          // Home position (for leashing)
+  floor: 0,                // 0 = ground, 1+ = upper floors
   hp, maxHp,
   damage, speed,
   dead: false,

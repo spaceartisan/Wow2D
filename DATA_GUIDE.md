@@ -440,7 +440,7 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 | `castSfx` | string\|null | *(optional)* SFX played on cast start |
 | `classes` | array | List of class strings that can use this skill (e.g. `["warrior", "mage"]`) |
 | `levelReq` | number | Minimum player level required |
-| `icon` | string | Icon identifier for UI |
+| `icon` | string | Icon identifier for UI. Must match a sprite at `public/assets/sprites/skills/{icon}.png` (32×32 pixel-art). Used in the skills panel, hotbar, and drag ghost. |
 
 ### Type-specific fields
 
@@ -514,9 +514,10 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 
 **To add a skill:**
 1. Add the entry to `skills.json` with a unique key
-2. Specify `classes` and `levelReq` for availability
-3. The Skills panel and hotbar system will pick it up automatically
-4. Server validates class, level, cooldown, mana, and range before executing
+2. Place a 32×32 icon at `public/assets/sprites/skills/{icon}.png`
+3. Specify `classes` and `levelReq` for availability
+4. The Skills panel and hotbar system will pick it up automatically
+5. Server validates class, level, cooldown, mana, and range before executing
 
 ---
 
@@ -603,6 +604,7 @@ When adding new content, ensure the matching sprite/icon exists:
 | enemies.json | `public/assets/sprites/entities/{enemyId}.png` | 48×48 |
 | npcs.json | `public/assets/sprites/entities/{npcId}.png` | 48×48 |
 | items.json | `public/assets/sprites/icons/{itemId}.png` | 32×32 |
+| skills.json | `public/assets/sprites/skills/{icon}.png` | 32×32 |
 | tilePalette.json | `public/assets/sprites/tiles/{tileName}.png` | 48×48 |
 | props.json | `public/assets/sprites/props/{propType}.png` | varies |
 | particles.json | *(no sprites — drawn procedurally)* | — |

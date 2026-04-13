@@ -31,7 +31,7 @@
     "type": "vendor",
     "defaultDialog": "Need something forged? I've got good steel.",
     "questIds": [],
-    "shop": ["noviceBlade", "forestBow", "steelLongsword", "stitchedVest", "ironShield", "hardLeatherTunic", "chainmailVest", "amberCharm", "darkwoodTalisman", "leatherQuiver", "reinforcedQuiver", "leatherCap", "ironHelm", "raggedTrousers", "leatherLeggings", "wornSandals", "leatherBoots", "copperBand", "silverRing"]
+    "shop": ["noviceBlade", "forestBow", "darkwoodStaff", "steelLongsword", "stitchedVest", "ironShield", "hardLeatherTunic", "chainmailVest", "amberCharm", "darkwoodTalisman", "leatherQuiver", "reinforcedQuiver", "leatherCap", "ironHelm", "raggedTrousers", "leatherLeggings", "wornSandals", "leatherBoots", "copperBand", "silverRing"]
   },
   "banker_tomas": {
     "id": "banker_tomas",
