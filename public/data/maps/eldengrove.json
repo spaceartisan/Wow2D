@@ -22465,6 +22465,13 @@
       "type": "flower"
     }
   ],
+  "particles": [
+    {
+      "tx": 27,
+      "ty": 28,
+      "preset": "campfire"
+    }
+  ],
   "extraBlocked": [],
   "enemySpawns": [
     {
@@ -22602,6 +22609,16 @@
       "targetTx": 63,
       "targetTy": 5,
       "label": "To Southmere"
+    },
+    {
+      "x": 4,
+      "y": 121,
+      "w": 3,
+      "h": 3,
+      "targetMap": "magical_tower",
+      "targetTx": 40,
+      "targetTy": 11,
+      "label": "To Magical Tower"
     }
   ]
 }

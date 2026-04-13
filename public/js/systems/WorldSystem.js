@@ -14,6 +14,7 @@ export class WorldSystem {
     this.blocked = new Set();
     this.buildings = [];
     this.ambientProps = [];
+    this.mapParticles = [];    // particle emitters placed on the map
     this.portals = [];
     this.safeZones = [];
 
@@ -125,15 +126,30 @@ export class WorldSystem {
     this.ambientProps = (data.props || []).map(p => ({
       x: p.tx * this.tileSize + this.tileSize * 0.5,
       y: p.ty * this.tileSize + this.tileSize * 0.5,
-      type: p.type || "rock"
+      type: p.type || "rock",
+      floor: p.floor || 0
+    }));
+
+    // Map-placed particle emitters
+    this.mapParticles = (data.particles || []).map(p => ({
+      x: p.tx * this.tileSize + this.tileSize * 0.5,
+      y: p.ty * this.tileSize + this.tileSize * 0.5,
+      preset: p.preset,
+      floor: p.floor || 0
     }));
 
     // Block props based on propDefs
     const propDefs = this.propDefs || {};
+    this.blockedByFloor = {};   // floor → Set of tileKeys (for non-ground floors)
     for (const p of (data.props || [])) {
       const def = propDefs[p.type];
-      if (def?.blocked) {
+      if (!def?.blocked) continue;
+      const floor = p.floor || 0;
+      if (floor === 0) {
         this.blocked.add(tileKey(p.tx, p.ty));
+      } else {
+        if (!this.blockedByFloor[floor]) this.blockedByFloor[floor] = new Set();
+        this.blockedByFloor[floor].add(tileKey(p.tx, p.ty));
       }
     }
   }
@@ -161,6 +177,9 @@ export class WorldSystem {
         const tile = this._getUpperFloorTile(tx, ty);
         if (!tile) return true;       // void / out of building = blocked
         if (tile.blocked) return true;
+        // Also check floor-specific prop blocking
+        const floorBlocked = this.blockedByFloor[this.currentFloor];
+        if (floorBlocked && floorBlocked.has(tileKey(tx, ty))) return true;
         continue;
       }
 
@@ -394,6 +413,7 @@ export class WorldSystem {
     const maxY = camera.y + canvas.height + this.tileSize;
 
     for (const prop of this.ambientProps) {
+      if (prop.floor !== this.currentFloor) continue;
       if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) continue;
 
       const px = prop.x - camera.x;

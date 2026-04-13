@@ -28,6 +28,7 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
   "trees": [ ... ],
   "props": [ ... ],
   "extraBlocked": [ ... ],
+  "particles": [ ... ],
   "enemySpawns": [ ... ],
   "npcs": [ ... ],
   "statues": [ ... ],
@@ -57,6 +58,7 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
 | `buildings` | `array` | Interior spaces, optionally multi-story. |
 | `props` | `array` | World objects (trees, rocks, flowers, etc.). Blocking behavior defined in `props.json`. |
 | `extraBlocked` | `[tx, ty][]` | Additional blocked tile coordinates beyond palette-blocked and prop-blocked tiles. |
+| `particles` | `array` | Map-placed particle emitters (campfires, torches, poison clouds, etc.). References presets in `particles.json`. |
 | `enemySpawns` | `array` | Enemy spawn definitions. |
 | `npcs` | `array` | NPC placements (references `npcs.json`). |
 | `statues` | `array` | Waystone placements for hearthstone attunement. |
@@ -308,7 +310,8 @@ All world objects — trees, rocks, flowers, mushrooms, etc. — live in a singl
 "props": [
   { "tx": 79, "ty": 20, "type": "tree" },
   { "tx": 19, "ty": 15, "type": "rock" },
-  { "tx": 22, "ty": 18, "type": "flower" }
+  { "tx": 22, "ty": 18, "type": "flower" },
+  { "tx": 10, "ty": 5, "type": "tree", "floor": 1 }
 ]
 ```
 
@@ -316,6 +319,7 @@ All world objects — trees, rocks, flowers, mushrooms, etc. — live in a singl
 |-------|------|-------------|
 | `tx`, `ty` | `number` | Tile position. |
 | `type` | `string` | Must match a key in `props.json`. |
+| `floor` | `number` | Floor level the prop appears on. `0` = ground (default), `1` = 2nd floor, etc. Omit for ground-floor props. Props are only rendered when the player is on the same floor. Non-ground-floor props do not block movement on the ground floor. |
 
 ## Extra Blocked Tiles
 
@@ -326,6 +330,26 @@ For tiles that should block movement but aren't covered by palette tiles, trees,
 ```
 
 Each entry is `[tx, ty]`.
+
+## Particles
+
+Map-placed particle emitters create ambient effects like campfire flames, torch flickers, poison clouds, etc. Each entry references a preset from `public/data/particles.json`.
+
+```json
+"particles": [
+  { "tx": 26, "ty": 24, "preset": "campfire" },
+  { "tx": 30, "ty": 34, "preset": "torch" },
+  { "tx": 12, "ty": 8, "preset": "poison_cloud", "floor": 1 }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tx`, `ty` | `number` | Tile position (emitter spawns centered on the tile). |
+| `preset` | `string` | Must match a key in `particles.json`. Use presets with `"continuous": true` and `"emitInterval"` (e.g. `campfire`, `torch`, `poison_cloud`, `frost_aura`, `embers`). |
+| `floor` | `number` | Floor level. `0` = ground (default). Emitters only run when the player is on the same floor. |
+
+Particle emitters are automatically started when the map loads and when the player changes floors via stairs. They are cleared on map transitions.
 
 ## Registering the Map on the Server
 
@@ -360,7 +384,8 @@ That's it. The server will:
 7. **Add a waystone** — so players can bind their hearthstone
 8. **Register on server** — add the map ID to the array in `ServerWorld.js`
 9. **Add new prop types** — if your map uses new props, add them to `props.json` and place matching sprites (sprite loading is automatic)
-10. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
+10. **Add particle emitters** — place ambient effects (campfires, torches) in the `particles` array using presets from `particles.json`
+11. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
 
 ## Example: Minimal Map
 
@@ -408,6 +433,7 @@ That's it. The server will:
   "buildings": [],
   "props": [],
   "extraBlocked": [],
+  "particles": [],
   "safeZones": []
 }
 ```

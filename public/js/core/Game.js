@@ -102,6 +102,9 @@ export class Game {
     this.ui.addMessage("I inventory, C equipment, L quest log, P character, K skills.");
     this.ui.addMessage("1 attack, 2 heal, 3-0 hotbar. Drag items to hotbar/bank. Enter to chat.");
 
+    // Start map-placed particle emitters for the starting floor
+    this._syncMapParticles();
+
     this._rafId = requestAnimationFrame(this._boundLoop = (t) => this.loop(t));
   }
 
@@ -309,7 +312,11 @@ export class Game {
 
   checkStairs(dt) {
     const player = this.entities.player;
+    const prevFloor = this.world.currentFloor;
     const result = this.world.checkStairs(player.x, player.y, dt);
+    if (result && this.world.currentFloor !== prevFloor) {
+      this._syncMapParticles();
+    }
   }
 
   async changeMap(mapId, targetTx, targetTy) {
@@ -332,6 +339,10 @@ export class Game {
       // Clear combat target (enemies are server-managed)
       this.combat.targetEnemyId = null;
       this.projectiles.clear();
+      this.particles.clear();
+
+      // Start map-placed particle emitters for the new map
+      this._syncMapParticles();
 
       // Tell server about the map transition
       if (this.network) {
@@ -358,6 +369,27 @@ export class Game {
     this.camera.x = player.x - this.canvas.width * 0.5;
     this.camera.y = player.y - this.canvas.height * 0.5;
     this.clampCamera();
+  }
+
+  /**
+   * Start/stop map-placed particle emitters so only the current floor's
+   * emitters are active.
+   */
+  _syncMapParticles() {
+    // Stop all existing map emitters
+    for (const id of (this._mapEmitterIds || [])) {
+      this.particles.stopContinuous(id);
+    }
+    this._mapEmitterIds = [];
+
+    const floor = this.world.currentFloor;
+    for (let i = 0; i < this.world.mapParticles.length; i++) {
+      const mp = this.world.mapParticles[i];
+      if (mp.floor !== floor) continue;
+      const id = `map_particle_${i}`;
+      this.particles.emitContinuous(id, mp.preset, mp.x, mp.y);
+      this._mapEmitterIds.push(id);
+    }
   }
 
   updateCamera() {

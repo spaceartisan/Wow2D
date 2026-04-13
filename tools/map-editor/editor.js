@@ -9,6 +9,7 @@ const S = {
   enemyDefs: {},           // enemies.json
   npcDefs: {},             // npcs.json
   propDefs: {},            // props.json
+  particleDefs: {},        // particles.json
 
   // Map data
   mapId: "",
@@ -24,6 +25,7 @@ const S = {
   enemySpawns: [],         // { type, positions: [[tx,ty],...] }
   npcs: [],
   props: [],               // includes trees (type: "tree")
+  particles: [],           // { tx, ty, preset, floor }
   buildings: [],
   statues: [],
   safeZones: [],
@@ -31,11 +33,11 @@ const S = {
 
   // Editor state
   tool: "paint",           // paint | erase | fill | pick
-  objMode: null,           // portal | enemy | npc | prop | building | statue | safezone | blocked | null
+  objMode: null,           // portal | enemy | npc | prop | particle | building | statue | safezone | blocked | null
   selectedPaletteIdx: 0,
   brushSize: 1,
   zoom: 1,
-  camX: 0, camY: 0,
+  panX: 0, panY: 0,       // world-pixel offset of viewport top-left
   isDragging: false,
   isPanning: false,
   panStart: null,
@@ -57,6 +59,10 @@ const S = {
 
 const GRID_COLOR = "rgba(255,255,255,0.06)";
 const SPAWN_COLOR = "#f9e2af";
+let _renderRAF = 0;
+function requestRender() {
+  if (!_renderRAF) _renderRAF = requestAnimationFrame(() => { _renderRAF = 0; render(); });
+}
 
 /* ── Sprite Cache ─────────────────────────── */
 const spriteCache = {};   // key → { img, loaded }
@@ -64,7 +70,7 @@ const spriteCache = {};   // key → { img, loaded }
 function loadSprite(path) {
   if (spriteCache[path]) return spriteCache[path];
   const entry = { img: new Image(), loaded: false };
-  entry.img.onload = () => { entry.loaded = true; render(); };
+  entry.img.onload = () => { entry.loaded = true; requestRender(); };
   entry.img.onerror = () => { entry.loaded = false; };
   entry.img.src = path;
   spriteCache[path] = entry;
@@ -90,16 +96,21 @@ const wrap = $("#canvasWrap");
 
 /* ── Init ─────────────────────────────────── */
 async function init() {
-  const [palette, enemies, npcs, propDefs] = await Promise.all([
+  const [palette, enemies, npcs, propDefs, particleDefs, bgmFiles] = await Promise.all([
     fetch("/api/palette").then(r => r.json()),
     fetch("/api/enemies").then(r => r.json()),
     fetch("/api/npcs").then(r => r.json()),
     fetch("/api/props").then(r => r.json()),
+    fetch("/api/particles").then(r => r.json()),
+    fetch("/api/bgm").then(r => r.json()),
   ]);
   S.globalPalette = palette;
   S.enemyDefs = enemies;
   S.npcDefs = npcs;
   S.propDefs = propDefs;
+  S.particleDefs = particleDefs;
+  S.bgmFiles = bgmFiles;
+  populateBgmDropdown();
 
   // Preload all tile sprites
   for (const name of Object.keys(palette)) loadSprite(tileSpritePath(name));
@@ -111,6 +122,10 @@ async function init() {
   loadSprite(propSpritePath("portal"));
 
   setupEventListeners();
+
+  // Keep canvas sized to container
+  new ResizeObserver(() => { resizeCanvas(); render(); }).observe(wrap);
+
   newMap(80, 80);
 }
 
@@ -121,6 +136,7 @@ function newMap(w, h) {
   S.mapId = "";
   S.mapName = "";
   S.bgm = "";
+  S.bgmFiles = [];         // populated from /api/bgm
   S.spawnPoint = [Math.floor(w / 2), Math.floor(h / 2)];
   S.tileSize = 48;
 
@@ -136,6 +152,7 @@ function newMap(w, h) {
   S.enemySpawns = [];
   S.npcs = [];
   S.props = [];
+  S.particles = [];
   S.buildings = [];
   S.statues = [];
   S.safeZones = [];
@@ -143,6 +160,7 @@ function newMap(w, h) {
 
   S.undoStack = [];
   S.redoStack = [];
+  S.panX = 0; S.panY = 0; S.zoom = 1;
 
   syncFieldsToUI();
   buildPaletteUI();
@@ -167,7 +185,8 @@ async function loadMap(id) {
   S.npcs = (data.npcs || []).map(n => ({ ...n, floor: n.floor || 0 }));
   // Merge legacy trees into props as type "tree" (backward compat for old map files)
   const loadedTrees = (data.trees || []).map(t => ({ tx: t.tx, ty: t.ty, type: "tree" }));
-  S.props = [...loadedTrees, ...(data.props || [])];
+  S.props = [...loadedTrees, ...(data.props || [])].map(p => ({ ...p, floor: p.floor || 0 }));
+  S.particles = (data.particles || []).map(p => ({ ...p, floor: p.floor || 0 }));
   S.buildings = data.buildings || [];
   S.statues = data.statues || [];
   S.safeZones = data.safeZones || [];
@@ -175,6 +194,7 @@ async function loadMap(id) {
 
   S.undoStack = [];
   S.redoStack = [];
+  S.panX = 0; S.panY = 0; S.zoom = 1;
 
   syncFieldsToUI();
   buildPaletteUI();
@@ -212,8 +232,17 @@ function buildMapJSON() {
   if (S.bgm) obj.bgm = S.bgm;
   obj.safeZones = S.safeZones;
   obj.buildings = S.buildings;
-  // All props (including trees) in a single array
-  obj.props = S.props;
+  // All props — strip floor:0 to keep JSON clean
+  obj.props = S.props.map(p => {
+    const e = { tx: p.tx, ty: p.ty, type: p.type };
+    if (p.floor) e.floor = p.floor;
+    return e;
+  });
+  obj.particles = S.particles.map(p => {
+    const e = { tx: p.tx, ty: p.ty, preset: p.preset };
+    if (p.floor) e.floor = p.floor;
+    return e;
+  });
   obj.extraBlocked = S.extraBlocked;
   obj.enemySpawns = S.enemySpawns;
   obj.npcs = S.npcs;
@@ -223,6 +252,40 @@ function buildMapJSON() {
 }
 
 /* ── Sync UI ↔ State ──────────────────────── */
+let bgmAudio = null;
+
+function populateBgmDropdown() {
+  const sel = $("#mapBgm");
+  sel.innerHTML = '<option value="">(none)</option>';
+  for (const f of S.bgmFiles) {
+    const name = f.replace(/\.[^.]+$/, "");
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.dataset.file = f;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+}
+
+function playBgm() {
+  stopBgm();
+  const sel = $("#mapBgm");
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.dataset.file) return;
+  bgmAudio = new Audio(`/assets/bgm/${opt.dataset.file}`);
+  bgmAudio.loop = true;
+  bgmAudio.volume = 0.5;
+  bgmAudio.play();
+}
+
+function stopBgm() {
+  if (bgmAudio) {
+    bgmAudio.pause();
+    bgmAudio.currentTime = 0;
+    bgmAudio = null;
+  }
+}
+
 function syncFieldsToUI() {
   $("#mapId").value = S.mapId;
   $("#mapName").value = S.mapName;
@@ -295,57 +358,70 @@ function buildPaletteUI() {
 
 /* ── Canvas sizing ────────────────────────── */
 function resizeCanvas() {
-  const ft = getFloorTerrain();
-  canvas.width = ft.w * S.tileSize * S.zoom;
-  canvas.height = ft.h * S.tileSize * S.zoom;
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
 }
 
 /* ── Render ───────────────────────────────── */
 function render() {
   const ft = getFloorTerrain();
   const w = ft.w, h = ft.h, ts = S.tileSize, z = S.zoom;
-  const pw = w * ts * z, ph = h * ts * z;
-  canvas.width = pw;
-  canvas.height = ph;
-  ctx.clearRect(0, 0, pw, ph);
+  const cw = canvas.width, ch = canvas.height;
 
-  // Terrain (ground or upper floor grid)
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
+  // Ensure canvas matches container
+  if (cw !== wrap.clientWidth || ch !== wrap.clientHeight) {
+    canvas.width = wrap.clientWidth;
+    canvas.height = wrap.clientHeight;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(-S.panX, -S.panY);
+
+  // Visible tile range
+  const tsz = ts * z;
+  const startX = Math.max(0, Math.floor(S.panX / tsz));
+  const startY = Math.max(0, Math.floor(S.panY / tsz));
+  const endX = Math.min(w, Math.ceil((S.panX + canvas.width) / tsz));
+  const endY = Math.min(h, Math.ceil((S.panY + canvas.height) / tsz));
+
+  // Terrain (only visible tiles)
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
       const idx = ft.grid[y] ? ft.grid[y][x] : 0;
       if (idx === -1) {
-        // Void tile on upper floors — draw dark checker
         ctx.fillStyle = ((x + y) % 2 === 0) ? "#181825" : "#11111b";
-        ctx.fillRect(x * ts * z, y * ts * z, ts * z, ts * z);
+        ctx.fillRect(x * tsz, y * tsz, tsz, tsz);
         continue;
       }
       const name = S.palette[idx];
       const sprite = name ? getSprite(tileSpritePath(name)) : null;
-      const dx = x * ts * z, dy = y * ts * z, sz = ts * z;
+      const dx = x * tsz, dy = y * tsz;
       if (sprite) {
-        ctx.drawImage(sprite, dx, dy, sz, sz);
+        ctx.drawImage(sprite, dx, dy, tsz, tsz);
       } else {
         const info = name ? S.globalPalette[name] : null;
         const [r, g, b] = info ? info.color : [40, 40, 40];
         ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(dx, dy, sz, sz);
+        ctx.fillRect(dx, dy, tsz, tsz);
       }
     }
   }
 
-  // Grid
+  // Grid (only visible lines)
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth = 1;
-  for (let x = 0; x <= w; x++) {
+  const pw = w * tsz, ph = h * tsz;
+  for (let x = startX; x <= endX && x <= w; x++) {
     ctx.beginPath();
-    ctx.moveTo(x * ts * z + 0.5, 0);
-    ctx.lineTo(x * ts * z + 0.5, ph);
+    ctx.moveTo(x * tsz + 0.5, startY * tsz);
+    ctx.lineTo(x * tsz + 0.5, endY * tsz);
     ctx.stroke();
   }
-  for (let y = 0; y <= h; y++) {
+  for (let y = startY; y <= endY && y <= h; y++) {
     ctx.beginPath();
-    ctx.moveTo(0, y * ts * z + 0.5);
-    ctx.lineTo(pw, y * ts * z + 0.5);
+    ctx.moveTo(startX * tsz, y * tsz + 0.5);
+    ctx.lineTo(endX * tsz, y * tsz + 0.5);
     ctx.stroke();
   }
 
@@ -374,9 +450,48 @@ function render() {
       ctx.fillText(def ? def.name : n.npcId, dx, dy - 2);
     }
 
-    // Floor label overlay
+    // Props on this floor
+    for (const p of S.props) {
+      if ((p.floor || 0) !== S.editingFloor) continue;
+      const lx = p.tx - bld.x, ly = p.ty - bld.y;
+      if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+      const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+      const pSprite = getSprite(propSpritePath(p.type));
+      if (pSprite) {
+        ctx.drawImage(pSprite, dx, dy, sz, sz);
+      } else {
+        const def = S.propDefs[p.type];
+        const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(160, 160, 160, 0.5)";
+        ctx.fillStyle = c;
+        ctx.fillRect(dx + 4 * z, dy + 4 * z, sz - 8 * z, sz - 8 * z);
+      }
+      ctx.fillStyle = "#bac2de";
+      ctx.font = `${8 * z}px sans-serif`;
+      ctx.fillText(p.type || "?", dx + 2, dy + sz - 2);
+    }
+
+    // Particles on this floor
+    for (const p of S.particles) {
+      if ((p.floor || 0) !== S.editingFloor) continue;
+      const lx = p.tx - bld.x, ly = p.ty - bld.y;
+      if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+      const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+      ctx.fillStyle = "rgba(255, 180, 50, 0.4)";
+      ctx.beginPath();
+      ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fab387";
+      ctx.lineWidth = 1.5 * z;
+      ctx.stroke();
+      ctx.fillStyle = "#fab387";
+      ctx.font = `${7 * z}px sans-serif`;
+      ctx.fillText(p.preset, dx + 1, dy + sz + 8 * z);
+    }
+
+    // Floor label overlay — draw in screen space
+    ctx.restore();
     ctx.fillStyle = "rgba(249, 226, 175, 0.15)";
-    ctx.fillRect(0, 0, pw, 18 * z);
+    ctx.fillRect(0, 0, canvas.width, 18 * z);
     ctx.fillStyle = "#f9e2af";
     ctx.font = `bold ${11 * z}px sans-serif`;
     ctx.fillText(`Floor ${S.editingFloor + 1}  —  ${bld.name}`, 4 * z, 13 * z);
@@ -429,8 +544,9 @@ function render() {
     ctx.fillText(p.label || p.targetMap || "Portal", p.x * ts * z + 2, p.y * ts * z + 10 * z);
   }
 
-  // Props (including trees)
+  // Props (including trees) — ground floor only
   for (const p of S.props) {
+    if ((p.floor || 0) !== 0) continue;
     const dx = p.tx * ts * z, dy = p.ty * ts * z, sz = ts * z;
     const pSprite = getSprite(propSpritePath(p.type));
     if (pSprite) {
@@ -443,7 +559,25 @@ function render() {
     }
     ctx.fillStyle = "#bac2de";
     ctx.font = `${8 * z}px sans-serif`;
-    ctx.fillText(p.type || "?", p.tx * ts * z + 2, (p.ty + 1) * ts * z - 2);
+    const floorTag = p.floor ? ` F${p.floor}` : "";
+    ctx.fillText((p.type || "?") + floorTag, p.tx * ts * z + 2, (p.ty + 1) * ts * z - 2);
+  }
+
+  // Particles — ground floor only
+  for (const p of S.particles) {
+    if ((p.floor || 0) !== 0) continue;
+    const dx = p.tx * ts * z, dy = p.ty * ts * z, sz = ts * z;
+    ctx.fillStyle = "rgba(255, 180, 50, 0.4)";
+    ctx.beginPath();
+    ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#fab387";
+    ctx.lineWidth = 1.5 * z;
+    ctx.stroke();
+    ctx.fillStyle = "#fab387";
+    ctx.font = `${7 * z}px sans-serif`;
+    const pFloorTag = p.floor ? ` F${p.floor}` : "";
+    ctx.fillText(p.preset + pFloorTag, dx + 1, dy + sz + 8 * z);
   }
 
   // Enemy spawns
@@ -537,14 +671,16 @@ function render() {
     ctx.strokeRect(dr.x * ts * z, dr.y * ts * z, dr.w * ts * z, dr.h * ts * z);
     ctx.setLineDash([]);
   }
+
+  ctx.restore();
 }
 
 /* ── Tile ↔ Pixel helpers ─────────────────── */
 function pixelToTile(px, py) {
   const ft = getFloorTerrain();
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((px - rect.left) / (S.tileSize * S.zoom));
-  const y = Math.floor((py - rect.top) / (S.tileSize * S.zoom));
+  const x = Math.floor((px - rect.left + S.panX) / (S.tileSize * S.zoom));
+  const y = Math.floor((py - rect.top + S.panY) / (S.tileSize * S.zoom));
   return [Math.max(0, Math.min(x, ft.w - 1)), Math.max(0, Math.min(y, ft.h - 1))];
 }
 
@@ -640,6 +776,7 @@ function handleObjClick(tx, ty) {
     case "enemy": placeEnemy(tx, ty); break;
     case "npc": placeNPC(tx, ty); break;
     case "prop": placeProp(tx, ty); break;
+    case "particle": placeParticle(tx, ty); break;
     case "statue": placeStatue(tx, ty); break;
     case "blocked": toggleBlocked(tx, ty); break;
   }
@@ -714,8 +851,30 @@ function placeNPC(tx, ty) {
 
 function placeProp(tx, ty) {
   const type = $("#propType") ? $("#propType").value : "rock";
-  if (S.props.some(p => p.tx === tx && p.ty === ty && p.type === type)) return;
-  S.props.push({ tx, ty, type });
+  let floor = $("#propFloor") ? parseInt($("#propFloor").value) || 0 : 0;
+  let worldTx = tx, worldTy = ty;
+  if (S.editingBuildingIdx >= 0) {
+    const bld = S.buildings[S.editingBuildingIdx];
+    worldTx = tx + bld.x;
+    worldTy = ty + bld.y;
+    floor = S.editingFloor;
+  }
+  if (S.props.some(p => p.tx === worldTx && p.ty === worldTy && p.type === type && (p.floor || 0) === floor)) return;
+  S.props.push({ tx: worldTx, ty: worldTy, type, floor });
+}
+
+function placeParticle(tx, ty) {
+  const preset = $("#particlePreset") ? $("#particlePreset").value : "campfire";
+  let floor = $("#particleFloor") ? parseInt($("#particleFloor").value) || 0 : 0;
+  let worldTx = tx, worldTy = ty;
+  if (S.editingBuildingIdx >= 0) {
+    const bld = S.buildings[S.editingBuildingIdx];
+    worldTx = tx + bld.x;
+    worldTy = ty + bld.y;
+    floor = S.editingFloor;
+  }
+  if (S.particles.some(p => p.tx === worldTx && p.ty === worldTy && p.preset === preset && (p.floor || 0) === floor)) return;
+  S.particles.push({ tx: worldTx, ty: worldTy, preset, floor });
 }
 
 function placeStatue(tx, ty) {
@@ -1107,7 +1266,22 @@ function updatePropsPanel() {
       <label>Type:
         <select id="propType">${opts}</select>
       </label>
+      <label>Floor:
+        <input id="propFloor" type="number" value="0" min="0" max="10" style="width:50px">
+      </label>
       <p class="muted">Click to place. Blocking defined in props.json.</p>
+    `;
+  } else if (S.objMode === "particle") {
+    const continuous = Object.entries(S.particleDefs).filter(([, d]) => d.continuous);
+    const opts = continuous.map(([k]) => `<option value="${k}">${k}</option>`).join("");
+    panel.innerHTML = `
+      <label>Preset:
+        <select id="particlePreset">${opts}</select>
+      </label>
+      <label>Floor:
+        <input id="particleFloor" type="number" value="0" min="0" max="10" style="width:50px">
+      </label>
+      <p class="muted">Click to place particle emitter.</p>
     `;
   } else if (S.objMode === "portal") {
     panel.innerHTML = `<p class="muted">Click and drag on the map to define portal rectangle.</p>`;
@@ -1192,6 +1366,14 @@ function updateObjectList() {
     <span>📦 Props: ${S.props.length} | Blocked: ${S.extraBlocked.length}</span>
   </div>`;
 
+  S.particles.forEach((p, i) => {
+    const floorTag = p.floor ? ` F${p.floor}` : "";
+    html += `<div class="obj-item" data-type="particle" data-idx="${i}">
+      <span>✨ ${p.preset} (${p.tx},${p.ty})${floorTag}</span>
+      <span class="obj-del" data-type="particle" data-idx="${i}">✕</span>
+    </div>`;
+  });
+
   list.innerHTML = html;
 
   // Wire up delete buttons
@@ -1254,18 +1436,43 @@ function deleteObject(type, idx) {
     case "statue": S.statues.splice(idx, 1); break;
     case "safezone": S.safeZones.splice(idx, 1); break;
     case "prop": S.props.splice(idx, 1); break;
+    case "particle": S.particles.splice(idx, 1); break;
   }
   updateObjectList();
   render();
 }
 
 function deleteObjectAtTile(tx, ty) {
-  // In floor edit mode, only handle NPCs on current floor
+  // In floor edit mode, convert local to world coords and delete matching floor objects
   if (S.editingBuildingIdx >= 0) {
     const bld = S.buildings[S.editingBuildingIdx];
     const worldTx = tx + bld.x, worldTy = ty + bld.y;
-    const ni = S.npcs.findIndex(n => n.tx === worldTx && n.ty === worldTy && (n.floor || 0) === S.editingFloor);
-    if (ni >= 0) { S.npcs.splice(ni, 1); updateObjectList(); render(); }
+    const fl = S.editingFloor;
+
+    // Category-scoped delete in floor edit mode
+    if (S.objMode === "npc") {
+      const ni = S.npcs.findIndex(n => n.tx === worldTx && n.ty === worldTy && (n.floor || 0) === fl);
+      if (ni >= 0) { S.npcs.splice(ni, 1); updateObjectList(); render(); }
+      return;
+    }
+    if (S.objMode === "prop") {
+      const i = S.props.findIndex(p => p.tx === worldTx && p.ty === worldTy && (p.floor || 0) === fl);
+      if (i >= 0) { S.props.splice(i, 1); updateObjectList(); render(); }
+      return;
+    }
+    if (S.objMode === "particle") {
+      const i = S.particles.findIndex(p => p.tx === worldTx && p.ty === worldTy && (p.floor || 0) === fl);
+      if (i >= 0) { S.particles.splice(i, 1); updateObjectList(); render(); }
+      return;
+    }
+
+    // No category — try all types on this floor
+    const ni = S.npcs.findIndex(n => n.tx === worldTx && n.ty === worldTy && (n.floor || 0) === fl);
+    if (ni >= 0) { S.npcs.splice(ni, 1); updateObjectList(); render(); return; }
+    const pi = S.props.findIndex(p => p.tx === worldTx && p.ty === worldTy && (p.floor || 0) === fl);
+    if (pi >= 0) { S.props.splice(pi, 1); updateObjectList(); render(); return; }
+    const pti = S.particles.findIndex(p => p.tx === worldTx && p.ty === worldTy && (p.floor || 0) === fl);
+    if (pti >= 0) { S.particles.splice(pti, 1); updateObjectList(); render(); return; }
     return;
   }
 
@@ -1319,6 +1526,11 @@ function deleteObjectAtTile(tx, ty) {
         if (i >= 0) { S.extraBlocked.splice(i, 1); updateObjectList(); render(); }
         return;
       }
+      case "particle": {
+        const i = S.particles.findIndex(p => p.tx === tx && p.ty === ty);
+        if (i >= 0) { S.particles.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
     }
     return;
   }
@@ -1353,6 +1565,9 @@ function deleteObjectAtTile(tx, ty) {
 
   const bli = S.extraBlocked.findIndex(([bx, by]) => bx === tx && by === ty);
   if (bli >= 0) { S.extraBlocked.splice(bli, 1); updateObjectList(); render(); return; }
+
+  const pti = S.particles.findIndex(p => p.tx === tx && p.ty === ty);
+  if (pti >= 0) { S.particles.splice(pti, 1); updateObjectList(); render(); return; }
 }
 
 /* ── Floor Editing ─────────────────────────── */
@@ -1378,6 +1593,7 @@ function enterFloorEdit(buildingIdx) {
   }
   S.editingBuildingIdx = buildingIdx;
   S.editingFloor = 1;
+  S.panX = 0; S.panY = 0;
   updateFloorUI();
   resizeCanvas();
   render();
@@ -1386,6 +1602,7 @@ function enterFloorEdit(buildingIdx) {
 function exitFloorEdit() {
   S.editingBuildingIdx = -1;
   S.editingFloor = 0;
+  S.panX = 0; S.panY = 0;
   updateFloorUI();
   resizeCanvas();
   render();
@@ -1480,6 +1697,8 @@ function setupEventListeners() {
     navigator.clipboard.writeText(json).then(() => alert("Map JSON copied to clipboard!"));
   };
   $("#btnResetView").onclick = resetView;
+  $("#btnBgmPlay").onclick = playBgm;
+  $("#btnBgmStop").onclick = stopBgm;
 
   // Tool buttons
   $$(".tool-btn").forEach(btn => {
@@ -1541,7 +1760,7 @@ function onCanvasMouseDown(e) {
   // Middle mouse or Space+click: pan
   if (e.button === 1) {
     S.isPanning = true;
-    S.panStart = { x: e.clientX - canvas.offsetLeft, y: e.clientY - canvas.offsetTop };
+    S.panStart = { x: e.clientX, y: e.clientY, panX: S.panX, panY: S.panY };
     return;
   }
 
@@ -1613,8 +1832,9 @@ function onCanvasMouseMove(e) {
 
   // Panning
   if (S.isPanning && S.panStart) {
-    canvas.style.left = (e.clientX - S.panStart.x) + "px";
-    canvas.style.top = (e.clientY - S.panStart.y) + "px";
+    S.panX = S.panStart.panX - (e.clientX - S.panStart.x);
+    S.panY = S.panStart.panY - (e.clientY - S.panStart.y);
+    requestRender();
     return;
   }
 
@@ -1644,7 +1864,7 @@ function onCanvasMouseMove(e) {
   }
 
   // Redraw hover highlight for delete tool
-  if (S.tool === "delete") render();
+  if (S.tool === "delete") requestRender();
 }
 
 function onCanvasMouseUp(e) {
@@ -1669,19 +1889,26 @@ function onCanvasMouseUp(e) {
 
 function onWheel(e) {
   e.preventDefault();
+  const oldZoom = S.zoom;
   const delta = e.deltaY > 0 ? -0.1 : 0.1;
   S.zoom = Math.max(0.2, Math.min(3, S.zoom + delta));
+  // Zoom toward cursor position
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const worldX = S.panX + mx;
+  const worldY = S.panY + my;
+  S.panX = worldX * (S.zoom / oldZoom) - mx;
+  S.panY = worldY * (S.zoom / oldZoom) - my;
   $("#zoomInfo").textContent = `${Math.round(S.zoom * 100)}%`;
-  resizeCanvas();
   render();
 }
 
 function resetView() {
   S.zoom = 1;
-  canvas.style.left = "0px";
-  canvas.style.top = "0px";
+  S.panX = 0;
+  S.panY = 0;
   $("#zoomInfo").textContent = "100%";
-  resizeCanvas();
   render();
 }
 

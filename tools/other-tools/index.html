@@ -30,6 +30,7 @@
       <button class="tab" data-tab="props">Props</button>
       <button class="tab" data-tab="particles">Particles</button>
       <button class="tab" data-tab="skills">Skills</button>
+      <button class="tab" data-tab="statusEffects">Status Effects</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -235,7 +236,14 @@
                     <select id="itemTypeInput">
                       <option value="weapon">weapon</option>
                       <option value="armor">armor</option>
+                      <option value="shield">shield</option>
+                      <option value="helmet">helmet</option>
+                      <option value="pants">pants</option>
+                      <option value="boots">boots</option>
+                      <option value="ring">ring</option>
+                      <option value="amulet">amulet</option>
                       <option value="trinket">trinket</option>
+                      <option value="quiver">quiver</option>
                       <option value="consumable">consumable</option>
                       <option value="junk">junk</option>
                       <option value="hearthstone">hearthstone</option>
@@ -300,6 +308,40 @@
                       <input id="itemManaBonusInput" type="number" step="1" />
                     </label>
                   </div>
+                  <div class="split-grid four-columns type-field" data-type-field="weaponMeta">
+                    <label class="field">
+                      <span>Handed</span>
+                      <select id="itemHandedInput">
+                        <option value="">—</option>
+                        <option value="1">1-handed</option>
+                        <option value="2">2-handed</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Weapon Type</span>
+                      <select id="itemWeaponTypeInput">
+                        <option value="">—</option>
+                        <option value="sword">sword</option>
+                        <option value="dagger">dagger</option>
+                        <option value="staff">staff</option>
+                        <option value="bow">bow</option>
+                        <option value="mace">mace</option>
+                        <option value="axe">axe</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Range <span class="subtle">(px, ranged)</span></span>
+                      <input id="itemWeaponRangeInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                    <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                      <input id="itemRequiresQuiverInput" type="checkbox" />
+                      <span>Requires Quiver</span>
+                    </label>
+                  </div>
+                  <label class="field type-field" data-type-field="maxArrows">
+                    <span>Max Arrows <span class="subtle">(quiver capacity)</span></span>
+                    <input id="itemMaxArrowsInput" type="number" step="1" min="1" />
+                  </label>
                   <div class="split-grid four-columns">
                     <label class="field type-field" data-type-field="effect">
                       <span>Effect</span>
@@ -307,6 +349,7 @@
                         <option value="">(none)</option>
                         <option value="healHp">healHp</option>
                         <option value="healMana">healMana</option>
+                        <option value="refillQuiver">refillQuiver</option>
                       </select>
                     </label>
                     <label class="field type-field" data-type-field="power">
@@ -322,10 +365,16 @@
                       <input id="itemCooldownInput" type="number" step="0.1" />
                     </label>
                   </div>
-                  <label class="field checkbox-field type-field" data-type-field="permanent">
-                    <input id="itemPermanentInput" type="checkbox" />
-                    <span>Permanent</span>
-                  </label>
+                  <div class="split-grid two-columns type-field" data-type-field="concentration">
+                    <label class="field checkbox-field type-field" data-type-field="permanent">
+                      <input id="itemPermanentInput" type="checkbox" />
+                      <span>Permanent</span>
+                    </label>
+                    <label class="field checkbox-field">
+                      <input id="itemConcentrationInput" type="checkbox" />
+                      <span>Concentration <span class="subtle">(interrupted by movement)</span></span>
+                    </label>
+                  </div>
                   <div class="split-grid three-columns type-field" data-type-field="hitParticle">
                     <label class="field">
                       <span>Hit Particle <span class="subtle">(preset)</span></span>
@@ -1374,6 +1423,26 @@
                   </label>
                 </div>
 
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="icon-preview-frame icon-preview-frame--sm">
+                      <img id="skillIconPreviewImage" class="item-icon-preview-image hidden" alt="Skill icon preview" />
+                      <div id="skillIconPreviewFallback">
+                        <div class="missing-icon-glyph">?</div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Icon Preview</span>
+                        <span id="skillIconStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="skillIconPathLabel">public/assets/sprites/icons/&lt;icon&gt;.png</code></div>
+                        <div><span class="subtle">Same folder as item icons.</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
                 <div class="split-grid three-columns">
                   <label class="field">
                     <span>Mana Cost</span>
@@ -1396,11 +1465,12 @@
 
                 <section class="field-group">
                   <div class="inline-json-header"><h4>Classes</h4></div>
-                  <div class="split-grid four-columns">
+                  <div class="split-grid five-columns">
                     <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="warrior" /><span>Warrior</span></label>
                     <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="mage" /><span>Mage</span></label>
                     <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="ranger" /><span>Ranger</span></label>
                     <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="cleric" /><span>Cleric</span></label>
+                    <label class="field checkbox-field"><input type="checkbox" class="skill-class-cb" value="rogue" /><span>Rogue</span></label>
                   </div>
                   <label class="field">
                     <span>Additional classes <span class="subtle">(comma-separated)</span></span>
@@ -1525,6 +1595,130 @@
                 <span id="skillValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="skillDiagnosticsList" class="diagnostics-list empty-diagnostics">
+                <p>No messages yet.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="statusEffects">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Status Effects</h2>
+            <div class="inline-actions">
+              <button id="addStatusEffectButton" class="button secondary small">Add</button>
+              <button id="duplicateStatusEffectButton" class="button secondary small">Duplicate</button>
+              <button id="deleteStatusEffectButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="statusEffectSearchInput" type="text" placeholder="Find effect id or name" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="statusEffectEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Buffs</span>
+                <strong id="statusEffectBuffCount">0</strong>
+              </div>
+            </div>
+            <div id="statusEffectList" class="tile-list" role="listbox" aria-label="Status effect entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Status Effects Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/statusEffects.json</code> — UI display data for buffs and debuffs applied by skills</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateStatusEffectsButton" class="button secondary">Validate</button>
+              <button id="reloadStatusEffectsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Effect</h3>
+                <span id="selectedStatusEffectLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="statusEffectEmptyState" class="empty-state">
+                <p>Select a status effect from the list to begin editing.</p>
+              </div>
+              <form id="statusEffectForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Effect ID</span>
+                    <input id="statusEffectIdInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="statusEffectNameInput" type="text" />
+                  </label>
+                </div>
+
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Type</span>
+                    <select id="statusEffectTypeInput">
+                      <option value="buff">buff</option>
+                      <option value="debuff">debuff</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Icon <span class="subtle">(path)</span></span>
+                    <input id="statusEffectIconInput" type="text" placeholder="assets/sprites/status/stunned.png" />
+                  </label>
+                </div>
+
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="icon-preview-frame icon-preview-frame--sm">
+                      <img id="statusEffectIconPreviewImage" class="item-icon-preview-image hidden" alt="Status effect icon preview" />
+                      <div id="statusEffectIconPreviewFallback">
+                        <div class="missing-icon-glyph">?</div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Icon Preview</span>
+                        <span id="statusEffectIconStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Path</span><code id="statusEffectIconPathLabel">assets/sprites/status/…</code></div>
+                        <div><span class="subtle">Relative to <code>public/</code></span></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <label class="field">
+                  <span>Description</span>
+                  <textarea id="statusEffectDescriptionInput" rows="2"></textarea>
+                </label>
+
+                <section class="inline-json">
+                  <div class="inline-json-header">
+                    <h4>JSON Preview</h4>
+                  </div>
+                  <pre id="statusEffectJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="statusEffectValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="statusEffectDiagnosticsList" class="diagnostics-list empty-diagnostics">
                 <p>No messages yet.</p>
               </div>
             </section>

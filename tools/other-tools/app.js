@@ -1,6 +1,6 @@
 
 (() => {
-  const ITEM_TYPES = ['weapon', 'armor', 'trinket', 'consumable', 'junk', 'hearthstone'];
+  const ITEM_TYPES = ['weapon', 'armor', 'shield', 'helmet', 'pants', 'boots', 'ring', 'amulet', 'trinket', 'quiver', 'consumable', 'junk', 'hearthstone'];
   const DEFAULT_NEW_TILE = { color: [128, 128, 128], blocked: false };
   const DEFAULT_NEW_ITEM = {
     id: 'newItem',
@@ -107,27 +107,35 @@
     selectedSkillKey: null,
     skillSearch: '',
     skillDirty: false,
+    skillIconExists: null,
+
+    statusEffects: {},
+    selectedStatusEffectKey: null,
+    statusEffectSearch: '',
+    statusEffectDirty: false,
+    statusEffectIconExists: null,
   };
 
   const els = {};
   const ids = [
     'connectionBadge','dirtyBadge','loadButton','saveButton',
     'reloadButton','validateButton','scanTilesButton','addTileButton','duplicateTileButton','deleteTileButton','searchInput','tileList','entryCount','blockedCount','selectedTileLabel','emptyState','tileForm','tileIdInput','tileBlockedInput','tileColorPicker','tileRInput','tileGInput','tileBInput','colorPreview','spritePreviewImage','spritePreviewFallback','spriteStatusBadge','spritePathLabel','entryJsonPreview','diagnosticsList','validationSummary','tileListItemTemplate','scanModal','scanModalSubtitle','scanModalCloseButton','scanCancelButton','scanConfirmButton','scanNewCount','scanExistingCount','scanSpriteDirLabel','scanTileIdList',
-    'itemSearchInput','itemList','itemEntryCount','itemTypeCount','selectedItemLabel','itemEmptyState','itemForm','itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHpBonusInput','itemManaBonusInput','itemEffectInput','itemPowerInput','itemPermanentInput','itemCastTimeInput','itemCooldownInput','itemIconPreviewImage','itemIconPreviewFallback','itemIconStatusBadge','itemIconPathLabel','itemJsonPreview','itemDiagnosticsList','itemValidationSummary','itemListItemTemplate','addItemButton','duplicateItemButton','deleteItemButton','validateItemsButton','reloadItemsButton',
+    'itemSearchInput','itemList','itemEntryCount','itemTypeCount','selectedItemLabel','itemEmptyState','itemForm','itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemRequiresQuiverInput','itemWeaponRangeInput','itemHpBonusInput','itemManaBonusInput','itemMaxArrowsInput','itemEffectInput','itemPowerInput','itemPermanentInput','itemConcentrationInput','itemCastTimeInput','itemCooldownInput','itemIconPreviewImage','itemIconPreviewFallback','itemIconStatusBadge','itemIconPathLabel','itemJsonPreview','itemDiagnosticsList','itemValidationSummary','itemListItemTemplate','addItemButton','duplicateItemButton','deleteItemButton','validateItemsButton','reloadItemsButton',
     'enemySearchInput','enemyList','enemyEntryCount','enemyLootRefCount','selectedEnemyLabel','enemyEmptyState','enemyForm','enemyIdInput','enemyNameInput','enemyPreviewImage','enemyPreviewFallback','enemySpriteStatusBadge','enemySpritePathLabel','enemyColorPreview','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyLootEditor','enemyLootEmptyState','enemyLootAddButton','enemyJsonPreview','enemyDiagnosticsList','enemyValidationSummary','enemyListItemTemplate','addEnemyButton','duplicateEnemyButton','deleteEnemyButton','validateEnemiesButton','reloadEnemiesButton',
     'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
     'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNotStartedTextInput','questDialogNotStartedOptionsEditor','questDialogNotStartedOptionsEmptyState','questDialogNotStartedAddButton','questDialogActiveTextInput','questDialogActiveOptionsEditor','questDialogActiveOptionsEmptyState','questDialogActiveAddButton','questDialogReadyTextInput','questDialogReadyOptionsEditor','questDialogReadyOptionsEmptyState','questDialogReadyAddButton','questDialogCompletedTextInput','questDialogCompletedOptionsEditor','questDialogCompletedOptionsEmptyState','questDialogCompletedAddButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
     'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
     'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton',
     'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleEmitIntervalInput','particleContinuousInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
-    'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton',
+    'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton','skillIconPreviewImage','skillIconPreviewFallback','skillIconStatusBadge','skillIconPathLabel',
     'enemyHitParticleInput','enemyHitSfxInput',
     'itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput',
-    'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput'
+    'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput',
+    'statusEffectSearchInput','statusEffectList','statusEffectEntryCount','statusEffectBuffCount','selectedStatusEffectLabel','statusEffectEmptyState','statusEffectForm','statusEffectIdInput','statusEffectNameInput','statusEffectDescriptionInput','statusEffectTypeInput','statusEffectIconInput','statusEffectJsonPreview','statusEffectDiagnosticsList','statusEffectValidationSummary','addStatusEffectButton','duplicateStatusEffectButton','deleteStatusEffectButton','validateStatusEffectsButton','reloadStatusEffectsButton','statusEffectIconPreviewImage','statusEffectIconPreviewFallback','statusEffectIconStatusBadge','statusEffectIconPathLabel'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : state.tileDirty))))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : state.tileDirty)))))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -147,6 +155,7 @@
   function setPropDirty(v){ state.propDirty = v; updateDirtyBadge(); }
   function setParticleDirty(v){ state.particleDirty = v; updateDirtyBadge(); }
   function setSkillDirty(v){ state.skillDirty = v; updateDirtyBadge(); }
+  function setStatusEffectDirty(v){ state.statusEffectDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -424,11 +433,12 @@
   }
   function updateTypeFieldVisibility(type) {
     const visible = new Set();
-    if (type === 'weapon') { visible.add('attackBonus'); visible.add('hitParticle'); }
-    if (type === 'armor') visible.add('hpBonus');
-    if (type === 'trinket') visible.add('manaBonus');
+    if (type === 'weapon') { visible.add('attackBonus'); visible.add('hitParticle'); visible.add('weaponMeta'); }
+    if (['armor','shield','helmet','pants','boots'].includes(type)) visible.add('hpBonus');
+    if (['trinket','ring','amulet'].includes(type)) visible.add('manaBonus');
     if (type === 'consumable') { visible.add('effect'); visible.add('power'); visible.add('useParticle'); }
-    if (type === 'hearthstone') { visible.add('permanent'); visible.add('castTime'); visible.add('cooldown'); }
+    if (type === 'hearthstone') { visible.add('permanent'); visible.add('castTime'); visible.add('cooldown'); visible.add('concentration'); }
+    if (type === 'quiver') visible.add('maxArrows');
     document.querySelectorAll('[data-type-field]').forEach(el => el.classList.toggle('hidden-field', !visible.has(el.dataset.typeField)));
   }
   function buildCurrentItemObject(baseKey) {
@@ -443,12 +453,20 @@
     if (els.itemStackSizeInput.value !== '') obj.stackSize = Number(els.itemStackSizeInput.value);
     if (obj.type === 'weapon') {
       if (els.itemAttackBonusInput.value !== '') obj.attackBonus = Number(els.itemAttackBonusInput.value);
+      const handed = els.itemHandedInput.value;
+      if (handed) obj.handed = Number(handed);
+      const weaponType = els.itemWeaponTypeInput.value.trim();
+      if (weaponType) obj.weaponType = weaponType;
+      if (els.itemRequiresQuiverInput.checked) obj.requiresQuiver = true;
+      const wRange = els.itemWeaponRangeInput.value;
+      if (wRange !== '') obj.range = Number(wRange);
       if (els.itemHitParticleInput.value.trim()) obj.hitParticle = els.itemHitParticleInput.value.trim();
       if (els.itemHitSfxInput.value.trim()) obj.hitSfx = els.itemHitSfxInput.value.trim();
       if (els.itemSwingSfxInput.value.trim()) obj.swingSfx = els.itemSwingSfxInput.value.trim();
     }
-    if (obj.type === 'armor' && els.itemHpBonusInput.value !== '') obj.hpBonus = Number(els.itemHpBonusInput.value);
-    if (obj.type === 'trinket' && els.itemManaBonusInput.value !== '') obj.manaBonus = Number(els.itemManaBonusInput.value);
+    if (['armor','shield','helmet','pants','boots'].includes(obj.type) && els.itemHpBonusInput.value !== '') obj.hpBonus = Number(els.itemHpBonusInput.value);
+    if (['trinket','ring','amulet'].includes(obj.type) && els.itemManaBonusInput.value !== '') obj.manaBonus = Number(els.itemManaBonusInput.value);
+    if (obj.type === 'quiver' && els.itemMaxArrowsInput.value !== '') obj.maxArrows = Number(els.itemMaxArrowsInput.value);
     if (obj.type === 'consumable') {
       if (els.itemEffectInput.value) obj.effect = els.itemEffectInput.value;
       if (els.itemPowerInput.value !== '') obj.power = Number(els.itemPowerInput.value);
@@ -459,6 +477,7 @@
       obj.permanent = !!els.itemPermanentInput.checked;
       if (els.itemCastTimeInput.value !== '') obj.castTime = Number(els.itemCastTimeInput.value);
       if (els.itemCooldownInput.value !== '') obj.cooldown = Number(els.itemCooldownInput.value);
+      if (els.itemConcentrationInput.checked) obj.concentration = true;
     }
     return obj;
   }
@@ -482,13 +501,19 @@
     els.itemStackSizeInput.value = toIntOrEmpty(item.stackSize);
     els.itemDescriptionInput.value = item.description || '';
     els.itemAttackBonusInput.value = toIntOrEmpty(item.attackBonus);
+    els.itemHandedInput.value = item.handed != null ? String(item.handed) : '';
+    els.itemWeaponTypeInput.value = item.weaponType || '';
+    els.itemRequiresQuiverInput.checked = !!item.requiresQuiver;
+    els.itemWeaponRangeInput.value = item.range != null ? item.range : '';
     els.itemHpBonusInput.value = toIntOrEmpty(item.hpBonus);
     els.itemManaBonusInput.value = toIntOrEmpty(item.manaBonus);
+    els.itemMaxArrowsInput.value = toIntOrEmpty(item.maxArrows);
     els.itemEffectInput.value = item.effect || '';
     els.itemPowerInput.value = toIntOrEmpty(item.power);
     els.itemPermanentInput.checked = !!item.permanent;
     els.itemCastTimeInput.value = toNumOrEmpty(item.castTime);
     els.itemCooldownInput.value = toNumOrEmpty(item.cooldown);
+    els.itemConcentrationInput.checked = !!item.concentration;
     els.itemHitParticleInput.value = item.hitParticle || '';
     els.itemHitSfxInput.value = item.hitSfx || '';
     els.itemSwingSfxInput.value = item.swingSfx || '';
@@ -1939,9 +1964,40 @@
   function addParticleColor() { const entry=getSelectedParticleEntry(); if(!entry) return; if(!Array.isArray(entry.color)) entry.color=[]; entry.color.push('#ffffff'); setParticleDirty(true); renderParticlePanel(); }
 
   // Skills
+  function getSkillIconUrl(icon) { return `/api/skill-icon/${encodeURIComponent(icon)}?v=${Date.now()}`; }
+  function getSkillIconDisplayPath(icon) { return `public/assets/sprites/icons/${icon}.png`; }
+  function setSkillIconStatus(exists) {
+    state.skillIconExists = exists;
+    if (exists === true) {
+      els.skillIconStatusBadge.textContent = 'Icon found'; els.skillIconStatusBadge.className = 'badge online';
+      els.skillIconPreviewImage.classList.remove('hidden'); els.skillIconPreviewFallback.classList.add('hidden');
+    } else if (exists === false) {
+      els.skillIconStatusBadge.textContent = 'Missing icon'; els.skillIconStatusBadge.className = 'badge unsaved';
+      els.skillIconPreviewImage.classList.add('hidden'); els.skillIconPreviewFallback.classList.remove('hidden');
+    } else {
+      els.skillIconStatusBadge.textContent = 'Checking'; els.skillIconStatusBadge.className = 'badge muted';
+      els.skillIconPreviewImage.classList.add('hidden'); els.skillIconPreviewFallback.classList.remove('hidden');
+    }
+  }
+
+  function getStatusEffectIconUrl(iconPath) { return `/api/status-sprite/${encodeURIComponent(iconPath)}?v=${Date.now()}`; }
+  function setStatusEffectIconStatus(exists) {
+    state.statusEffectIconExists = exists;
+    if (exists === true) {
+      els.statusEffectIconStatusBadge.textContent = 'Icon found'; els.statusEffectIconStatusBadge.className = 'badge online';
+      els.statusEffectIconPreviewImage.classList.remove('hidden'); els.statusEffectIconPreviewFallback.classList.add('hidden');
+    } else if (exists === false) {
+      els.statusEffectIconStatusBadge.textContent = 'Missing icon'; els.statusEffectIconStatusBadge.className = 'badge unsaved';
+      els.statusEffectIconPreviewImage.classList.add('hidden'); els.statusEffectIconPreviewFallback.classList.remove('hidden');
+    } else {
+      els.statusEffectIconStatusBadge.textContent = 'Checking'; els.statusEffectIconStatusBadge.className = 'badge muted';
+      els.statusEffectIconPreviewImage.classList.add('hidden'); els.statusEffectIconPreviewFallback.classList.remove('hidden');
+    }
+  }
+
   const SKILL_TYPES = ['attack','heal','buff','debuff','support'];
   const SKILL_TARGETING = ['enemy','self','aoe','aoe_ally'];
-  const KNOWN_CLASSES = ['warrior','mage','ranger','cleric'];
+  const KNOWN_CLASSES = ['warrior','mage','ranger','cleric','rogue'];
   const DEFAULT_NEW_SKILL = { id:'newSkill', name:'New Skill', description:'', type:'attack', targeting:'enemy', range:null, cooldown:null, manaCost:0, damage:0, damageType:'physical', particle:null, sfx:null, classes:[], levelReq:1, icon:'newSkill' };
 
   function getVisibleSkillKeys() {
@@ -2067,7 +2123,12 @@
     els.skillHealIntervalInput.value = skill.healInterval != null ? skill.healInterval : '';
     els.skillHealChanneledInput.checked = !!skill.channeled;
     updateSkillTypeVisibility(els.skillTypeInput.value);
+    // Icon preview
+    const iconKey = (skill.icon || '').trim();
+    els.skillIconPathLabel.textContent = getSkillIconDisplayPath(iconKey || '…');
     els.skillJsonPreview.textContent = JSON.stringify({ [state.selectedSkillKey]: skill }, null, 2);
+    if (iconKey) { setSkillIconStatus(null); els.skillIconPreviewImage.src = getSkillIconUrl(iconKey); }
+    else { setSkillIconStatus(false); }
   }
 
   function syncSelectedSkillFromForm() {
@@ -2150,11 +2211,132 @@
   function duplicateSkill() { const s=getSelectedSkillEntry(); if(!s) return; const key=ensureUniqueSkillKey(`${state.selectedSkillKey}_copy`); const clone=JSON.parse(JSON.stringify(s)); clone.id=key; state.skills[key]=clone; state.selectedSkillKey=key; setSkillDirty(true); renderSkills(); }
   function deleteSkill() { if(!getSelectedSkillEntry()) return; if(!window.confirm(`Delete skill "${state.selectedSkillKey}"?`)) return; delete state.skills[state.selectedSkillKey]; state.selectedSkillKey=Object.keys(state.skills)[0]||null; setSkillDirty(true); renderSkills(); }
 
+  // Status Effects
+  const DEFAULT_NEW_STATUS_EFFECT = { name:'New Effect', description:'', type:'buff', icon:'' };
+
+  function getVisibleStatusEffectKeys() {
+    const q = state.statusEffectSearch.toLowerCase();
+    return Object.keys(state.statusEffects).filter(k => {
+      const se = state.statusEffects[k] || {};
+      return !q || k.toLowerCase().includes(q) || String(se.name||'').toLowerCase().includes(q) || String(se.type||'').toLowerCase().includes(q);
+    }).sort((a,b)=>a.localeCompare(b));
+  }
+  function getSelectedStatusEffectEntry() { return state.selectedStatusEffectKey ? state.statusEffects[state.selectedStatusEffectKey] || null : null; }
+  function ensureUniqueStatusEffectKey(baseKey){ let c=baseKey, i=2; while(state.statusEffects[c]) c=`${baseKey}_${i++}`; return c; }
+
+  function renderStatusEffectList() {
+    const visibleKeys = getVisibleStatusEffectKeys();
+    const allKeys = Object.keys(state.statusEffects);
+    els.statusEffectEntryCount.textContent = String(allKeys.length);
+    els.statusEffectBuffCount.textContent = String(allKeys.filter(k => state.statusEffects[k]?.type === 'buff').length);
+    els.statusEffectList.innerHTML = '';
+    if (!visibleKeys.length) { const empty=document.createElement('div'); empty.className='subtle'; empty.textContent='No matching effects.'; els.statusEffectList.appendChild(empty); return; }
+    for (const key of visibleKeys) {
+      const se = state.statusEffects[key] || {};
+      const color = se.type === 'buff' ? '#3fb06a' : '#d06060';
+      const button = document.createElement('button');
+      button.className = 'tile-list-item' + (key === state.selectedStatusEffectKey ? ' active' : '');
+      button.type = 'button';
+      button.innerHTML = `<span class="swatch" style="background:${color}"></span><span class="tile-text"><strong class="tile-name">${se.name || key}</strong><span class="tile-meta">${key} • ${se.type || '?'}</span></span>`;
+      button.addEventListener('click', () => { state.selectedStatusEffectKey = key; renderStatusEffectPanel(); renderStatusEffectList(); });
+      els.statusEffectList.appendChild(button);
+    }
+  }
+
+  function renderStatusEffectPanel() {
+    const se = getSelectedStatusEffectEntry();
+    if (!se) {
+      els.selectedStatusEffectLabel.textContent = 'Nothing selected';
+      els.statusEffectEmptyState.classList.remove('hidden');
+      els.statusEffectForm.classList.add('hidden');
+      els.statusEffectJsonPreview.textContent = '';
+      return;
+    }
+    els.selectedStatusEffectLabel.textContent = state.selectedStatusEffectKey;
+    els.statusEffectEmptyState.classList.add('hidden');
+    els.statusEffectForm.classList.remove('hidden');
+    els.statusEffectIdInput.value = state.selectedStatusEffectKey;
+    els.statusEffectNameInput.value = se.name || '';
+    els.statusEffectDescriptionInput.value = se.description || '';
+    els.statusEffectTypeInput.value = se.type || 'buff';
+    els.statusEffectIconInput.value = se.icon || '';
+    // Icon preview
+    const iconPath = (se.icon || '').trim();
+    els.statusEffectIconPathLabel.textContent = iconPath || 'assets/sprites/status/…';
+    els.statusEffectJsonPreview.textContent = JSON.stringify({ [state.selectedStatusEffectKey]: se }, null, 2);
+    if (iconPath) { setStatusEffectIconStatus(null); els.statusEffectIconPreviewImage.src = getStatusEffectIconUrl(iconPath); }
+    else { setStatusEffectIconStatus(false); }
+  }
+
+  function syncSelectedStatusEffectFromForm() {
+    const current = getSelectedStatusEffectEntry(); if (!current) return;
+    const newKey = (els.statusEffectIdInput.value || '').trim() || state.selectedStatusEffectKey;
+    if (newKey !== state.selectedStatusEffectKey && !state.statusEffects[newKey]) {
+      const newMap = {};
+      Object.keys(state.statusEffects).forEach(k => { newMap[k === state.selectedStatusEffectKey ? newKey : k] = state.statusEffects[k]; });
+      state.statusEffects = newMap; state.selectedStatusEffectKey = newKey;
+    }
+    state.statusEffects[state.selectedStatusEffectKey] = {
+      name: els.statusEffectNameInput.value || '',
+      description: els.statusEffectDescriptionInput.value || '',
+      type: els.statusEffectTypeInput.value || 'buff',
+      icon: els.statusEffectIconInput.value || '',
+    };
+    setStatusEffectDirty(true);
+    renderStatusEffectList();
+    els.statusEffectJsonPreview.textContent = JSON.stringify({ [state.selectedStatusEffectKey]: state.statusEffects[state.selectedStatusEffectKey] }, null, 2);
+  }
+
+  function renderStatusEffectDiagnostics(items=[], summary='No validation run yet') {
+    els.statusEffectValidationSummary.textContent = summary; els.statusEffectDiagnosticsList.innerHTML = '';
+    if (!items.length) { els.statusEffectDiagnosticsList.className='diagnostics-list empty-diagnostics'; els.statusEffectDiagnosticsList.innerHTML='<p>No messages yet.</p>'; return; }
+    els.statusEffectDiagnosticsList.className='diagnostics-list';
+    for (const item of items) { const div=document.createElement('div'); div.className=`diagnostic-item ${item.level||'info'}`; div.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`; els.statusEffectDiagnosticsList.appendChild(div); }
+  }
+
+  function renderStatusEffects() { renderStatusEffectList(); renderStatusEffectPanel(); }
+
+  async function loadStatusEffects() {
+    const result = await apiFetch('/api/status-effects');
+    state.statusEffects = result.statusEffects || {};
+    const keys = Object.keys(state.statusEffects);
+    state.selectedStatusEffectKey = keys.includes(state.selectedStatusEffectKey) ? state.selectedStatusEffectKey : (keys[0] || null);
+    setStatusEffectDirty(false); renderStatusEffects(); renderStatusEffectDiagnostics([{level:'info', title:'Status effects loaded', message:result.path}], `Loaded ${keys.length} entries from disk`);
+  }
+
+  async function saveStatusEffects() {
+    const result = await apiFetch('/api/status-effects', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({statusEffects: state.statusEffects}) });
+    setStatusEffectDirty(false); renderStatusEffectDiagnostics([{level:'info', title:'Saved successfully', message:result.path}], `Saved ${Object.keys(state.statusEffects).length} entries to disk`);
+  }
+
+  function validateStatusEffects() {
+    const messages=[]; const entries=Object.entries(state.statusEffects);
+    if (!entries.length) messages.push({level:'warning', title:'No entries', message:'statusEffects.json is empty.'});
+    for (const [key, se] of entries) {
+      if (!key.trim()) { messages.push({level:'error', title:'Blank key', message:'A status effect has an empty id.'}); continue; }
+      if (!se.name || !String(se.name).trim()) messages.push({level:'warning', title:`Missing name: ${key}`, message:'name should be a non-empty string.'});
+      if (!['buff','debuff'].includes(se.type)) messages.push({level:'error', title:`Invalid type: ${key}`, message:`type must be "buff" or "debuff", got "${se.type}".`});
+      if (!se.icon) messages.push({level:'warning', title:`Missing icon: ${key}`, message:'icon path should be set (e.g. assets/sprites/status/stunned.png).'});
+      // Check that a matching skill buff/debuff id exists
+      const referencedBySkill = Object.values(state.skills).some(skill =>
+        (skill.buff && skill.buff.id === key) || (skill.debuff && skill.debuff.id === key)
+      );
+      if (!referencedBySkill) messages.push({level:'info', title:`Unreferenced: ${key}`, message:'No skill buff/debuff references this id. May be intentional.'});
+    }
+    if (!messages.length) messages.push({level:'info', title:'Validation passed', message:'No schema problems detected in statusEffects.json.'});
+    const errorCount=messages.filter(m=>m.level==='error').length; const warnCount=messages.filter(m=>m.level==='warning').length;
+    renderStatusEffectDiagnostics(messages, errorCount||warnCount ? `${errorCount} error(s), ${warnCount} warning(s)` : 'Validation passed');
+  }
+
+  function addStatusEffect() { const key=ensureUniqueStatusEffectKey('newEffect'); state.statusEffects[key]=JSON.parse(JSON.stringify(DEFAULT_NEW_STATUS_EFFECT)); state.selectedStatusEffectKey=key; setStatusEffectDirty(true); renderStatusEffects(); }
+  function duplicateStatusEffect() { const se=getSelectedStatusEffectEntry(); if(!se) return; const key=ensureUniqueStatusEffectKey(`${state.selectedStatusEffectKey}_copy`); state.statusEffects[key]=JSON.parse(JSON.stringify(se)); state.selectedStatusEffectKey=key; setStatusEffectDirty(true); renderStatusEffects(); }
+  function deleteStatusEffect() { if(!getSelectedStatusEffectEntry()) return; if(!window.confirm(`Delete status effect "${state.selectedStatusEffectKey}"?`)) return; delete state.statusEffects[state.selectedStatusEffectKey]; state.selectedStatusEffectKey=Object.keys(state.statusEffects)[0]||null; setStatusEffectDirty(true); renderStatusEffects(); }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : loadPalette()))))))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : loadPalette())))))))));
     els.saveButton.addEventListener('click', () => {
-      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills' };
+      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects' };
       const label = tabNames[state.activeTab] || state.activeTab;
       if (!window.confirm(`Save ${label} to disk?\n\nThis will overwrite the JSON file.`)) return;
       if (state.activeTab === 'items') saveItems();
@@ -2165,6 +2347,7 @@
       else if (state.activeTab === 'props') saveProps();
       else if (state.activeTab === 'particles') saveParticles();
       else if (state.activeTab === 'skills') saveSkills();
+      else if (state.activeTab === 'statusEffects') saveStatusEffects();
       else savePalette();
     });
     els.reloadButton.addEventListener('click', loadPalette);
@@ -2191,8 +2374,10 @@
     els.duplicateItemButton.addEventListener('click', duplicateItem);
     els.deleteItemButton.addEventListener('click', deleteItem);
     els.itemSearchInput.addEventListener('input', e => { state.itemSearch = e.target.value || ''; renderItemList(); });
-    ['itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHpBonusInput','itemManaBonusInput','itemEffectInput','itemPowerInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput'].forEach(id => els[id].addEventListener('input', syncSelectedItemFromForm));
+    ['itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemWeaponRangeInput','itemMaxArrowsInput','itemHpBonusInput','itemManaBonusInput','itemEffectInput','itemPowerInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput'].forEach(id => els[id].addEventListener('input', syncSelectedItemFromForm));
     els.itemPermanentInput.addEventListener('change', syncSelectedItemFromForm);
+    els.itemConcentrationInput.addEventListener('change', syncSelectedItemFromForm);
+    els.itemRequiresQuiverInput.addEventListener('change', syncSelectedItemFromForm);
     els.itemTypeInput.addEventListener('change', () => { updateTypeFieldVisibility(els.itemTypeInput.value); syncSelectedItemFromForm(); });
     els.itemIconPreviewImage.addEventListener('load', () => setItemIconStatus(true));
     els.itemIconPreviewImage.addEventListener('error', () => setItemIconStatus(false));
@@ -2285,6 +2470,33 @@
     els.skillHealChanneledInput.addEventListener('change', syncSelectedSkillFromForm);
     document.querySelectorAll('.skill-class-cb').forEach(cb => cb.addEventListener('change', syncSelectedSkillFromForm));
 
+    els.reloadStatusEffectsButton.addEventListener('click', loadStatusEffects);
+    els.validateStatusEffectsButton.addEventListener('click', validateStatusEffects);
+    els.addStatusEffectButton.addEventListener('click', addStatusEffect);
+    els.duplicateStatusEffectButton.addEventListener('click', duplicateStatusEffect);
+    els.deleteStatusEffectButton.addEventListener('click', deleteStatusEffect);
+    els.statusEffectSearchInput.addEventListener('input', e => { state.statusEffectSearch = e.target.value || ''; renderStatusEffectList(); });
+    ['statusEffectIdInput','statusEffectNameInput','statusEffectDescriptionInput','statusEffectIconInput'].forEach(id => els[id].addEventListener('input', syncSelectedStatusEffectFromForm));
+    els.statusEffectTypeInput.addEventListener('change', syncSelectedStatusEffectFromForm);
+    els.skillIconPreviewImage.addEventListener('load', () => setSkillIconStatus(true));
+    els.skillIconPreviewImage.addEventListener('error', () => setSkillIconStatus(false));
+    els.statusEffectIconPreviewImage.addEventListener('load', () => setStatusEffectIconStatus(true));
+    els.statusEffectIconPreviewImage.addEventListener('error', () => setStatusEffectIconStatus(false));
+    // Refresh skill icon preview live as the icon key is typed
+    els.skillIconInput.addEventListener('input', () => {
+      const key = els.skillIconInput.value.trim();
+      els.skillIconPathLabel.textContent = getSkillIconDisplayPath(key || '…');
+      if (key) { setSkillIconStatus(null); els.skillIconPreviewImage.src = getSkillIconUrl(key); }
+      else setSkillIconStatus(false);
+    });
+    // Refresh statusEffect icon preview live as the path is typed
+    els.statusEffectIconInput.addEventListener('input', () => {
+      const p = els.statusEffectIconInput.value.trim();
+      els.statusEffectIconPathLabel.textContent = p || 'assets/sprites/status/…';
+      if (p) { setStatusEffectIconStatus(null); els.statusEffectIconPreviewImage.src = getStatusEffectIconUrl(p); }
+      else setStatusEffectIconStatus(false);
+    });
+
     // SFX play buttons — single delegated listener covers all tabs
     document.addEventListener('click', e => {
       const btn = e.target.closest('.sfx-play-btn');
@@ -2296,7 +2508,7 @@
     });
 
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -2313,7 +2525,8 @@
     renderProps();
     renderParticles();
     renderSkills();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills()]); }
+    renderStatusEffects();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -2323,6 +2536,7 @@
       renderPlayerBaseDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderParticleDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderSkillDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderStatusEffectDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 

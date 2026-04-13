@@ -40,7 +40,7 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
   flex: 1; overflow: hidden; position: relative; cursor: crosshair;
   background: #11111b;
 }
-#mapCanvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; }
+#mapCanvas { image-rendering: pixelated; display: block; }
 
 /* ── Panel Sections ────────────────────────── */
 .panel-section { margin-bottom: 12px; }

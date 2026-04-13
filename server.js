@@ -299,9 +299,10 @@ const startServer = (port) => {
 
     // Character detail
     app.get("/admin/api/characters/:id", adminAuth, (req, res) => {
+      const charId = Number(req.params.id);
       const row = database.db.prepare(
         "SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, username, created_at AS createdAt FROM characters WHERE id = ?"
-      ).get(Number(req.params.id));
+      ).get(charId);
       if (!row) return res.status(404).json({ error: "Character not found" });
       row.inventory = JSON.parse(row.inventory || "[]");
       row.equipment = JSON.parse(row.equipment || "{}");
@@ -309,6 +310,20 @@ const startServer = (port) => {
       row.hearthstone = JSON.parse(row.hearthstone || "null");
       row.bank = JSON.parse(row.bank || "[]");
       row.hotbar = JSON.parse(row.hotbar || "[]");
+      // Override with live in-memory state for online players
+      for (const [pid, p] of world.players) {
+        if (p.charId === charId) {
+          row.level = p.level; row.xp = p.xp; row.gold = p.gold;
+          row.hp = p.hp; row.mana = p.mana;
+          row.inventory = p.inventory || [];
+          row.equipment = p.equipment || {};
+          row.bank = p.bank || [];
+          row.hotbar = p.hotbar || [];
+          row.hearthstone = p.hearthstone || null;
+          row.quests = p.quests || {};
+          break;
+        }
+      }
       res.json({ character: row });
     });
 
@@ -416,6 +431,7 @@ const startServer = (port) => {
       for (const [pid, p] of world.players) {
         if (p.charId === charId) {
           p.inventory = inventory;
+          world.send(p.ws, { type: "swap_result", ok: true, inventory: p.inventory, bank: p.bank });
           return res.json({ ok: true, online: true });
         }
       }
@@ -449,6 +465,7 @@ const startServer = (port) => {
       for (const [pid, p] of world.players) {
         if (p.charId === charId) {
           p.bank = bank;
+          world.send(p.ws, { type: "swap_result", ok: true, inventory: p.inventory, bank: p.bank });
           return res.json({ ok: true, online: true });
         }
       }

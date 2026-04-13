@@ -56,6 +56,21 @@ const SKILLS_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/skills.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/skills.json'),
 ];
+const STATUS_EFFECTS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/statusEffects.json'),
+  path.resolve(process.cwd(), '../../public/data/statusEffects.json'),
+  path.resolve(process.cwd(), 'public/data/statusEffects.json'),
+  path.resolve(process.cwd(), '../public/data/statusEffects.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/statusEffects.json'),
+];
+// Status effect icons are served from the public root (icon field is a relative path)
+const PUBLIC_ROOT_CANDIDATES = [
+  path.resolve(__dirname, '../../public'),
+  path.resolve(process.cwd(), '../../public'),
+  path.resolve(process.cwd(), 'public'),
+  path.resolve(process.cwd(), '../public'),
+  path.resolve(process.cwd(), '../../wow2d/public'),
+];
 const PROPS_CANDIDATES = [
   path.resolve(__dirname, '../../public/data/props.json'),
   path.resolve(process.cwd(), '../../public/data/props.json'),
@@ -117,6 +132,8 @@ function resolveExistingNpcsPath() { return firstExisting(NPCS_CANDIDATES); }
 function resolveExistingQuestsPath() { return firstExisting(QUESTS_CANDIDATES); }
 function resolveExistingParticlesPath() { return firstExisting(PARTICLES_CANDIDATES); }
 function resolveExistingSkillsPath() { return firstExisting(SKILLS_CANDIDATES); }
+function resolveExistingStatusEffectsPath() { return firstExisting(STATUS_EFFECTS_CANDIDATES); }
+function resolvePublicRoot() { return firstExisting(PUBLIC_ROOT_CANDIDATES); }
 function resolveExistingPropsPath() { return firstExisting(PROPS_CANDIDATES); }
 function resolveExistingPropSpriteDir() { return firstExisting(PROP_SPRITE_DIR_CANDIDATES); }
 function resolveExistingPlayerBasePath() { return firstExisting(PLAYER_BASE_CANDIDATES); }
@@ -237,6 +254,17 @@ function validateQuests(quests) {
   return null;
 }
 
+function validateStatusEffects(statusEffects) {
+  if (!statusEffects || typeof statusEffects !== 'object' || Array.isArray(statusEffects)) return 'statusEffects must be an object keyed by effect id.';
+  for (const [key, entry] of Object.entries(statusEffects)) {
+    if (!key.trim()) return 'Effect ids cannot be blank.';
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `Entry for "${key}" must be an object.`;
+    if (typeof entry.name !== 'string') return `Entry for "${key}" must contain name: string.`;
+    if (!['buff','debuff'].includes(entry.type)) return `Entry for "${key}" type must be "buff" or "debuff".`;
+  }
+  return null;
+}
+
 function validateSkills(skills) {
   const VALID_TYPES = new Set(['attack','heal','buff','debuff','support']);
   const VALID_TARGETING = new Set(['enemy','self','aoe','aoe_ally']);
@@ -317,7 +345,50 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  // Serve status effect icons by their relative path (e.g. assets/sprites/status/stunned.png)
+  if (pathname.startsWith('/api/status-sprite/') && req.method === 'GET') {
+    try {
+      const relPath = decodeURIComponent(pathname.replace('/api/status-sprite/', '')).trim();
+      if (!relPath) return sendText(res, 400, 'Missing path');
+      const publicRoot = resolvePublicRoot();
+      const filePath = path.normalize(path.join(publicRoot, relPath));
+      if (!filePath.startsWith(path.normalize(publicRoot))) return sendText(res, 403, 'Forbidden');
+      if (!fs.existsSync(filePath)) return sendText(res, 404, 'Not found');
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = { '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp' };
+      const data = await fs.promises.readFile(filePath);
+      res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+      return res.end(data);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+
+  // Serve skill icons — same folder as item icons (public/assets/sprites/icons/)
+  if (pathname.startsWith('/api/skill-icon/') && req.method === 'GET') {
+    try {
+      const iconId = pathname.replace('/api/skill-icon/', '').trim();
+      if (!iconId) return sendText(res, 400, 'Missing icon id');
+      const iconPath = safeAssetPath(resolveExistingItemIconDir(), iconId);
+      if (!iconPath) return sendText(res, 403, 'Forbidden');
+      return serveFile(res, iconPath);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+
+  if (pathname === '/api/status-effects' && req.method === 'GET') {
+    try { return sendJson(res, 200, { statusEffects: JSON.parse(await fs.promises.readFile(resolveExistingStatusEffectsPath(), 'utf8')), path: resolveExistingStatusEffectsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingStatusEffectsPath() }); }
+  }
+  if (pathname === '/api/status-effects' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateStatusEffects(body.statusEffects);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingStatusEffectsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.statusEffects, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingStatusEffectsPath() }); }
+  }
 
   if (pathname === '/api/skills' && req.method === 'GET') {
     try { return sendJson(res, 200, { skills: JSON.parse(await fs.promises.readFile(resolveExistingSkillsPath(), 'utf8')), path: resolveExistingSkillsPath() }); }
@@ -536,6 +607,7 @@ server.listen(PORT, () => {
   console.log(`Prop sprite dir: ${resolveExistingPropSpriteDir()}`);
   console.log(`Particles target: ${resolveExistingParticlesPath()}`);
   console.log(`Skills target:    ${resolveExistingSkillsPath()}`);
+  console.log(`Status effects:   ${resolveExistingStatusEffectsPath()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);
   console.log(`Tile sprite dir: ${resolveExistingTileSpriteDir()}`);
   console.log(`Entity sprite dir: ${resolveExistingEntitySpriteDir()}`);

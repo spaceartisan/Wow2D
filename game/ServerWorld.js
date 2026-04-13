@@ -130,10 +130,16 @@ class CollisionMap {
     // Buildings are now tile-based (walls blocked via palette), no rectangle blocking needed
 
     // Props (including trees) — blocked per props.json definition
+    this.blockedByFloor = {};   // floor → Set of tileKeys (non-ground floors)
     for (const p of (data.props || [])) {
       const def = PROP_DEFS[p.type];
-      if (def?.blocked) {
+      if (!def?.blocked) continue;
+      const floor = p.floor || 0;
+      if (floor === 0) {
         this.blocked.add(tileKey(p.tx, p.ty));
+      } else {
+        if (!this.blockedByFloor[floor]) this.blockedByFloor[floor] = new Set();
+        this.blockedByFloor[floor].add(tileKey(p.tx, p.ty));
       }
     }
   }
@@ -154,6 +160,9 @@ class CollisionMap {
         const tile = this._getUpperFloorTile(tx, ty, floor);
         if (!tile) return true;       // out of building / void = blocked
         if (tile.blocked) return true;
+        // Also check floor-specific prop blocking
+        const floorBlocked = this.blockedByFloor[floor];
+        if (floorBlocked && floorBlocked.has(tileKey(tx, ty))) return true;
       } else {
         if (this.blocked.has(tileKey(tx, ty))) return true;
       }
@@ -196,7 +205,7 @@ class ServerWorld {
   constructor() {
     // Load all maps
     this.maps = new Map();       // mapId → { data, collision, enemies[], drops[] }
-    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern", "southmere", "stonegate"]) {
+    for (const mapId of ["eldengrove", "darkwood", "moonfall_cavern", "southmere", "stonegate","titanreach","magical_tower"]) {
       const data = loadMap(mapId);
       const collision = new CollisionMap(data);
       const enemies = this._createEnemiesForMap(data, collision);

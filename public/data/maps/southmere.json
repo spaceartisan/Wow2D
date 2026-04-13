@@ -17797,6 +17797,7 @@
     }
   ],
   "extraBlocked": [],
+  "particles": [],
   "enemySpawns": [
     {
       "type": "wolf",

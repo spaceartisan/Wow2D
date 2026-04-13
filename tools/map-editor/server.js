@@ -49,6 +49,18 @@ app.get("/api/props", (_req, res) => {
   res.json(data);
 });
 
+app.get("/api/particles", (_req, res) => {
+  const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "particles.json"), "utf8"));
+  res.json(data);
+});
+
+app.get("/api/bgm", (_req, res) => {
+  const bgmDir = path.join(PROJECT_ROOT, "public", "assets", "bgm");
+  if (!fs.existsSync(bgmDir)) return res.json([]);
+  const files = fs.readdirSync(bgmDir).filter(f => /\.(mp3|wav|ogg)$/i.test(f));
+  res.json(files);
+});
+
 app.get("/api/maps", (_req, res) => {
   if (!fs.existsSync(MAPS_DIR)) return res.json([]);
   const files = fs.readdirSync(MAPS_DIR)

@@ -159,7 +159,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `attack` | `enemyId` | Attack an enemy (range + cooldown validated) |
 | `heal` | — | Use Minor Heal (22 mana, 5.3s cooldown) |
 | `chat` | `text` | Send chat. `/w Name msg` for whisper. Max 200 chars |
-| `map_change` | `portalIndex` | Enter a portal (proximity validated) |
+| `map_change` | `mapId, x, y` | Enter a portal (proximity validated) |
 | `use_item` | `index` | Use consumable at inventory index |
 | `sell_item` | `index` | Sell item (must be near vendor NPC) |
 | `buy_item` | `npcId, itemId` | Buy from vendor (proximity + gold validated) |
@@ -741,7 +741,7 @@ The admin GUI (`admin/`) is fully implemented. All routes are behind `adminAuth`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/admin/api/stats` | Dashboard stats (online count, accounts, characters, active sessions, maps) |
+| GET | `/admin/api/stats` | Dashboard stats (online count, accounts, characters, active sessions, maps, mapSpawns, totalGold, classCounts) |
 | GET | `/admin/api/players` | All online players with position, HP, mana, gold, status |
 | GET | `/admin/api/accounts` | All registered accounts |
 | GET | `/admin/api/accounts/:username/characters` | Characters belonging to an account |
@@ -755,7 +755,7 @@ The admin GUI (`admin/`) is fully implemented. All routes are behind `adminAuth`
 | GET | `/admin/api/waystones` | All waystones across all maps |
 | POST | `/admin/api/players/:id/kick` | Kick an online player |
 | POST | `/admin/api/players/:id/revive` | Revive a dead player to full HP/mana |
-| POST | `/admin/api/players/:id/teleport` | Teleport player to a waystone |
+| POST | `/admin/api/players/:id/teleport` | Teleport player to any map + tile coordinates |
 | POST | `/admin/api/players/:id/grantxp` | Grant XP (handles level-ups) |
 | POST | `/admin/api/players/:id/setgold` | Set gold amount |
 | POST | `/admin/api/players/:id/whisper` | Send a private whisper from `[Admin]` |

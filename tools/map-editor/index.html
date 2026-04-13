@@ -21,7 +21,9 @@
       <label>Name: <input id="mapName" type="text" placeholder="My Map" class="input-md"></label>
       <label>W: <input id="mapWidth" type="number" value="80" min="10" max="256" class="input-xs"></label>
       <label>H: <input id="mapHeight" type="number" value="80" min="10" max="256" class="input-xs"></label>
-      <label>BGM: <input id="mapBgm" type="text" placeholder="" class="input-sm"></label>
+      <label>BGM: <select id="mapBgm" class="input-sm"><option value="">(none)</option></select></label>
+      <button id="btnBgmPlay" title="Play BGM" style="font-size:14px;cursor:pointer;">&#9654;</button>
+      <button id="btnBgmStop" title="Stop BGM" style="font-size:14px;cursor:pointer;">&#9632;</button>
       <label>Spawn: <input id="spawnX" type="number" value="5" min="0" class="input-xs">,<input id="spawnY" type="number" value="5" min="0" class="input-xs"></label>
     </div>
     <div class="topbar-group" id="floorControls" style="display:none;">
@@ -76,6 +78,7 @@
           <button class="obj-btn" data-obj="enemy">Enemy</button>
           <button class="obj-btn" data-obj="npc">NPC</button>
           <button class="obj-btn" data-obj="prop">Prop</button>
+          <button class="obj-btn" data-obj="particle">Particle</button>
           <button class="obj-btn" data-obj="building">Building</button>
           <button class="obj-btn" data-obj="statue">Waystone</button>
           <button class="obj-btn" data-obj="safezone">Safe Zone</button>
