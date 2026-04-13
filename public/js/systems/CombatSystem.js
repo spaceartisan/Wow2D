@@ -216,7 +216,7 @@ export class CombatSystem {
     this.game.network.sendAttack(enemy.id);
 
     // Use weapon-specific swing SFX, fall back to playerBase default
-    const weapon = this.game.entities.player.equipment?.weapon;
+    const weapon = this.game.entities.player.equipment?.mainHand;
     const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
     const swingSfx = weaponDef?.swingSfx || PLAYER_BASE.swingSfx || "sword_swing";
     this.game.audio.play(swingSfx);

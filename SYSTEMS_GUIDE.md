@@ -27,6 +27,10 @@ All values are sourced directly from the codebase. If something below disagrees 
 18. [Camera](#18-camera)
 19. [Render Order](#19-render-order)
 20. [Client Update Order](#20-client-update-order)
+21. [Authority Model](#21-authority-model)
+22. [Message Catalog](#22-message-catalog)
+23. [End-to-End Flow Examples](#23-end-to-end-flow-examples)
+24. [Glossary](#24-glossary)
 
 ---
 
@@ -309,7 +313,7 @@ $$
 \text{damage} = \max(2, \; \text{player.damage} + \text{randInt}(-2, 4))
 $$
 
-`player.damage` is computed from `baseDamage + weapon.attackBonus`.
+`player.damage` is computed from `baseDamage + mainHand.attackBonus`.
 
 Damage is applied **immediately**. No projectile. The server sends:
 
@@ -330,7 +334,7 @@ Damage is applied **immediately**. No projectile. The server sends:
 
 **File:** `game/ServerWorld.js` — `handleAttack()`, `updateProjectiles()`, `_resolveProjectileHit()`
 
-Ranged weapons (any weapon with a `range` property in items.json) use server-tracked projectiles. **Damage is NOT computed at launch time.** It is computed at launch but only *applied* when the projectile hits.
+Ranged weapons (any weapon with a `range` property in items.json) use server-tracked projectiles. **Damage is computed at hit time** — when the projectile reaches its target, the server rolls damage using the player's *current* stats (including any buffs/debuffs active at that moment). This means stat changes between launch and impact are properly reflected in the final damage.
 
 ### Launch
 
@@ -560,11 +564,11 @@ Iterative computation — each level requires 28% more XP than the last. Level c
 ### Stat formulas
 
 $$
-\text{maxHp} = 120 + (\text{level} - 1) \times 24 + \text{armor.hpBonus}
+\text{maxHp} = 120 + (\text{level} - 1) \times 24 + \sum(\text{armor, offHand, helmet, pants, boots hpBonus})
 $$
 
 $$
-\text{maxMana} = 80 + (\text{level} - 1) \times 16 + \text{trinket.manaBonus}
+\text{maxMana} = 80 + (\text{level} - 1) \times 16 + \sum(\text{ring1, ring2, amulet manaBonus})
 $$
 
 $$
@@ -572,11 +576,11 @@ $$
 $$
 
 $$
-\text{damage} = \text{baseDamage} + \text{weapon.attackBonus}
+\text{damage} = \text{baseDamage} + \text{mainHand.attackBonus}
 $$
 
 $$
-\text{attackRange} = \text{weapon.range} \; || \; 52
+\text{attackRange} = \text{mainHand.range} \; || \; 52
 $$
 
 ### On stat recalculation
@@ -937,3 +941,448 @@ All positions are drawn relative to the integer-snapped camera.
 ```
 
 `dt` is capped at **0.05 s** (20 fps floor) to prevent physics explosions from lag spikes.
+
+---
+
+## 21. Authority Model
+
+A clear breakdown of what runs where and who has the final say.
+
+### Server-authoritative (server is the single source of truth)
+
+| System | Details |
+|--------|---------|
+| **HP / Mana / Death** | All damage, healing, regen, and death states are computed on the server. The client never subtracts HP. |
+| **Projectile damage** | Server tracks its own projectile objects, moves them each tick, and applies damage only when *its* copy hits. Client projectiles are cosmetic. |
+| **Gold / Inventory / Equipment** | Every gold change, item pickup, buy, sell, equip, and swap is validated and executed on the server. Client receives the result. |
+| **XP / Levelling / Stats** | XP grants, level-ups, and stat recalculations (`_recalcStats`) happen server-side. Client applies values from messages. |
+| **Enemy state** | Enemy HP, position, AI state, and death are all server-side. Client only renders what the `state` message tells it. |
+| **Cooldowns** | Attack and skill cooldowns are enforced on the server. The client also tracks them for UI feedback but the server rejects early attempts. |
+| **Casting / Concentration** | Cast timers, completion, and interrupts (movement, death) are all server-checked per tick. |
+| **Loot ownership** | Drop ownership and expiry timers are server-side. Pickup validation (distance, ownership window) is server-side. |
+| **Map transitions** | Server validates portal proximity before allowing a map change. |
+| **Collision (validation)** | Server checks `isBlocked()` on every move. Clients that send impossible positions are silently rejected. |
+
+### Client-predicted (act immediately, reconcile later)
+
+| System | Details |
+|--------|---------|
+| **Local player movement** | Client moves the player sprite instantly on input. Sends position + sequence number to server. Server acks the seq, client compares and smoothly corrects any disagreement (see §4). |
+| **Equip (optimistic)** | Client swaps the item in the UI immediately on click, then sends `equip_item`. If the server says `ok: false`, the UI is technically wrong until the next state refresh. |
+
+### Interpolated (smoothed from server snapshots)
+
+| System | Details |
+|--------|---------|
+| **Remote player positions** | Rendered 4 ticks behind real-time via Catmull-Rom / linear / dead-reckoning interpolation with output smoothing (see §3). |
+| **Enemy positions** | Rendered 3 ticks behind real-time, same interpolation pipeline. |
+| **Enemy HP (overrides)** | Immediate override via `attack_result` / `projectile_hit` for responsiveness; replaced by next `state` message. |
+
+### Client-only / cosmetic (no server involvement)
+
+| System | Details |
+|--------|---------|
+| **Particles** | All particle emission, physics, and rendering happen on the client. The server never knows about particles. |
+| **Audio** | SFX and BGM are client-only. Volume settings persist in `localStorage`. |
+| **Camera** | Lerp-based tracking of the local player is entirely client-side. |
+| **Client projectile visuals** | Arrow sprites, trails, homing animation, and `onHit` callbacks (which trigger particles + SFX) are all cosmetic. The server has its own invisible projectile objects. |
+| **Damage text / floating numbers** | Spawned client-side in response to server messages. Not a game state. |
+| **Minimap** | Rendered client-side from loaded map data. |
+| **UI panels** | Inventory, equipment, quest log, skill book, shop, bank — all rendered client-side from server-provided data. |
+
+---
+
+## 22. Message Catalog
+
+Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
+
+### Client → Server (22 types)
+
+| `type` | Payload | Handler |
+|--------|---------|---------|
+| `join` | `token`, `charData` | `server.js` auth |
+| `move` | `seq`, `x`, `y`, `level`, `floor` | `handleMove()` |
+| `attack` | `enemyId` | `handleAttack()` |
+| `heal` | *(none)* | `handleHeal()` |
+| `use_skill` | `skillId`, `enemyId?` | `handleUseSkill()` |
+| `chat` | `text` | `handleChat()` |
+| `map_change` | `mapId`, `x`, `y` | `handleMapChange()` |
+| `use_item` | `index` | `handleUseItem()` |
+| `sell_item` | `index` | `handleSellItem()` |
+| `buy_item` | `itemId`, `npcId` | `handleBuyItem()` |
+| `equip_item` | `index` | `handleEquipItem()` |
+| `unequip_item` | `slot` | `handleUnequipItem()` |
+| `complete_quest` | `questId` | `handleCompleteQuest()` |
+| `quest_state_update` | `quests` | `handleQuestStateUpdate()` |
+| `attune_hearthstone` | `statueId` | `handleAttuneHearthstone()` |
+| `use_hearthstone` | *(none)* | `handleUseHearthstone()` |
+| `cancel_hearthstone` | *(none)* | `handleCancelHearthstone()` |
+| `bank_deposit` | `invIndex` | `handleBankDeposit()` |
+| `bank_withdraw` | `bankIndex` | `handleBankWithdraw()` |
+| `hotbar_update` | `hotbar` (array of 10) | `handleHotbarUpdate()` |
+| `swap_items` | `from`, `to`, `fromContainer`, `toContainer` | `handleSwapItems()` |
+| `respawn` | *(none)* | *(no-op — death timer auto-respawns)* |
+
+### Server → Client — Unicast (29 types)
+
+| `type` | Key payload fields | Sent by |
+|--------|--------------------|---------|
+| `welcome` | `playerId`, `tick`, `tickRate`, `enemies[]`, `players[]`, `drops[]`, full inventory/equipment/stats/quests/bank/hotbar | `addPlayer()` |
+| `state` | `tick`, `enemies[]`, `players[]`, `drops[]`, `you{…}` | `broadcastWorldState()` — per-player |
+| `attack_result` | `enemyId`, `damage`, `enemyHp`, `enemyMaxHp` | `handleAttack()`, `_resolveProjectileHit()` |
+| `enemy_killed` | `enemyId`, `enemyType`, `xpReward` | `killEnemy()` |
+| `player_damaged` | `damage`, `hp`, `maxHp`, `attackerName`, `attackerType` | `updateEnemyAi()` |
+| `you_died` | `goldLost` | `onPlayerDeath()` |
+| `you_respawned` | `x`, `y`, `hp`, `maxHp`, `mana`, `maxMana` | `updatePlayerDeaths()` |
+| `loot_pickup` | `dropId`, `gold`, `item`, `index`, `slotItem` | `updateDropPickups()` |
+| `heal_result` | `ok`, `reason?`, `healAmount?`, `hp?`, `maxHp?`, `mana?`, `maxMana?` | `handleHeal()` |
+| `map_changed` | `mapId`, `enemies[]`, `players[]`, `drops[]` | `handleMapChange()` |
+| `skill_result` | `ok`, `skillId`, `damage?`, `enemyHp?`, `mana`, `maxMana`, `buff?`, `debuff?` | `handleUseSkill()` |
+| `projectile_hit` | `skillId`, `enemyId`, `damage`, `enemyHp`, `enemyMaxHp`, `debuff?` | `_resolveProjectileHit()` |
+| `use_item_result` | `ok`, `index`, `itemId`, `remainingItem`, `effect`, `amount`, `hp`, `maxHp`, `mana`, `maxMana` | `handleUseItem()` |
+| `sell_item_result` | `ok`, `index`, `remainingItem`, `gold`, `soldName`, `sellPrice` | `handleSellItem()` |
+| `buy_item_result` | `ok`, `item`, `index`, `gold`, `buyPrice` | `handleBuyItem()` |
+| `equip_item_result` | `ok`, `index`, `slot`, `newItem`, `oldItem`, `hp`, `maxHp`, `mana`, `maxMana`, `damage` | `handleEquipItem()` |
+| `unequip_item_result` | `ok`, `slot`, `item`, `index`, `hp`, `maxHp`, `mana`, `maxMana`, `damage` | `handleUnequipItem()` |
+| `quest_complete_result` | `ok`, `questId`, `xp`, `gold`, `items[]`, `playerGold`, `playerXp`, `playerLevel` | `handleCompleteQuest()` |
+| `attune_result` | `ok`, `reason?`, `hearthstone?` | `handleAttuneHearthstone()` |
+| `hearthstone_result` | `ok`, `reason`, `remaining?` | `handleUseHearthstone()` |
+| `hearthstone_cast_start` | `castTime`, `destination` | `handleUseHearthstone()` |
+| `hearthstone_cast_cancelled` | `reason` | `_interruptCast()` / `handleCancelHearthstone()` |
+| `hearthstone_teleport` | `mapId`, `x`, `y`, `hearthstone`, `enemies[]?`, `players[]?`, `drops[]?` | `_completeCast()` |
+| `bank_result` | `ok`, `action`, `invIndex?`, `bankIndex?`, `inventory[]`, `bank[]` | `handleBankDeposit/Withdraw()` |
+| `hotbar_result` | `ok`, `hotbar[]` | `handleHotbarUpdate()` |
+| `swap_result` | `ok`, `inventory[]`, `bank[]` | `handleSwapItems()` |
+| `auth_error` | `error` | `server.js` auth |
+| `kicked` | `reason` | `server.js` duplicate-login / admin |
+| `chat` | `channel`, `from`, `text`, `playerId?`, `to?` | `handleChat()` / admin |
+
+### Server → Broadcast (all players on map)
+
+| `type` | Key payload fields | Sent by |
+|--------|--------------------|---------|
+| `player_joined` | `player{id, name, charClass, level, x, y, hp, maxHp, dead}` | `addPlayer()`, `handleMapChange()` |
+| `player_left` | `playerId` | `removePlayer()`, `handleMapChange()` |
+| `drop_spawned` | `drop{id, x, y}` | `killEnemy()` |
+| `drop_removed` | `dropId` | `updateDropPickups()` |
+| `combat_visual` | *(varies — see below)* | Multiple sources |
+| `projectile_spawn` | `attackerId`, `sx`, `sy`, `targetEnemyId`, `speed`, `weaponId?`, `skillId?`, `damageType?` | `handleAttack()`, `handleUseSkill()` |
+| `chat` (world) | `channel:"world"`, `from`, `playerId`, `text` | `handleChat()` — all maps |
+
+### `combat_visual` variants
+
+This is the most polymorphic message. Its shape depends on context:
+
+**A. Melee / instant skill → enemy** (excludes attacker)
+```
+attackerId, ax, ay, enemyId, ex, ey, weaponId?, skillId?,
+isRanged?, hitParticle, hitSfx, projectileSpeed?, damageType?,
+damage, enemyHp, enemyMaxHp
+```
+
+**B. Self-targeted effect (heal / buff)** (excludes caster)
+```
+attackerId, ax, ay, selfTarget: true, particle, sfx
+```
+
+**C. Enemy → player attack** (excludes target)
+```
+attackerId: null, enemyAttackerId, ax, ay,
+targetPlayerId, tx, ty, hitParticle, hitSfx
+```
+
+**D. Projectile hit** (excludes attacker)
+```
+projectileHit: true, attackerId, enemyId, ex, ey,
+damage, enemyHp, enemyMaxHp
+```
+
+The client's `onCombatVisual()` handler branches on `projectileHit`, `selfTarget`, and `enemyAttackerId` to determine variant.
+
+---
+
+## 23. End-to-End Flow Examples
+
+Step-by-step traces of common game actions from input to pixels on screen.
+
+---
+
+### 23a. Melee Attack
+
+```
+1. Player clicks enemy                      [client — CombatSystem.handleWorldClick]
+2. combat.sendAttack(enemyId)               [client → sends { type:"attack", enemyId }]
+     │
+3. handleAttack(player, msg)                [server]
+     ├─ validate: alive, cooldown, target exists, range (attackRange + 30)
+     ├─ damage = max(2, player.damage + randInt(-2,4))
+     ├─ enemy.hp -= damage
+     ├─ → send attack_result to attacker    { enemyId, damage, enemyHp, enemyMaxHp }
+     ├─ → broadcast combat_visual (var A)   to all OTHER players on map
+     └─ if enemy.hp ≤ 0 → killEnemy()
+          ├─ enemy.dead = true, set deadUntil
+          ├─ create loot drop, grant XP
+          ├─ → send enemy_killed              { enemyId, enemyType, xpReward }
+          └─ → broadcast drop_spawned          { drop }
+     │
+4. onAttackResult(msg)                      [client — attacker]
+     ├─ set enemyOverrides (immediate HP)
+     ├─ show damage number, emit hit_spark particle, play sword_hit SFX
+     └─ UI message: "You hit Wolf for 18."
+     │
+5. onCombatVisual(msg)                      [client — other players]
+     ├─ set enemyOverrides
+     ├─ show damage number, emit particle, play SFX
+     └─ (only other players see this — attacker already handled above)
+     │
+6. Next state tick                          [server → all clients]
+     └─ state message includes updated enemy HP
+        → client clears enemyOverrides, interpolation shows authoritative data
+```
+
+---
+
+### 23b. Ranged Attack (Bow)
+
+```
+1. Player clicks enemy                      [client]
+2. → { type:"attack", enemyId }            [client → server]
+     │
+3. handleAttack(player, msg)                [server]
+     ├─ weapon has range property → ranged path
+     ├─ damage = max(2, player.damage + randInt(-2,4))
+     ├─ create server projectile { id, playerId, targetEnemyId, x, y, speed:360, damage }
+     ├─ push into mapEntry.projectiles[]
+     └─ → broadcast projectile_spawn to ALL  { attackerId, sx, sy, targetEnemyId, speed, weaponId }
+         (no attack_result yet — damage is deferred)
+     │
+4. onProjectileSpawn(msg)                   [client — ALL players]
+     ├─ look up weapon sprite
+     └─ projectiles.spawn() — visual arrow with homing, trail, onHit callback
+     │
+5. updateProjectiles() each server tick     [server]
+     ├─ home toward enemy.x/y
+     ├─ step = 360 × dt ≈ 6 px/tick
+     └─ if dist ≤ 16 or step ≥ dist → _resolveProjectileHit()
+          ├─ enemy.hp -= damage
+          ├─ → send attack_result to attacker    { damage, enemyHp, enemyMaxHp }
+          ├─ → broadcast combat_visual (var D)   { projectileHit:true }
+          └─ if enemy dead → killEnemy()
+     │
+6. Client projectile hits (visual)          [client — ~same time]
+     ├─ onHit() → emit hit_spark, play arrow_hit SFX
+     └─ projectile removed from visual list
+     │
+7. onAttackResult(msg)                      [client — attacker]
+     ├─ set enemyOverrides, show damage text
+     └─ (for ranged, no particles here — onHit already fired)
+     │
+8. onCombatVisual(projectileHit:true)       [client — other players]
+     └─ early return: just set enemyOverrides (projectile visual already showing)
+```
+
+Key difference from melee: **damage is deferred**. The server's invisible projectile must physically reach the enemy before `attack_result` is sent. If a different attack kills the enemy first, the projectile fizzles and no damage message is sent.
+
+---
+
+### 23c. Player Death and Respawn
+
+```
+1. Enemy attacks player in updateEnemyAi()  [server]
+     ├─ target.hp -= enemy.damage
+     └─ if target.hp ≤ 0:
+          ├─ target.hp = 0
+          └─ onPlayerDeath(target, now)
+               ├─ player.dead = true
+               ├─ player.deathUntil = now + 4200  (4.2s timer)
+               ├─ goldLost = min(gold, 10); gold -= goldLost
+               ├─ all enemies drop aggro on this player
+               └─ → send you_died { goldLost }
+     │
+2. onPlayerDied()                           [client]
+     ├─ player.dead = true
+     ├─ player.deathUntil = performance.now() + 4200
+     ├─ emit "death" particle, play "player_death" SFX
+     └─ message: "You died."
+     │
+3. state messages continue at 60 Hz        [server → client]
+     └─ you.dead = true; client keeps rendering death state
+     │
+4. After 4.2 seconds — updatePlayerDeaths() [server]
+     ├─ player.dead = false
+     ├─ hp = maxHp, mana = maxMana
+     ├─ x, y = map spawn point; floor = 0
+     └─ → send you_respawned { x, y, hp, maxHp, mana, maxMana }
+     │
+5. onPlayerRespawned(msg)                   [client]
+     ├─ player.dead = false
+     ├─ apply position and all stats
+     ├─ combat.clearTarget()
+     └─ message: "You awaken at the town shrine."
+```
+
+The `respawn` client→server message is a no-op. Respawn is entirely timer-driven on the server (4200 ms).
+
+---
+
+### 23d. Equipping an Item
+
+```
+1. Player clicks weapon in inventory        [client — UISystem]
+     ├─ item.type must be in EQUIPPABLE_TYPES (weapon, shield, quiver, armor, helmet, pants, boots, ring, amulet)
+     ├─ OPTIMISTIC: entities.equipItemAtIndex(index)
+     │    ├─ determine target slot via _equipSlotForItem():
+     │    │    weapon→mainHand, shield/quiver→offHand, armor→armor, helmet→helmet,
+     │    │    pants→pants, boots→boots, amulet→amulet, ring→ring1 or ring2 (first empty, or ring1)
+     │    ├─ swap inventory[index] ↔ equipment[slot]
+     │    ├─ recalculateDerivedStats() — local damage, maxHp, etc.
+     │    └─ message: "Iron Sword equipped."
+     └─ → { type:"equip_item", index }
+     │
+2. handleEquipItem(player, msg)             [server]
+     ├─ validate: alive, valid index, item is equippable
+     ├─ determine slot via _equipSlotForItem()
+     ├─ 2H weapon check: auto-unequip offHand if needed (bow+quiver stays)
+     ├─ offHand check: reject shield/quiver if mainHand is 2H (non-bow)
+     ├─ swap inventory[index] ↔ equipment[slot]
+     ├─ _recalcStats(player)
+     │    ├─ hpBonus = sum(armor, offHand, helmet, pants, boots .hpBonus)
+     │    ├─ manaBonus = sum(ring1, ring2, amulet .manaBonus)
+     │    ├─ maxHp = 120 + (level-1)×24 + hpBonus
+     │    ├─ maxMana = 80 + (level-1)×16 + manaBonus
+     │    ├─ damage = baseDamage + mainHand.attackBonus
+     │    ├─ attackRange = mainHand.range || 52
+     │    └─ preserve HP/mana ratios
+     └─ → send equip_item_result { ok, index, slot, newItem, oldItem, hp, maxHp, mana, maxMana, damage }
+     │
+3. onEquipItemResult(msg)                   [client]
+     ├─ AUTHORITATIVE overwrite: equipment[slot], inventory[index]
+     ├─ apply hp, maxHp, mana, maxMana, damage from server
+     └─ re-render inventory + equipment panels
+```
+
+The client's optimistic swap gives instant UI feedback. The server response overwrites with the authoritative result on the next message.
+
+---
+
+### 23e. Map Change via Portal
+
+```
+1. checkPortals() detects overlap           [client — Game.update, every frame]
+     └─ changeMap(targetMap, targetTx, targetTy)
+          ├─ set _changingMap = true
+          ├─ await world.loadMap(mapId) — fetch map JSON, build tiles + collision
+          ├─ minimap.invalidate()
+          ├─ player.x/y = target × tileSize
+          ├─ rebuild NPCs + statues
+          ├─ combat.targetEnemyId = null
+          ├─ projectiles.clear()
+          ├─ centerCameraOnPlayer() — snap, no lerp
+          └─ → { type:"map_change", mapId, x, y }
+     │
+2. handleMapChange(player, msg)             [server]
+     ├─ validate: alive, map exists, portal proximity (tileSize × 5)
+     ├─ → broadcast player_left to OLD map   { playerId }
+     ├─ player.mapId = targetMap, update x/y, floor = 0
+     ├─ → send map_changed                   { mapId, enemies[], players[], drops[] }
+     └─ → broadcast player_joined to NEW map { player }
+     │
+3. onMapChanged(msg)                        [client]
+     ├─ _resetEntities(msg)
+     │    ├─ clear ALL interpolation buffers (enemy + player snaps, smooth maps)
+     │    ├─ clear prediction buffer + correction
+     │    ├─ reset tick-time mapping
+     │    ├─ seed new snapshot buffers from msg.enemies/players
+     │    └─ reset drops
+     ├─ particles.clear()
+     └─ combat.clearTarget()
+```
+
+The client loads map data *first*, then tells the server. If the server rejects (e.g., player wasn't near a valid portal), the client has already loaded — but the server won't send `map_changed`, and the next `state` message positions the player correctly.
+
+---
+
+### 23f. Buying from a Shop
+
+```
+1. Player clicks "Buy" in shop UI           [client — UISystem]
+     └─ → { type:"buy_item", itemId, npcId }
+     │
+2. handleBuyItem(player, msg)               [server]
+     ├─ validate: alive, NPC exists, NPC sells this item
+     ├─ proximity check: dist < tileSize × 1.5
+     ├─ gold check: player.gold ≥ item.value
+     ├─ inventory: _addItemToSlots() — stack or find empty slot
+     ├─ player.gold -= buyPrice
+     └─ → send buy_item_result { ok, item, index, gold, buyPrice }
+     │
+3. onBuyItemResult(msg)                     [client]
+     ├─ if !ok: show error ("Not enough gold." / "Inventory is full." / "Too far from vendor.")
+     ├─ inventorySlots[index] = msg.item
+     ├─ player.gold = msg.gold
+     ├─ play "pickup" SFX
+     ├─ message: "Bought Iron Sword for 45 gold."
+     └─ refresh shop panel (button states depend on gold)
+```
+
+No optimistic update — client waits for the server to confirm the purchase.
+
+---
+
+### 23g. Using a Consumable (Health Potion)
+
+```
+1. Player clicks potion in inventory/hotbar [client — UISystem]
+     └─ → { type:"use_item", index }       (no optimistic HP change)
+     │
+2. handleUseItem(player, msg)               [server]
+     ├─ validate: alive, valid index, type = "consumable"
+     ├─ decrement qty (or remove if qty = 1)
+     ├─ look up template for effect:
+     │    effect "healHp": hp = min(maxHp, hp + power)
+     │    effect "healMana": mana = min(maxMana, mana + power)
+     └─ → send use_item_result { ok, index, remainingItem, effect, amount, hp, maxHp, mana, maxMana }
+     │
+3. onUseItemResult(msg)                     [client]
+     ├─ inventorySlots[index] = msg.remainingItem || null
+     ├─ apply hp, maxHp, mana, maxMana
+     ├─ look up item's useParticle + useSfx from items.json
+     ├─ emit particle at player, play SFX
+     └─ message: "Potion restores 50 HP."
+```
+
+---
+
+## 24. Glossary
+
+| Term | Definition |
+|------|-----------|
+| **Tick** | One iteration of the server game loop. Runs 60 times per second (every ~16.67 ms). |
+| **dt** | Delta time — seconds elapsed since last tick (server) or frame (client). |
+| **Tick rate** | Fixed frequency of the server loop: 60 Hz. |
+| **Frame** | One iteration of the client render loop. Target 60 fps via `requestAnimationFrame`. |
+| **Authoritative** | The server is the final authority. Client values are overridden by server data. |
+| **Optimistic update** | Client applies a change immediately before the server confirms, for perceived responsiveness. |
+| **Prediction** | Client simulates its own movement locally so input feels instant, correcting against server acks. |
+| **Reconciliation** | Comparing an optimistic/predicted value against the server's response and correcting the error. |
+| **Interpolation** | Smoothly blending between two known positions (snapshots) to render a past moment in time. |
+| **Dead reckoning** | Extrapolating an entity's future position from its last known velocity when no new snapshots arrive. |
+| **Render tick** | The fractional server tick at which the client renders entities. Always behind real-time (`currentTick - interpTicks`). |
+| **Snapshot** | A recorded `{ tick, x, y }` for an entity, stored in a ring buffer for interpolation. |
+| **Ring buffer** | Fixed-size array (16 entries) per entity storing recent snapshots. Oldest entries shift out. |
+| **Output smoothing** | Per-frame blend (0.45) between the previous rendered position and the new interpolated result. Prevents micro-pops. |
+| **Hard snap** | Teleporting an entity to its target position when the error exceeds a threshold (150 px for interp, 80 px for prediction). |
+| **Enemy override** | Immediate client-side HP patch from `attack_result` / `projectile_hit`. Superseded on next `state` message. |
+| **Correction** | Accumulated position error (`server - predicted`) drained at 0.2× per frame toward zero. |
+| **Homing** | Projectile recalculates its direction toward the target's current position each tick/frame. |
+| **Fizzle** | A projectile that is discarded because its target died or disappeared before contact. |
+| **Leash** | Distance (300 px) from spawn at which an enemy drops aggro and returns home. |
+| **Aggro** | An enemy selecting a player as its attack target. Acquired by proximity, lost by distance/death/safe-zone. |
+| **Safe zone** | Map region (defined in collision data) where enemies cannot aggro players. |
+| **Concentration** | A cast property requiring the player to remain stationary. Movement interrupts the cast. |
+| **Burst (particles)** | One-shot emission of a batch of particles (e.g., `hit_spark` on impact). |
+| **Continuous emitter** | A particle source that fires bursts at a fixed interval until stopped or its duration expires. |
+| **Catmull-Rom** | A cubic spline interpolation using 4 control points that passes through the middle two, producing smooth curves. |
+| **Linear regression (tick mapping)** | Least-squares fit over 120 `{tick, time}` samples to convert client timestamps to fractional server ticks. |
+| **Sequence number (`seq`)** | Integer tagged on each move message. Server acks it so the client can identify which prediction to compare against. |
+| **blendMode** | Canvas compositing mode. Most particles use `"lighter"` (additive blending) for glow effects. |

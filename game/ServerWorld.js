@@ -281,16 +281,55 @@ class ServerWorld {
       inventory: (() => {
         const raw = Array.isArray(charData.inventory) ? charData.inventory : [];
         const slots = new Array(20).fill(null);
-        for (let i = 0; i < Math.min(raw.length, 20); i++) slots[i] = raw[i] || null;
+        for (let i = 0; i < Math.min(raw.length, 20); i++) {
+          const saved = raw[i];
+          if (!saved) continue;
+          // Reconcile with current template so reclassified items update
+          const tpl = ITEMS[saved.id];
+          if (tpl) {
+            saved.type = tpl.type;
+            saved.name = tpl.name;
+            saved.icon = tpl.icon;
+          }
+          slots[i] = saved;
+        }
         return slots;
       })(),
-      equipment: (charData.equipment && typeof charData.equipment === "object") ? charData.equipment : {},
+      equipment: (() => {
+        const raw = (charData.equipment && typeof charData.equipment === "object") ? charData.equipment : {};
+        // Migrate old 3-slot format → new 9-slot format
+        const eq = {
+          mainHand: raw.mainHand || raw.weapon || null,
+          offHand: raw.offHand || null,
+          armor: raw.armor || null,
+          helmet: raw.helmet || null,
+          pants: raw.pants || null,
+          boots: raw.boots || null,
+          ring1: raw.ring1 || null,
+          ring2: raw.ring2 || null,
+          amulet: raw.amulet || raw.trinket || null
+        };
+        // Reconcile equipped items with current templates
+        for (const slot of Object.keys(eq)) {
+          const it = eq[slot];
+          if (!it) continue;
+          const tpl = ITEMS[it.id];
+          if (tpl) { it.type = tpl.type; it.name = tpl.name; it.icon = tpl.icon; }
+        }
+        return eq;
+      })(),
       quests: (charData.quests && typeof charData.quests === "object") ? charData.quests : {},
       hearthstone: (charData.hearthstone && typeof charData.hearthstone === "object") ? charData.hearthstone : null,
       bank: (() => {
         const raw = Array.isArray(charData.bank) ? charData.bank : [];
         const slots = new Array(48).fill(null);
-        for (let i = 0; i < Math.min(raw.length, 48); i++) slots[i] = raw[i] || null;
+        for (let i = 0; i < Math.min(raw.length, 48); i++) {
+          const saved = raw[i];
+          if (!saved) continue;
+          const tpl = ITEMS[saved.id];
+          if (tpl) { saved.type = tpl.type; saved.name = tpl.name; saved.icon = tpl.icon; }
+          slots[i] = saved;
+        }
         return slots;
       })(),
       hotbar: (() => {
@@ -563,15 +602,26 @@ class ServerWorld {
     if (d > player.attackRange + 30) return; // allow small latency buffer
 
     player.lastAttackAt = now;
-    const weaponDef = player.equipment?.weapon ? ITEMS[player.equipment.weapon.id] : null;
+    const weaponDef = player.equipment?.mainHand ? ITEMS[player.equipment.mainHand.id] : null;
 
     // ── Ranged weapon — create server-side projectile, defer damage ──
     if (weaponDef?.range) {
-      const damage = Math.max(2, player.damage + randInt(-2, 4));
+      // Bow requires a quiver with arrows
+      if (weaponDef.requiresQuiver) {
+        const quiver = player.equipment.offHand;
+        if (!quiver || quiver.type !== "quiver" || !(quiver.arrows > 0)) {
+          this.send(player.ws, { type: "attack_result", ok: false, reason: "Out of arrows!" });
+          return;
+        }
+        quiver.arrows--;
+        // Notify client of updated arrow count
+        this.send(player.ws, { type: "quiver_update", arrows: quiver.arrows, maxArrows: ITEMS[quiver.id]?.maxArrows || quiver.maxArrows || 50 });
+      }
+
       const projId = this._nextProjId++;
       mapEntry.projectiles.push({
         id: projId, playerId: player.id, targetEnemyId: enemy.id,
-        x: player.x, y: player.y, speed: 360, damage,
+        x: player.x, y: player.y, speed: 360,
         type: "attack",
         hitParticle: weaponDef.hitParticle || "hit_spark",
         hitSfx: weaponDef.hitSfx || "sword_hit",
@@ -582,7 +632,7 @@ class ServerWorld {
         sx: player.x, sy: player.y,
         targetEnemyId: enemy.id,
         speed: 360,
-        weaponId: player.equipment?.weapon?.id || null,
+        weaponId: player.equipment?.mainHand?.id || null,
       });
       return;
     }
@@ -609,7 +659,7 @@ class ServerWorld {
       enemyId: enemy.id,
       ex: enemy.x,
       ey: enemy.y,
-      weaponId: player.equipment?.weapon?.id || null,
+      weaponId: player.equipment?.mainHand?.id || null,
       isRanged: false,
       hitParticle: weaponDef?.hitParticle || "hit_spark",
       hitSfx: weaponDef?.hitSfx || "sword_hit",
@@ -720,16 +770,13 @@ class ServerWorld {
     // Resolve skill effects by type
     if (skillDef.type === "attack" || skillDef.type === "debuff") {
       if (!enemy) return;
-      const baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
-      const damage = Math.max(1, baseDmg + randInt(-2, 4));
-
       // ── Ranged skill — create server-side projectile, defer damage ──
       if (skillDef.projectileSpeed > 0) {
         const mapEntry = this.maps.get(player.mapId);
         const projId = this._nextProjId++;
         mapEntry.projectiles.push({
           id: projId, playerId: player.id, targetEnemyId: enemy.id,
-          x: player.x, y: player.y, speed: skillDef.projectileSpeed, damage,
+          x: player.x, y: player.y, speed: skillDef.projectileSpeed,
           type: "skill", skillId,
           hitParticle: skillDef.hitParticle || skillDef.particle || null,
           hitSfx: skillDef.sfx || null,
@@ -755,6 +802,8 @@ class ServerWorld {
       }
 
       // ── Instant skill — apply damage immediately ──
+      const baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+      const damage = Math.max(1, baseDmg + randInt(-2, 4));
       enemy.hp -= damage;
 
       // Apply debuff to enemy if skill has one
@@ -1036,6 +1085,32 @@ class ServerWorld {
         mana: player.mana,
         maxMana: player.maxMana
       });
+    } else if (template.effect === "refillQuiver") {
+      const quiver = player.equipment.offHand;
+      if (!quiver || quiver.type !== "quiver") {
+        // put the item back
+        if (qty > 1) { item.qty = qty; } else { inventory[index] = item; }
+        this.send(player.ws, { type: "use_item_result", ok: false, reason: "No quiver equipped." });
+        return;
+      }
+      const maxArr = ITEMS[quiver.id]?.maxArrows || quiver.maxArrows || 50;
+      const before = quiver.arrows || 0;
+      quiver.arrows = Math.min(maxArr, before + template.power);
+      const added = quiver.arrows - before;
+      this.send(player.ws, {
+        type: "use_item_result",
+        ok: true,
+        index,
+        itemId: item.id,
+        remainingItem: inventory[index],
+        effect: "refillQuiver",
+        amount: added,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        mana: player.mana,
+        maxMana: player.maxMana
+      });
+      this.send(player.ws, { type: "quiver_update", arrows: quiver.arrows, maxArrows: maxArr });
     } else {
       this.send(player.ws, { type: "use_item_result", ok: false, reason: "unknown_effect" });
     }
@@ -1150,6 +1225,34 @@ class ServerWorld {
     });
   }
 
+  /* ── Equipment slot helpers ───────────────────────────── */
+
+  static EQUIPPABLE_TYPES = new Set([
+    "weapon", "shield", "quiver", "armor", "helmet", "pants", "boots", "ring", "amulet"
+  ]);
+
+  static EQUIPMENT_SLOTS = [
+    "mainHand", "offHand", "armor", "helmet", "pants", "boots", "ring1", "ring2", "amulet"
+  ];
+
+  /** Map item type → target equipment slot (rings handled specially). */
+  _equipSlotForItem(player, item) {
+    switch (item.type) {
+      case "weapon": return "mainHand";
+      case "shield": case "quiver": return "offHand";
+      case "armor":  return "armor";
+      case "helmet": return "helmet";
+      case "pants":  return "pants";
+      case "boots":  return "boots";
+      case "amulet": return "amulet";
+      case "ring":
+        if (!player.equipment.ring1) return "ring1";
+        if (!player.equipment.ring2) return "ring2";
+        return "ring1"; // both full → swap ring1
+      default: return null;
+    }
+  }
+
   handleEquipItem(player, msg) {
     if (player.dead) return;
     const index = Number(msg.index);
@@ -1157,9 +1260,50 @@ class ServerWorld {
 
     const inventory = player.inventory;
     const item = inventory[index];
-    if (!item || !["weapon", "armor", "trinket"].includes(item.type)) return;
+    if (!item || !ServerWorld.EQUIPPABLE_TYPES.has(item.type)) return;
 
-    const slot = item.type;
+    const slot = this._equipSlotForItem(player, item);
+    if (!slot) return;
+
+    // ── 2H / bow / offHand constraint checks ──
+    const mainDef = player.equipment.mainHand ? ITEMS[player.equipment.mainHand.id] : null;
+
+    if (slot === "mainHand") {
+      const weaponDef = ITEMS[item.id];
+      if (weaponDef?.handed === 2 && player.equipment.offHand) {
+        // 2H weapon — auto-unequip offHand (unless bow + quiver combo)
+        if (weaponDef.requiresQuiver && player.equipment.offHand.type === "quiver") {
+          // bow allows quiver to stay
+        } else {
+          const emptyIdx = inventory.indexOf(null);
+          if (emptyIdx === -1) {
+            this.send(player.ws, { type: "equip_item_result", ok: false, reason: "Inventory full — unequip off-hand first." });
+            return;
+          }
+          inventory[emptyIdx] = player.equipment.offHand;
+          player.equipment.offHand = null;
+        }
+      }
+    }
+
+    if (slot === "offHand") {
+      if (mainDef?.handed === 2) {
+        if (mainDef.requiresQuiver && item.type === "quiver") {
+          // allow quiver with bow
+        } else {
+          this.send(player.ws, { type: "equip_item_result", ok: false, reason: "Cannot equip off-hand with a two-handed weapon." });
+          return;
+        }
+      }
+    }
+
+    // ── Quiver: initialise arrow count ──
+    if (item.type === "quiver" && item.arrows === undefined) {
+      const template = ITEMS[item.id];
+      item.arrows = template?.maxArrows || 50;
+    }
+
+    // ── Perform the swap ──
     const oldItem = player.equipment[slot] || null;
     player.equipment[slot] = item;
     inventory[index] = oldItem;
@@ -1184,7 +1328,7 @@ class ServerWorld {
   handleUnequipItem(player, msg) {
     if (player.dead) return;
     const slot = msg.slot;
-    if (!["weapon", "armor", "trinket"].includes(slot)) return;
+    if (!ServerWorld.EQUIPMENT_SLOTS.includes(slot)) return;
 
     const item = player.equipment[slot];
     if (!item) return;
@@ -1627,12 +1771,23 @@ class ServerWorld {
   /* ── stat recalculation ─────────────────────────────── */
 
   _recalcStats(player) {
-    const weapon = player.equipment.weapon || null;
-    const armor = player.equipment.armor || null;
-    const trinket = player.equipment.trinket || null;
+    const eq = player.equipment;
+    const weapon = eq.mainHand || null;
 
-    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + (armor?.hpBonus || 0);
-    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + (trinket?.manaBonus || 0);
+    // Sum HP bonuses from all armour-like slots (armor, shield, helmet, pants, boots)
+    let hpBonus = 0;
+    for (const s of ["armor", "offHand", "helmet", "pants", "boots"]) {
+      hpBonus += eq[s]?.hpBonus || 0;
+    }
+
+    // Sum mana bonuses from rings + amulet
+    let manaBonus = 0;
+    for (const s of ["ring1", "ring2", "amulet"]) {
+      manaBonus += eq[s]?.manaBonus || 0;
+    }
+
+    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + hpBonus;
+    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + manaBonus;
     const damage = player.baseDamage + (weapon?.attackBonus || 0);
 
     // Use weapon range if present (ranged weapons), otherwise default melee range
@@ -1814,8 +1969,18 @@ class ServerWorld {
   _resolveProjectileHit(proj, enemy, mapEntry) {
     const player = this.players.get(proj.playerId);
 
-    // Apply damage
-    enemy.hp -= proj.damage;
+    // Compute damage at hit time using player's current stats
+    let damage;
+    if (proj.type === "attack") {
+      const dmgStat = player ? player.damage : 10;
+      damage = Math.max(2, dmgStat + randInt(-2, 4));
+    } else {
+      const skillDef = SKILLS[proj.skillId];
+      const level = player ? player.level : 1;
+      const baseDmg = (skillDef?.damage || 0) + (skillDef?.damagePerLevel || 0) * (level - 1);
+      damage = Math.max(1, baseDmg + randInt(-2, 4));
+    }
+    enemy.hp -= damage;
 
     // Apply debuff if skill carried one
     let debuffApplied = null;
@@ -1842,7 +2007,7 @@ class ServerWorld {
         this.send(player.ws, {
           type: "attack_result",
           enemyId: enemy.id,
-          damage: proj.damage,
+          damage,
           enemyHp: enemy.hp,
           enemyMaxHp: enemy.maxHp
         });
@@ -1854,7 +2019,7 @@ class ServerWorld {
         attackerId: proj.playerId,
         enemyId: enemy.id,
         ex: enemy.x, ey: enemy.y,
-        damage: proj.damage,
+        damage,
         enemyHp: enemy.hp,
         enemyMaxHp: enemy.maxHp,
       }, proj.playerId);
@@ -1865,7 +2030,7 @@ class ServerWorld {
           type: "projectile_hit",
           skillId: proj.skillId,
           enemyId: enemy.id,
-          damage: proj.damage,
+          damage,
           enemyHp: enemy.hp,
           enemyMaxHp: enemy.maxHp,
           debuff: debuffApplied,
@@ -1878,7 +2043,7 @@ class ServerWorld {
         attackerId: proj.playerId,
         enemyId: enemy.id,
         ex: enemy.x, ey: enemy.y,
-        damage: proj.damage,
+        damage,
         enemyHp: enemy.hp,
         enemyMaxHp: enemy.maxHp,
       }, proj.playerId);

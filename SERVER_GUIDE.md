@@ -17,7 +17,7 @@ Reference for building a web-based admin GUI on top of the Azerfall server. Cove
 │         ▼                     ▼                        │
 │  ┌─────────────┐  ┌────────────────────────────────┐  │
 │  │ database.js  │  │ ServerWorld.js                  │  │
-│  │ SQLite + WAL │  │ Game loop @ 20 Hz              │  │
+│  │ SQLite + WAL │  │ Game loop @ 60 Hz               │  │
 │  │ (better-     │  │ Players / Enemies / Maps / AI  │  │
 │  │  sqlite3)    │  └────────────────────────────────┘  │
 │  └─────────────┘                                       │
@@ -57,7 +57,7 @@ DB file: `data/azerfall.db` (SQLite, WAL mode, foreign keys ON)
 | `hp` | INTEGER | 120 | |
 | `mana` | INTEGER | 80 | |
 | `inventory` | TEXT | `'[]'` | JSON: 20-slot array |
-| `equipment` | TEXT | `'{}'` | JSON: `{ weapon, armor, trinket }` |
+| `equipment` | TEXT | `'{}'` | JSON: `{ mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet }` |
 | `quests` | TEXT | `'{}'` | JSON: `{ questId: stateObj }` |
 | `hearthstone` | TEXT | `'null'` | JSON: attunement object or null |
 | `bank` | TEXT | `'[]'` | JSON: 48-slot array |
@@ -164,7 +164,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `sell_item` | `index` | Sell item (must be near vendor NPC) |
 | `buy_item` | `npcId, itemId` | Buy from vendor (proximity + gold validated) |
 | `equip_item` | `index` | Equip item from inventory |
-| `unequip_item` | `slot` | Unequip item from equipment slot (`weapon`, `armor`, or `trinket`) |
+| `unequip_item` | `slot` | Unequip item from equipment slot (`mainHand`, `offHand`, `armor`, `helmet`, `pants`, `boots`, `ring1`, `ring2`, or `amulet`) |
 | `complete_quest` | `questId, npcId` | Turn in quest at NPC |
 | `quest_state_update` | `questId, state` | Sync quest accept/progress (can't set "completed") |
 | `use_hearthstone` | — | Begin hearthstone cast |
@@ -183,7 +183,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `auth_error` | Bad token | `error` |
 | `kicked` | Duplicate login | `reason` |
 | `welcome` | Join success | `playerId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana` |
-| `state` | Every tick (20 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, damage }` |
+| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, damage }` |
 | `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead }` |
 | `player_left` | Player leaves map | `playerId` |
 | `map_changed` | Portal transition | `mapId, enemies, players, drops` |
@@ -233,10 +233,10 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   level: 5,
   xp: 320,
   gold: 87,
-  hp: 200, maxHp: 216,         // maxHp = base(120) + (level-1)*24 + armor.hpBonus
-  mana: 120, maxMana: 144,     // maxMana = base(80) + (level-1)*16 + trinket.manaBonus
+  hp: 200, maxHp: 216,         // maxHp = base(120) + (level-1)*24 + sum(armor/offHand/helmet/pants/boots hpBonus)
+  mana: 120, maxMana: 144,     // maxMana = base(80) + (level-1)*16 + sum(ring1/ring2/amulet manaBonus)
   baseDamage: 32,              // base(16) + (level-1)*4
-  damage: 37,                  // baseDamage + weapon.attackBonus
+  damage: 37,                  // baseDamage + mainHand.attackBonus
   attackRange: 52,
   attackCooldown: 0.82,        // seconds
   lastAttackAt: 0,             // timestamp
@@ -245,9 +245,15 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   deathUntil: 0,               // timestamp (respawn at)
   inventory: [null, {...}, ...], // 20 slots
   equipment: {
-    weapon: null | itemObj,
+    mainHand: null | itemObj,   // weapon (1H or 2H)
+    offHand: null | itemObj,    // shield or quiver
     armor: null | itemObj,
-    trinket: null | itemObj
+    helmet: null | itemObj,
+    pants: null | itemObj,
+    boots: null | itemObj,
+    ring1: null | itemObj,
+    ring2: null | itemObj,
+    amulet: null | itemObj
   },
   quests: {                    // questId → state
     "wolf_cull": { status: "active", progress: { wolf: 3 } }
@@ -338,9 +344,9 @@ Stored in `world.maps` — a `Map<mapId, MapEntry>`:
 
 ---
 
-## Tick Loop (20 Hz)
+## Tick Loop (60 Hz)
 
-Every 50ms the server runs:
+Every ~16.67ms the server runs:
 
 | Step | Method | What It Does |
 |------|--------|--------------|
@@ -660,10 +666,10 @@ const activeSessions = db.prepare(
 
 | Stat | Formula |
 |------|---------|
-| Max HP | `120 + (level - 1) × 24 + armor.hpBonus` |
-| Max Mana | `80 + (level - 1) × 16 + trinket.manaBonus` |
+| Max HP | `120 + (level - 1) × 24 + sum(armor, offHand, helmet, pants, boots hpBonus)` |
+| Max Mana | `80 + (level - 1) × 16 + sum(ring1, ring2, amulet manaBonus)` |
 | Base Damage | `16 + (level - 1) × 4` |
-| Total Damage | `baseDamage + weapon.attackBonus` |
+| Total Damage | `baseDamage + mainHand.attackBonus` |
 | XP to Level | `160 × 1.28^(level - 1)` |
 | Heal Amount | `34 + level × 6` (22 mana, 5.3s cooldown) |
 | HP Regen | `1.8 / sec` |

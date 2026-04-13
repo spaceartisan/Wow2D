@@ -69,6 +69,8 @@
     "type": "weapon",
     "icon": "rustySword",
     "attackBonus": 2,
+    "handed": 1,
+    "weaponType": "sword",
     "value": 8,
     "description": "Dull and pitted, but still sharp enough to cut.",
     "hitParticle": "hit_spark",
@@ -81,6 +83,8 @@
     "type": "weapon",
     "icon": "noviceBlade",
     "attackBonus": 5,
+    "handed": 1,
+    "weaponType": "sword",
     "value": 20,
     "description": "A sturdy blade forged for new adventurers.",
     "hitParticle": "hit_spark",
@@ -93,6 +97,9 @@
     "type": "weapon",
     "icon": "forestBow",
     "attackBonus": 8,
+    "handed": 2,
+    "weaponType": "bow",
+    "requiresQuiver": true,
     "range": 200,
     "value": 32,
     "description": "Crafted from flexible yew. Quick and accurate.",
@@ -106,6 +113,8 @@
     "type": "weapon",
     "icon": "darkwoodStaff",
     "attackBonus": 10,
+    "handed": 2,
+    "weaponType": "staff",
     "value": 40,
     "description": "Dense darkwood humming with faint energy.",
     "hitParticle": "arcane_hit",
@@ -118,6 +127,8 @@
     "type": "weapon",
     "icon": "steelLongsword",
     "attackBonus": 14,
+    "handed": 2,
+    "weaponType": "sword",
     "value": 65,
     "description": "Balanced steel with a keen edge. A warrior's companion.",
     "hitParticle": "hit_spark",
@@ -130,6 +141,9 @@
     "type": "weapon",
     "icon": "huntersBow",
     "attackBonus": 12,
+    "handed": 2,
+    "weaponType": "bow",
+    "requiresQuiver": true,
     "range": 250,
     "value": 55,
     "description": "A powerful bow favored by veteran hunters.",
@@ -143,6 +157,8 @@
     "type": "weapon",
     "icon": "banditDagger",
     "attackBonus": 7,
+    "handed": 1,
+    "weaponType": "dagger",
     "value": 28,
     "description": "A jagged blade taken from a bandit. Fast but cruel.",
     "hitParticle": "hit_spark",
@@ -155,6 +171,8 @@
     "type": "weapon",
     "icon": "eldenwoodStaff",
     "attackBonus": 16,
+    "handed": 2,
+    "weaponType": "staff",
     "value": 80,
     "description": "Ancient wood that amplifies arcane power.",
     "hitParticle": "arcane_hit",
@@ -183,7 +201,7 @@
   "ironShield": {
     "id": "ironShield",
     "name": "Iron Buckler",
-    "type": "armor",
+    "type": "shield",
     "icon": "ironShield",
     "hpBonus": 30,
     "value": 35,
@@ -220,7 +238,7 @@
   "amberCharm": {
     "id": "amberCharm",
     "name": "Amber Charm",
-    "type": "trinket",
+    "type": "amulet",
     "icon": "amberCharm",
     "manaBonus": 18,
     "value": 18,
@@ -229,7 +247,7 @@
   "wolftoothNecklace": {
     "id": "wolftoothNecklace",
     "name": "Wolftooth Necklace",
-    "type": "trinket",
+    "type": "amulet",
     "icon": "wolftoothNecklace",
     "manaBonus": 10,
     "value": 12,
@@ -238,7 +256,7 @@
   "mossAgate": {
     "id": "mossAgate",
     "name": "Moss Agate Ring",
-    "type": "trinket",
+    "type": "ring",
     "icon": "mossAgate",
     "manaBonus": 25,
     "value": 30,
@@ -247,7 +265,7 @@
   "darkwoodTalisman": {
     "id": "darkwoodTalisman",
     "name": "Darkwood Talisman",
-    "type": "trinket",
+    "type": "amulet",
     "icon": "darkwoodTalisman",
     "manaBonus": 35,
     "value": 48,
@@ -256,11 +274,118 @@
   "captainsMedal": {
     "id": "captainsMedal",
     "name": "Captain's Medal",
-    "type": "trinket",
+    "type": "amulet",
     "icon": "captainsMedal",
     "manaBonus": 45,
     "value": 70,
     "description": "Awarded for valor. It hums with resilient energy."
+  },
+
+  "copperBand": {
+    "id": "copperBand",
+    "name": "Copper Band",
+    "type": "ring",
+    "icon": "copperBand",
+    "manaBonus": 8,
+    "value": 10,
+    "description": "A simple copper ring. Faintly warm to the touch."
+  },
+  "silverRing": {
+    "id": "silverRing",
+    "name": "Silver Ring",
+    "type": "ring",
+    "icon": "silverRing",
+    "manaBonus": 15,
+    "value": 22,
+    "description": "Polished silver that channels magical energy."
+  },
+
+  "leatherCap": {
+    "id": "leatherCap",
+    "name": "Leather Cap",
+    "type": "helmet",
+    "icon": "leatherCap",
+    "hpBonus": 10,
+    "value": 8,
+    "description": "A soft leather cap. Keeps the sun off and blows light."
+  },
+  "ironHelm": {
+    "id": "ironHelm",
+    "name": "Iron Helm",
+    "type": "helmet",
+    "icon": "ironHelm",
+    "hpBonus": 25,
+    "value": 32,
+    "description": "A solid iron helmet with a nose guard."
+  },
+
+  "raggedTrousers": {
+    "id": "raggedTrousers",
+    "name": "Ragged Trousers",
+    "type": "pants",
+    "icon": "raggedTrousers",
+    "hpBonus": 8,
+    "value": 5,
+    "description": "Threadbare but functional leg wear."
+  },
+  "leatherLeggings": {
+    "id": "leatherLeggings",
+    "name": "Leather Leggings",
+    "type": "pants",
+    "icon": "leatherLeggings",
+    "hpBonus": 18,
+    "value": 24,
+    "description": "Hardened leather leg guards. Good for travel."
+  },
+
+  "wornSandals": {
+    "id": "wornSandals",
+    "name": "Worn Sandals",
+    "type": "boots",
+    "icon": "wornSandals",
+    "hpBonus": 5,
+    "value": 4,
+    "description": "Barely held together, but better than bare feet."
+  },
+  "leatherBoots": {
+    "id": "leatherBoots",
+    "name": "Leather Boots",
+    "type": "boots",
+    "icon": "leatherBoots",
+    "hpBonus": 12,
+    "value": 18,
+    "description": "Sturdy boots with good grip on rough terrain."
+  },
+
+  "leatherQuiver": {
+    "id": "leatherQuiver",
+    "name": "Leather Quiver",
+    "type": "quiver",
+    "icon": "leatherQuiver",
+    "maxArrows": 50,
+    "value": 15,
+    "description": "A simple leather quiver. Holds up to 50 arrows."
+  },
+  "reinforcedQuiver": {
+    "id": "reinforcedQuiver",
+    "name": "Reinforced Quiver",
+    "type": "quiver",
+    "icon": "reinforcedQuiver",
+    "maxArrows": 100,
+    "value": 40,
+    "description": "A sturdy quiver with extra capacity. Holds up to 100 arrows."
+  },
+
+  "arrowBundle": {
+    "id": "arrowBundle",
+    "name": "Bundle of Arrows",
+    "type": "consumable",
+    "icon": "arrowBundle",
+    "effect": "refillQuiver",
+    "power": 25,
+    "value": 5,
+    "stackSize": 20,
+    "description": "Adds 25 arrows to your equipped quiver."
   },
 
   "minorHealingPotion": {

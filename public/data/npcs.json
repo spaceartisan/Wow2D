@@ -22,7 +22,7 @@
     "type": "vendor",
     "defaultDialog": "Rest a while. Need supplies? I keep a stock of potions and remedies.",
     "questIds": [],
-    "shop": ["minorHealingPotion", "healingPotion", "greaterHealingPotion", "minorManaPotion", "manaPotion", "antidote"]
+    "shop": ["minorHealingPotion", "healingPotion", "greaterHealingPotion", "minorManaPotion", "manaPotion", "antidote", "arrowBundle"]
   },
   "blacksmith_kael": {
     "id": "blacksmith_kael",
@@ -31,7 +31,7 @@
     "type": "vendor",
     "defaultDialog": "Need something forged? I've got good steel.",
     "questIds": [],
-    "shop": ["noviceBlade", "forestBow", "steelLongsword", "stitchedVest", "ironShield", "hardLeatherTunic", "chainmailVest", "amberCharm", "darkwoodTalisman"]
+    "shop": ["noviceBlade", "forestBow", "steelLongsword", "stitchedVest", "ironShield", "hardLeatherTunic", "chainmailVest", "amberCharm", "darkwoodTalisman", "leatherQuiver", "reinforcedQuiver", "leatherCap", "ironHelm", "raggedTrousers", "leatherLeggings", "wornSandals", "leatherBoots", "copperBand", "silverRing"]
   },
   "banker_tomas": {
     "id": "banker_tomas",

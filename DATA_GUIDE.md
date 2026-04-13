@@ -77,7 +77,7 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 |-------|------|-------------|
 | `id` | string | Must match the object key |
 | `name` | string | Display name |
-| `type` | string | One of: `weapon`, `armor`, `trinket`, `consumable`, `junk`, `hearthstone` |
+| `type` | string | One of: `weapon`, `shield`, `quiver`, `armor`, `helmet`, `pants`, `boots`, `ring`, `amulet`, `consumable`, `junk`, `hearthstone` |
 | `icon` | string | Icon filename without `.png` (usually same as `id`) |
 | `value` | number | Sell price in gold |
 | `description` | string | Tooltip text |
@@ -89,17 +89,30 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 | Field | Type | Description |
 |-------|------|-------------|
 | `attackBonus` | number | Added to player base damage |
+| `handed` | number | `1` = one-handed, `2` = two-handed |
+| `weaponType` | string | `"sword"`, `"dagger"`, `"staff"`, `"bow"` — cosmetic/UI categorization |
+| `requiresQuiver` | boolean | *(optional)* `true` for bows — requires a quiver in offHand to attack |
 | `range` | number | *(optional)* Attack range in pixels. Omit for melee weapons (defaults to `playerBase.attackRange`). Bows use 200–250. |
 | `hitParticle` | string | *(optional)* Particle preset emitted when attack lands (falls back to `playerBase.hitParticle`) |
 | `hitSfx` | string | *(optional)* SFX played when attack lands (falls back to `playerBase.hitSfx`) |
 | `swingSfx` | string | *(optional)* SFX played on swing (falls back to `playerBase.swingSfx`) |
 
-**armor:**
+**shield:**
 | Field | Type | Description |
 |-------|------|-------------|
 | `hpBonus` | number | Added to player max HP |
 
-**trinket:**
+**quiver:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `maxArrows` | number | Maximum arrow capacity (e.g. 50, 100) |
+
+**armor / helmet / pants / boots:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `hpBonus` | number | Added to player max HP |
+
+**ring / amulet:**
 | Field | Type | Description |
 |-------|------|-------------|
 | `manaBonus` | number | Added to player max mana |
@@ -107,8 +120,8 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 **consumable:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `effect` | string | `"healHp"` or `"healMana"` |
-| `power` | number | Amount restored |
+| `effect` | string | `"healHp"`, `"healMana"`, or `"refillQuiver"` |
+| `power` | number | Amount restored (HP/mana) or arrows added (refillQuiver) |
 | `useParticle` | string | *(optional)* Particle preset emitted on use (e.g. `"heal"`, `"mana_restore"`) |
 | `useSfx` | string | *(optional)* SFX played on use (e.g. `"potion_drink"`) |
 
@@ -127,6 +140,8 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
   "type": "weapon",
   "icon": "noviceBlade",
   "attackBonus": 5,
+  "handed": 1,
+  "weaponType": "sword",
   "value": 20,
   "description": "A sturdy blade forged for new adventurers.",
   "hitParticle": "hit_spark",
@@ -381,8 +396,8 @@ Single flat object defining starting player stats. Equipment bonuses stack on to
 | `moveSpeed` | number | Movement speed (pixels/sec) |
 | `attackRange` | number | Melee range (pixels) |
 | `attackCooldown` | number | Seconds between attacks |
-| `maxHp` | number | Base max HP (armor `hpBonus` adds to this) |
-| `maxMana` | number | Base max mana (trinket `manaBonus` adds to this) |
+| `maxHp` | number | Base max HP (armor/shield/helmet/pants/boots `hpBonus` stacks on top) |
+| `maxMana` | number | Base max mana (ring/amulet `manaBonus` adds to this) |
 | `damage` | number | Base damage (weapon `attackBonus` adds to this) |
 | `hitParticle` | string | Default particle preset when unarmed attack lands |
 | `hitSfx` | string | Default SFX when unarmed attack lands |

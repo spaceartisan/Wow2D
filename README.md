@@ -88,7 +88,9 @@ http://localhost:3000
 - Data-driven loot tables with gold and item drops
 - Data-driven combat effects: weapons, enemies, and consumables define their own particle effects and SFX via JSON
 - Data-driven skill system: class-restricted abilities (attacks, heals, buffs, debuffs, support) defined in skills.json
-- Ranged weapon support: bows use extended attack range from item data
+- 9-slot equipment system: mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet
+- 1-handed and 2-handed weapons with automatic offHand management
+- Ranged weapon support: bows require quivers with finite arrows; refill via arrow bundles
 - Projectile system: homing projectiles with sprite support (arrow.png for bows) and glow-circle fallback for magic
 - Buff/debuff status effects with icon images loaded from statusEffects.json
 - Death with gold penalty and shrine respawn
@@ -116,7 +118,7 @@ http://localhost:3000
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
 - Inventory (20 slots) with click-to-use/equip, drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
 - Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
-- Equipment panel with weapon/armor/trinket slots (click to unequip)
+- Equipment panel with 9 slots (mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet) — click to unequip
 - Quest tracker, quest log, character sheet, and skills panel
 - NPC dialog system with quest accept/turn-in flow
 - Floor indicator when inside multi-story buildings
@@ -127,6 +129,7 @@ http://localhost:3000
 server.js                    Express + WebSocket server entry point
 generate-maps.js             Procedural map generator
 generate-icons.js            Item icon generator
+generate_icons.py            Pixel-art item icon generator (Pillow)
 generate-sfx.js              Sound effect generator
 MAP_GUIDE.md                 Guide for creating new maps
 game/
@@ -143,7 +146,7 @@ public/
     skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support)
     statusEffects.json         Buff/debuff display metadata and icon paths
     enemies.json               Enemy type definitions
-    items.json                 Item definitions
+    items.json                 Item definitions (weapons, armor, shields, helmets, pants, boots, rings, amulets, quivers, consumables, junk)
     npcs.json                  NPC definitions
     quests.json                Quest definitions
     maps/                      Generated map JSON files

@@ -352,6 +352,9 @@ export class NetworkSystem {
       case "unequip_item_result":
         this.onUnequipItemResult(msg);
         break;
+      case "quiver_update":
+        this.onQuiverUpdate(msg);
+        break;
       case "quest_complete_result":
         this.onQuestCompleteResult(msg);
         break;
@@ -476,9 +479,16 @@ export class NetworkSystem {
       }
     }
     if (msg.equipment) {
-      player.equipment.weapon = msg.equipment.weapon || null;
-      player.equipment.armor = msg.equipment.armor || null;
-      player.equipment.trinket = msg.equipment.trinket || null;
+      const raw = msg.equipment;
+      player.equipment.mainHand = raw.mainHand || raw.weapon || null;
+      player.equipment.offHand = raw.offHand || null;
+      player.equipment.armor = raw.armor || null;
+      player.equipment.helmet = raw.helmet || null;
+      player.equipment.pants = raw.pants || null;
+      player.equipment.boots = raw.boots || null;
+      player.equipment.ring1 = raw.ring1 || null;
+      player.equipment.ring2 = raw.ring2 || null;
+      player.equipment.amulet = raw.amulet || raw.trinket || null;
     }
     if (msg.level !== undefined) player.level = msg.level;
     if (msg.xp !== undefined) player.xp = msg.xp;
@@ -538,6 +548,13 @@ export class NetworkSystem {
     const seenEnemies = new Set();
     for (const e of enemies) {
       seenEnemies.add(e.id);
+      // If enemy just respawned (was dead, now alive), flush stale
+      // snapshots so interpolation doesn't slide from death location.
+      const prev = this._latestEnemyMap.get(e.id);
+      if (prev && prev.dead && !e.dead) {
+        this._enemySnaps.delete(e.id);
+        this._smoothPosEnemy.delete(e.id);
+      }
       this._pushSnap(this._enemySnaps, e, tick);
       this._latestEnemyMap.set(e.id, e);
     }
@@ -650,7 +667,11 @@ export class NetworkSystem {
   }
 
   onAttackResult(msg) {
-    const weapon = this.game.entities.player.equipment?.weapon;
+    if (msg.ok === false) {
+      this.game.ui.addMessage(msg.reason || "Attack failed.");
+      return;
+    }
+    const weapon = this.game.entities.player.equipment?.mainHand;
     const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
     const playerBase = this.game.entities.player;
     const hitParticle = weaponDef?.hitParticle || playerBase._baseHitParticle;
@@ -948,7 +969,7 @@ export class NetworkSystem {
 
   onUseItemResult(msg) {
     if (!msg.ok) {
-      this.game.ui.addMessage("Cannot use that item.");
+      this.game.ui.addMessage(msg.reason || "Cannot use that item.");
       return;
     }
     const player = this.game.entities.player;
@@ -965,6 +986,9 @@ export class NetworkSystem {
       this.game.ui.addMessage(`Potion restores ${msg.amount} HP.`);
     } else if (msg.effect === "healMana") {
       this.game.ui.addMessage(`Potion restores ${msg.amount} mana.`);
+    } else if (msg.effect === "refillQuiver") {
+      this.game.ui.addMessage(`Added ${msg.amount} arrows to quiver.`);
+      this.game.ui._equipmentDirty = true;
     }
 
     // Look up consumed item's effects from items.json
@@ -1013,7 +1037,7 @@ export class NetworkSystem {
   onEquipItemResult(msg) {
     if (!msg.ok) {
       // Server rejected — revert client-side equip
-      this.game.ui.addMessage("Cannot equip that right now.");
+      this.game.ui.addMessage(msg.reason || "Cannot equip that right now.");
       return;
     }
     const player = this.game.entities.player;
@@ -1047,6 +1071,15 @@ export class NetworkSystem {
     this.game.ui._equipmentDirty = true;
     this.game.ui._hotbarDirty = true;
     this.game.ui.addMessage(`${msg.item.name} unequipped.`);
+  }
+
+  onQuiverUpdate(msg) {
+    const quiver = this.game.entities.player.equipment?.offHand;
+    if (quiver && quiver.type === "quiver") {
+      quiver.arrows = msg.arrows;
+      quiver.maxArrows = msg.maxArrows;
+    }
+    this.game.ui._equipmentDirty = true;
   }
 
   onQuestCompleteResult(msg) {

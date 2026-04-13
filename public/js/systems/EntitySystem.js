@@ -47,9 +47,15 @@ export class EntitySystem {
         null, null, null, null, null, null, null, null
       ],
       equipment: {
-        weapon: null,
+        mainHand: null,
+        offHand: null,
         armor: null,
-        trinket: null
+        helmet: null,
+        pants: null,
+        boots: null,
+        ring1: null,
+        ring2: null,
+        amulet: null
       }
     };
   }
@@ -276,17 +282,40 @@ export class EntitySystem {
     return false;
   }
 
+  static EQUIPPABLE_TYPES = new Set([
+    "weapon", "shield", "quiver", "armor", "helmet", "pants", "boots", "ring", "amulet"
+  ]);
+
+  _equipSlotForItem(item) {
+    const eq = this.player.equipment;
+    switch (item.type) {
+      case "weapon": return "mainHand";
+      case "shield": case "quiver": return "offHand";
+      case "armor":  return "armor";
+      case "helmet": return "helmet";
+      case "pants":  return "pants";
+      case "boots":  return "boots";
+      case "amulet": return "amulet";
+      case "ring":
+        if (!eq.ring1) return "ring1";
+        if (!eq.ring2) return "ring2";
+        return "ring1";
+      default: return null;
+    }
+  }
+
   equipItemAtIndex(index) {
     const slots = this.player.inventorySlots;
     const item = slots[index];
 
     if (this.player.dead) return;
-    if (!item || !["weapon", "armor", "trinket"].includes(item.type)) {
-      return;
-    }
+    if (!item || !EntitySystem.EQUIPPABLE_TYPES.has(item.type)) return;
 
-    const oldItem = this.player.equipment[item.type];
-    this.player.equipment[item.type] = item;
+    const slot = this._equipSlotForItem(item);
+    if (!slot) return;
+
+    const oldItem = this.player.equipment[slot];
+    this.player.equipment[slot] = item;
     slots[index] = oldItem || null;
 
     this.recalculateDerivedStats();
@@ -295,19 +324,29 @@ export class EntitySystem {
 
   recalculateDerivedStats() {
     const player = this.player;
+    const eq = player.equipment;
 
-    const weapon = player.equipment.weapon;
-    const armor = player.equipment.armor;
-    const trinket = player.equipment.trinket;
-
+    const weapon = eq.mainHand;
     player.damage = player.baseDamage + (weapon?.attackBonus || 0);
 
     // Use weapon range if present (ranged weapons), otherwise default melee range
     const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
     player.attackRange = weaponDef?.range || PLAYER_BASE.attackRange;
 
-    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + (armor?.hpBonus || 0);
-    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + (trinket?.manaBonus || 0);
+    // Sum HP bonuses from armour-like slots
+    let hpBonus = 0;
+    for (const s of ["armor", "offHand", "helmet", "pants", "boots"]) {
+      hpBonus += eq[s]?.hpBonus || 0;
+    }
+
+    // Sum mana bonuses from rings + amulet
+    let manaBonus = 0;
+    for (const s of ["ring1", "ring2", "amulet"]) {
+      manaBonus += eq[s]?.manaBonus || 0;
+    }
+
+    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + hpBonus;
+    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + manaBonus;
 
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
     const manaRatio = player.maxMana > 0 ? player.mana / player.maxMana : 1;

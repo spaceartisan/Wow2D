@@ -69,6 +69,9 @@ export class UISystem {
     this.activeChannel = "all"; // "all" | "world" | "whisper" | "system"
     this.maxChatMessages = 100;
 
+    /* ── DOM listener tracking (cleaned up in destroy()) ── */
+    this._domHandlers = [];
+
     this.initPlayerDisplay();
     this.bindButtons();
     this.bindPanelCloses();
@@ -80,7 +83,19 @@ export class UISystem {
     this.renderHotbar();
   }
 
+  /** Track a DOM listener so destroy() can remove it. */
+  _on(el, evt, fn) {
+    if (!el) return;
+    el.addEventListener(evt, fn);
+    this._domHandlers.push({ el, evt, fn });
+  }
+
   destroy() {
+    // Remove ALL tracked DOM listeners so they don't stack on re-enter
+    for (const { el, evt, fn } of this._domHandlers) {
+      el.removeEventListener(evt, fn);
+    }
+    this._domHandlers = [];
     if (this.dragManager) {
       this.dragManager.destroy();
       this.dragManager = null;
@@ -143,12 +158,12 @@ export class UISystem {
   bindButtons() {
     // Hotbar slot clicks
     document.querySelectorAll("#action-bar .hotbar-slot").forEach((slot) => {
-      slot.addEventListener("click", () => {
+      this._on(slot, "click", () => {
         const idx = parseInt(slot.dataset.slot, 10);
         this.activateHotbarSlot(idx);
       });
       // Right-click to clear a hotbar slot
-      slot.addEventListener("contextmenu", (e) => {
+      this._on(slot, "contextmenu", (e) => {
         e.preventDefault();
         if (this.hotbarLocked) return;
         const idx = parseInt(slot.dataset.slot, 10);
@@ -164,7 +179,7 @@ export class UISystem {
     // Utility bar buttons (bag, gear, quests, char, skills)
     const utilBtns = document.querySelectorAll("#utility-bar .utility-btn");
     utilBtns.forEach((button) => {
-      button.addEventListener("click", () => {
+      this._on(button, "click", () => {
         this.game.audio.play("ui_click");
         const action = button.dataset.action;
         if (action === "inventory") {
@@ -184,7 +199,7 @@ export class UISystem {
 
   bindPanelCloses() {
     document.querySelectorAll(".panel-close").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      this._on(btn, "click", () => {
         const target = btn.dataset.close;
         if (target === "inventory") this.toggleInventory();
         if (target === "equipment") this.toggleEquipment();
@@ -203,7 +218,7 @@ export class UISystem {
     this.chatInput = document.getElementById("chat-input");
     if (!this.chatInput) return;
 
-    this.chatInput.addEventListener("keydown", (e) => {
+    this._on(this.chatInput, "keydown", (e) => {
       e.stopPropagation(); // prevent game hotkeys while typing
 
       if (e.key === "Enter") {
@@ -222,14 +237,14 @@ export class UISystem {
     });
 
     // prevent all key events from reaching the game while chat is focused
-    this.chatInput.addEventListener("keyup", (e) => e.stopPropagation());
-    this.chatInput.addEventListener("keypress", (e) => e.stopPropagation());
+    this._on(this.chatInput, "keyup", (e) => e.stopPropagation());
+    this._on(this.chatInput, "keypress", (e) => e.stopPropagation());
   }
 
   bindChatTabs() {
     const tabs = document.querySelectorAll(".chat-tab");
     tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
+      this._on(tab, "click", () => {
         tabs.forEach((t) => t.classList.remove("active"));
         tab.classList.add("active");
         this.activeChannel = tab.dataset.channel;
@@ -332,26 +347,20 @@ export class UISystem {
     const logoutBtn = document.getElementById("btn-game-logout");
     const charSelectBtn = document.getElementById("btn-game-charselect");
 
-    if (menuBtn) {
-      menuBtn.addEventListener("click", () => {
-        this.el.gameMenuPanel.classList.toggle("hidden");
-        this.game.audio.play("ui_click");
-      });
-    }
+    this._on(menuBtn, "click", () => {
+      this.el.gameMenuPanel.classList.toggle("hidden");
+      this.game.audio.play("ui_click");
+    });
 
-    if (charSelectBtn) {
-      charSelectBtn.addEventListener("click", () => {
-        this.el.gameMenuPanel.classList.add("hidden");
-        this.game.logout();
-      });
-    }
+    this._on(charSelectBtn, "click", () => {
+      this.el.gameMenuPanel.classList.add("hidden");
+      this.game.logout();
+    });
 
-    if (logoutBtn) {
-      logoutBtn.addEventListener("click", () => {
-        this.el.gameMenuPanel.classList.add("hidden");
-        this.game.logoutFull();
-      });
-    }
+    this._on(logoutBtn, "click", () => {
+      this.el.gameMenuPanel.classList.add("hidden");
+      this.game.logoutFull();
+    });
 
     // Sound controls
     const sfxSlider = document.getElementById("slider-sfx");
@@ -360,56 +369,46 @@ export class UISystem {
     const bgmLabel = document.getElementById("bgm-vol-label");
     const muteBtn = document.getElementById("btn-mute-toggle");
 
-    if (sfxSlider) {
-      sfxSlider.addEventListener("input", () => {
-        const v = parseInt(sfxSlider.value, 10);
-        sfxLabel.textContent = v;
-        this.game.audio.setSfxVolume(v / 100);
-      });
-    }
+    this._on(sfxSlider, "input", () => {
+      const v = parseInt(sfxSlider.value, 10);
+      sfxLabel.textContent = v;
+      this.game.audio.setSfxVolume(v / 100);
+    });
 
-    if (bgmSlider) {
-      bgmSlider.addEventListener("input", () => {
-        const v = parseInt(bgmSlider.value, 10);
-        bgmLabel.textContent = v;
-        this.game.audio.setBgmVolume(v / 100);
-      });
-    }
+    this._on(bgmSlider, "input", () => {
+      const v = parseInt(bgmSlider.value, 10);
+      bgmLabel.textContent = v;
+      this.game.audio.setBgmVolume(v / 100);
+    });
 
-    if (muteBtn) {
-      muteBtn.addEventListener("click", () => {
-        const muted = this.game.audio.toggleMute();
-        muteBtn.textContent = muted ? "Unmute" : "Mute";
-      });
-    }
+    this._on(muteBtn, "click", () => {
+      const muted = this.game.audio.toggleMute();
+      muteBtn.textContent = muted ? "Unmute" : "Mute";
+    });
 
     // Lock hotbar toggle
     const lockBtn = document.getElementById("btn-lock-hotbar");
-    if (lockBtn) {
-      lockBtn.addEventListener("click", () => {
-        this.hotbarLocked = !this.hotbarLocked;
-        lockBtn.textContent = this.hotbarLocked ? "Locked" : "Unlocked";
-        this.game.audio.play("ui_click");
-      });
-    }
+    this._on(lockBtn, "click", () => {
+      this.hotbarLocked = !this.hotbarLocked;
+      lockBtn.textContent = this.hotbarLocked ? "Locked" : "Unlocked";
+      this.game.audio.play("ui_click");
+    });
 
     // Lock hotbar position toggle
     const lockPosBtn = document.getElementById("btn-lock-hotbar-pos");
-    if (lockPosBtn) {
-      lockPosBtn.addEventListener("click", () => {
-        this._hotbarPosLocked = !this._hotbarPosLocked;
-        lockPosBtn.textContent = this._hotbarPosLocked ? "Locked" : "Unlocked";
-        const bottomBar = document.getElementById("bottom-bar");
-        if (bottomBar && this.dragManager) {
-          if (this._hotbarPosLocked) {
-            this.dragManager.lockPanel(bottomBar);
-          } else {
-            this.dragManager.unlockPanel(bottomBar);
-          }
+    this._on(lockPosBtn, "click", () => {
+      this._hotbarPosLocked = !this._hotbarPosLocked;
+      lockPosBtn.textContent = this._hotbarPosLocked ? "Locked" : "Unlocked";
+      const bottomBar = document.getElementById("bottom-bar");
+      if (bottomBar && this.dragManager) {
+        if (this._hotbarPosLocked) {
+          this.dragManager.lockPanel(bottomBar);
+        } else {
+          this.dragManager.unlockPanel(bottomBar);
         }
-        this.game.audio.play("ui_click");
-      });
-    }
+      }
+      this.game.audio.play("ui_click");
+    });
   }
 
   /* ── Panels ─────────────────────────────────────────── */
@@ -662,12 +661,22 @@ export class UISystem {
 
   _itemTooltipText(item) {
     let tip = item.name;
-    if (item.type === "weapon") tip += `\nAttack +${item.attackBonus}`;
-    if (item.type === "armor") tip += `\nHP +${item.hpBonus}`;
-    if (item.type === "trinket") tip += `\nMana +${item.manaBonus}`;
+    if (item.type === "weapon") {
+      tip += `\nAttack +${item.attackBonus}`;
+      const def = this.game.data?.items?.[item.id];
+      if (def?.handed) tip += ` (${def.handed === 2 ? "Two-Hand" : "One-Hand"})`;
+      if (def?.requiresQuiver) tip += " [Requires Quiver]";
+    }
+    if (item.hpBonus) tip += `\nHP +${item.hpBonus}`;
+    if (item.manaBonus) tip += `\nMana +${item.manaBonus}`;
+    if (item.type === "quiver") {
+      const maxArr = this.game.data?.items?.[item.id]?.maxArrows || item.maxArrows || 50;
+      tip += `\nArrows: ${item.arrows ?? maxArr}/${maxArr}`;
+    }
     if (item.type === "consumable") {
       if (item.effect === "healHp") tip += `\nRestores ${item.power} HP`;
       if (item.effect === "healMana") tip += `\nRestores ${item.power} Mana`;
+      if (item.effect === "refillQuiver") tip += `\nAdds ${item.power} arrows to quiver`;
     }
     if (item.description) tip += `\n${item.description}`;
     if (item.value) tip += `\nValue: ${item.value}g`;
@@ -680,13 +689,18 @@ export class UISystem {
     this.el.equipmentSlots.textContent = "";
 
     const rows = [
-      ["Weapon", equipment.weapon],
-      ["Armor", equipment.armor],
-      ["Trinket", equipment.trinket]
+      ["Main Hand", "mainHand", equipment.mainHand],
+      ["Off Hand",  "offHand",  equipment.offHand],
+      ["Helmet",    "helmet",   equipment.helmet],
+      ["Armor",     "armor",    equipment.armor],
+      ["Pants",     "pants",    equipment.pants],
+      ["Boots",     "boots",    equipment.boots],
+      ["Ring 1",    "ring1",    equipment.ring1],
+      ["Ring 2",    "ring2",    equipment.ring2],
+      ["Amulet",    "amulet",   equipment.amulet]
     ];
 
-    rows.forEach(([label, item]) => {
-      const slot = label.toLowerCase();
+    rows.forEach(([label, slot, item]) => {
       const row = document.createElement("div");
       row.className = "equip-slot";
 
@@ -713,7 +727,13 @@ export class UISystem {
 
       const valueEl = document.createElement("span");
       valueEl.className = "equip-slot-value" + (item ? "" : " empty");
-      valueEl.textContent = item ? item.name : "Empty";
+      let displayName = item ? item.name : "Empty";
+      // Show arrow count for quivers
+      if (item && item.type === "quiver") {
+        const maxArr = this.game.data?.items?.[item.id]?.maxArrows || item.maxArrows || 50;
+        displayName += ` (${item.arrows ?? maxArr}/${maxArr})`;
+      }
+      valueEl.textContent = displayName;
 
       if (item) {
         row.title = this._itemTooltipText(item) + "\nClick to unequip";
@@ -1256,7 +1276,8 @@ export class UISystem {
   }
 
   _handleInventoryItemClick(index, item) {
-    if (["weapon", "armor", "trinket"].includes(item.type)) {
+    const EQUIPPABLE = new Set(["weapon","shield","quiver","armor","helmet","pants","boots","ring","amulet"]);
+    if (EQUIPPABLE.has(item.type)) {
       this.game.entities.equipItemAtIndex(index);
       if (this.game.network) this.game.network.sendEquipItem(index);
       this._inventoryDirty = true;
@@ -1518,9 +1539,15 @@ export class UISystem {
     body.append(eqHeader);
 
     const slots = [
-      ["Weapon", p.equipment.weapon],
+      ["Main Hand", p.equipment.mainHand],
+      ["Off Hand", p.equipment.offHand],
+      ["Helmet", p.equipment.helmet],
       ["Armor", p.equipment.armor],
-      ["Trinket", p.equipment.trinket]
+      ["Pants", p.equipment.pants],
+      ["Boots", p.equipment.boots],
+      ["Ring 1", p.equipment.ring1],
+      ["Ring 2", p.equipment.ring2],
+      ["Amulet", p.equipment.amulet]
     ];
 
     for (const [slot, item] of slots) {

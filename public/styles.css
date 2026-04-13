@@ -871,10 +871,12 @@ input, textarea {
 }
 
 #equipment-panel {
-  top: 455px;
+  top: 300px;
   right: 10px;
-  width: 290px;
+  width: 310px;
   padding: 10px;
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 #equipment-slots {
@@ -898,7 +900,7 @@ input, textarea {
   font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
-  width: 54px;
+  width: 68px;
   flex-shrink: 0;
 }
 
