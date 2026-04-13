@@ -142,6 +142,14 @@ class CollisionMap {
         this.blockedByFloor[floor].add(tileKey(p.tx, p.ty));
       }
     }
+
+    // Tile modifier zones (invisible buffs/debuffs/hazards)
+    this.tileModifiers = new Map();  // "tx,ty,floor" → modifiers[]
+    for (const zone of (data.tileModifiers || [])) {
+      const floor = zone.floor || 0;
+      const key = `${zone.x},${zone.y},${floor}`;
+      this.tileModifiers.set(key, zone.modifiers || []);
+    }
   }
 
   isBlocked(worldX, worldY, radius = 15, floor = 0) {
@@ -190,6 +198,13 @@ class CollisionMap {
       if (wx >= sz.x1 && wx <= sz.x2 && wy >= sz.y1 && wy <= sz.y2) return true;
     }
     return false;
+  }
+
+  /** Return modifier array for the tile at world coords, or null. */
+  getTileModifiers(worldX, worldY, floor = 0) {
+    const tx = Math.floor(worldX / this.tileSize);
+    const ty = Math.floor(worldY / this.tileSize);
+    return this.tileModifiers.get(`${tx},${ty},${floor}`) || null;
   }
 }
 
@@ -2179,6 +2194,7 @@ class ServerWorld {
     this.updatePlayerRegen(dt);
     this.updatePlayerCasts(now);
     this.updateBuffsAndDebuffs(now);
+    this.updateTileModifiers(now);
     this.broadcastWorldState();
 
     // Periodic auto-save every 60 seconds
@@ -2563,6 +2579,134 @@ class ServerWorld {
 
       return true;
     });
+  }
+
+  /* ── tile modifier zones (invisible map hazards / auras) ── */
+
+  updateTileModifiers(now) {
+    for (const [, player] of this.players) {
+      if (player.dead) continue;
+      const mapEntry = this.maps.get(player.mapId);
+      if (!mapEntry) continue;
+
+      const mods = mapEntry.collision.getTileModifiers(player.x, player.y, player.floor);
+      if (!mods) continue;
+
+      if (!player.activeBuffs) player.activeBuffs = [];
+
+      for (const mod of mods) {
+        // Buffs: apply / refresh with short grace duration so it lingers briefly after leaving
+        if (mod.type === "buff") {
+          const dur = (mod.duration || 2) * 1000;
+          const existing = player.activeBuffs.find(b => b.id === mod.id);
+          if (existing) {
+            // Refresh expiry while standing on tile
+            existing.expiresAt = now + dur;
+          } else {
+            const entry = {
+              id: mod.id,
+              stat: mod.stat,
+              modifier: mod.modifier || 0,
+              duration: mod.duration || 2,
+              appliedAt: now,
+              expiresAt: now + dur,
+              _tileZone: true   // tag so we know this came from a zone
+            };
+            if (mod.absorbAmount !== undefined) {
+              entry.absorbRemaining = (mod.absorbAmount || 0)
+                + (mod.absorbPerLevel || 0) * (player.level - 1);
+            }
+            player.activeBuffs.push(entry);
+          }
+        }
+
+        // Debuffs applied as negative buffs on the player
+        if (mod.type === "debuff") {
+          const dur = (mod.duration || 2) * 1000;
+          const existing = player.activeBuffs.find(b => b.id === mod.id);
+          if (existing) {
+            existing.expiresAt = now + dur;
+          } else {
+            player.activeBuffs.push({
+              id: mod.id,
+              stat: mod.stat,
+              modifier: mod.modifier || 0,
+              duration: mod.duration || 2,
+              appliedAt: now,
+              expiresAt: now + dur,
+              _tileZone: true
+            });
+          }
+        }
+
+        // Damage-over-time hazard (poison, fire, etc.)
+        if (mod.type === "dot") {
+          const interval = (mod.tickInterval || 2) * 1000;
+          // Track per-player per-zone DoT timing
+          if (!player._tileDoTs) player._tileDoTs = {};
+          const dotKey = `${player.mapId}:${mod.id}`;
+          const lastTick = player._tileDoTs[dotKey] || 0;
+          if (now - lastTick >= interval) {
+            player._tileDoTs[dotKey] = now;
+            const dmg = mod.byPct
+              ? Math.round(player.maxHp * (mod.perTick || 0.05))
+              : (mod.perTick || 5);
+            player.hp -= dmg;
+            if (player.hp <= 0) {
+              player.hp = 0;
+              // Let the death system handle it
+            }
+          }
+          // Also apply visual debuff indicator
+          const dur = (mod.tickInterval || 2) * 1500; // persists slightly longer than interval
+          const existing = player.activeBuffs.find(b => b.id === mod.id);
+          if (existing) {
+            existing.expiresAt = now + dur;
+          } else {
+            player.activeBuffs.push({
+              id: mod.id,
+              stat: "dot",
+              modifier: 0,
+              duration: dur / 1000,
+              appliedAt: now,
+              expiresAt: now + dur,
+              _tileZone: true
+            });
+          }
+        }
+
+        // Heal-over-time zone
+        if (mod.type === "hot") {
+          const interval = (mod.tickInterval || 2) * 1000;
+          if (!player._tileDoTs) player._tileDoTs = {};
+          const hotKey = `${player.mapId}:${mod.id}`;
+          const lastTick = player._tileDoTs[hotKey] || 0;
+          if (now - lastTick >= interval) {
+            player._tileDoTs[hotKey] = now;
+            const heal = mod.byPct
+              ? Math.round(player.maxHp * (mod.perTick || 0.05))
+              : (mod.perTick || 10);
+            player.hp = Math.min(player.maxHp, player.hp + heal);
+          }
+          // Visual buff indicator
+          const dur = (mod.tickInterval || 2) * 1500;
+          const existing = player.activeBuffs.find(b => b.id === mod.id);
+          if (existing) {
+            existing.expiresAt = now + dur;
+          } else {
+            player.activeBuffs.push({
+              id: mod.id,
+              stat: "hot",
+              modifier: 0,
+              duration: dur / 1000,
+              appliedAt: now,
+              expiresAt: now + dur,
+              _tileZone: true
+            });
+          }
+        }
+      }
+    }
   }
 
   /* ── buff & debuff expiry ──────────────────────────── */

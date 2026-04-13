@@ -32,7 +32,8 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
   "enemySpawns": [ ... ],
   "npcs": [ ... ],
   "statues": [ ... ],
-  "portals": [ ... ]
+  "portals": [ ... ],
+  "tileModifiers": [ ... ]
 }
 ```
 
@@ -63,6 +64,7 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
 | `npcs` | `array` | NPC placements (references `npcs.json`). |
 | `statues` | `array` | Waystone placements for hearthstone attunement. |
 | `portals` | `array` | Transitions to other maps. |
+| `tileModifiers` | `array` | Invisible tile zones that apply buffs, debuffs, DoTs, or HoTs to players standing on them. |
 
 ## Tile Palette
 
@@ -359,6 +361,83 @@ Map-placed particle emitters create ambient effects like campfire flames, torch 
 
 Particle emitters are automatically started when the map loads and when the player changes floors via stairs. They are cleared on map transitions.
 
+## Tile Modifier Zones
+
+Invisible tile-based zones that apply status effects to players standing on them. Works like `extraBlocked` — defined per-tile in the map JSON — but instead of blocking movement, they apply buffs, debuffs, damage-over-time (DoT), or healing-over-time (HoT).
+
+```json
+"tileModifiers": [
+  {
+    "x": 40, "y": 35,
+    "modifiers": [
+      { "type": "dot", "id": "zonePoison", "stat": "dot", "modifier": 0, "duration": 4, "perTick": 8, "tickInterval": 2 }
+    ]
+  },
+  {
+    "x": 55, "y": 40,
+    "modifiers": [
+      { "type": "debuff", "id": "zoneSlow", "stat": "speed", "modifier": -50, "duration": 3, "byPct": true }
+    ]
+  },
+  {
+    "x": 25, "y": 27,
+    "modifiers": [
+      { "type": "hot", "id": "zoneHealing", "stat": "hot", "modifier": 0, "duration": 4, "perTick": 12, "tickInterval": 2 }
+    ]
+  }
+]
+```
+
+### Tile fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `x`, `y` | `number` | Tile coordinates (same scale as terrain grid). |
+| `floor` | `number` | *(optional)* Floor number. Default `0`. |
+| `modifiers` | `array` | One or more effects applied to players on this tile. |
+
+### Modifier fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `string` | One of: `buff`, `debuff`, `dot`, `hot`. |
+| `id` | `string` | Status effect ID — must match an entry in `statusEffects.json` for client icon display. |
+| `stat` | `string` | Stat key affected: `speed`, `damage`, `defense`, `dot`, `hot`, etc. |
+| `modifier` | `number` | Flat or percentage value. For DoT/HoT, typically `0` (the `perTick` field controls effect strength). |
+| `duration` | `number` | Effect duration in seconds. Refreshes while standing on the tile; expires ~2s after leaving. |
+| `perTick` | `number` | *(DoT/HoT only)* Damage or healing applied per tick. |
+| `tickInterval` | `number` | *(DoT/HoT only)* Seconds between ticks (default 2). |
+| `byPct` | `boolean` | *(optional)* If `true`, `modifier` is a percentage (e.g., `-50` = −50% speed). |
+
+### Modifier types
+
+| Type | Effect | Example |
+|------|--------|---------|
+| `buff` | Positive stat modifier (added to `activeBuffs[]`) | +15% damage via `zoneCourage` |
+| `debuff` | Negative stat modifier (added to `activeBuffs[]`) | −50% speed via `zoneSlow` |
+| `dot` | Periodic damage while standing on tile | 8 dmg / 2s via `zonePoison` |
+| `hot` | Periodic healing while standing on tile | 12 hp / 2s via `zoneHealing` |
+
+### Available zone status effects
+
+These are pre-defined in `statusEffects.json` and ready to use:
+
+| ID | Display Name | Icon |
+|----|-------------|------|
+| `zoneSlow` | Bogged Down | chilled.png |
+| `zonePoison` | Toxic Fumes | poisoned.png |
+| `zoneBurning` | Scorched | poisoned.png |
+| `zoneHealing` | Sacred Ground | evasion.png |
+| `zoneCourage` | Emboldened | battleShout.png |
+| `zoneWeakness` | Enfeebled | weakened.png |
+
+To add a new zone effect, add a new entry to `statusEffects.json` with a matching icon path, then reference its `id` in your tile modifier.
+
+**Tips:**
+- Place modifiers in clusters (e.g., 3×2 grids) for area coverage — each tile is a single point.
+- Combine with particle emitters for visual cues (e.g., a `poison_cloud` emitter on the same tiles as a `zonePoison` DoT).
+- Effects auto-expire ~2 seconds after the player steps off the tile.
+
 ## Registering the Map on the Server
 
 Open `game/ServerWorld.js` and add your map ID to the constructor's map list:
@@ -393,7 +472,8 @@ That's it. The server will:
 8. **Register on server** — add the map ID to the array in `ServerWorld.js`
 9. **Add new prop types** — if your map uses new props, add them to `props.json` and place matching sprites (sprite loading is automatic)
 10. **Add particle emitters** — place ambient effects (campfires, torches) in the `particles` array using presets from `particles.json`
-11. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
+11. **Add tile modifier zones** *(optional)* — place hazards, healing zones, or stat-altering areas in the `tileModifiers` array. Reference status effect IDs from `statusEffects.json`
+12. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
 
 ## Example: Minimal Map
 
@@ -442,6 +522,7 @@ That's it. The server will:
   "props": [],
   "extraBlocked": [],
   "particles": [],
-  "safeZones": []
+  "safeZones": [],
+  "tileModifiers": []
 }
 ```

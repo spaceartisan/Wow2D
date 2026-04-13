@@ -42,7 +42,7 @@ http://localhost:3000
 | Left-click enemy | Select target (does not attack) |
 | Left-click player | Select target (friendly) |
 | Right-click enemy | Select target and engage auto-attack |
-| Click inventory item | Use consumable / equip gear |
+| Right-click inventory item | Context menu: Equip, Use, or Drop |
 | Click equipment slot | Unequip item back to inventory |
 | `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
 | `E` | Interact with nearby NPC or waystone |
@@ -93,6 +93,7 @@ http://localhost:3000
 - Ranged weapon support: bows require quivers with finite arrows; refill via arrow bundles
 - Projectile system: homing projectiles with sprite support (arrow.png for bows) and glow-circle fallback for magic
 - Buff/debuff status effects with icon images loaded from statusEffects.json
+- Tile modifier zones: invisible map tiles that apply buffs, debuffs, DoTs, or HoTs to players (data-driven via `tileModifiers` in map JSON)
 - Death with gold penalty and shrine respawn
 
 ### Multiplayer
@@ -116,7 +117,7 @@ http://localhost:3000
 - Target panel with HP bar (different style for friendly vs enemy targets)
 - 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear; hover tooltips for skills and items
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
-- Inventory (20 slots) with click-to-use/equip, drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
+- Inventory (20 slots) with right-click context menu (Equip/Use/Drop), drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
 - Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
 - Equipment panel with 9 slots (mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet) — click to unequip
 - Quest tracker, quest log, character sheet, and skills panel
@@ -145,7 +146,7 @@ public/
     playerBase.json            Shared player base stats (client + server)
     particles.json             Particle effect presets (burst + continuous emitters)
     skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support) with icon references
-    statusEffects.json         Buff/debuff display metadata and icon paths
+    statusEffects.json         Buff/debuff and zone-effect display metadata and icon paths
     enemies.json               Enemy type definitions
     items.json                 Item definitions (weapons, armor, shields, helmets, pants, boots, rings, amulets, quivers, consumables, junk)
     npcs.json                  NPC definitions

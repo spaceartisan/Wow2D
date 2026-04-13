@@ -10752,6 +10752,20 @@
     }
   ],
   "extraBlocked": [],
+  "tileModifiers": [
+    { "x": 40, "y": 35, "modifiers": [{ "type": "dot", "id": "zonePoison", "perTick": 8, "byPct": false, "tickInterval": 2 }] },
+    { "x": 41, "y": 35, "modifiers": [{ "type": "dot", "id": "zonePoison", "perTick": 8, "byPct": false, "tickInterval": 2 }] },
+    { "x": 42, "y": 35, "modifiers": [{ "type": "dot", "id": "zonePoison", "perTick": 8, "byPct": false, "tickInterval": 2 }] },
+    { "x": 40, "y": 36, "modifiers": [{ "type": "dot", "id": "zonePoison", "perTick": 8, "byPct": false, "tickInterval": 2 }] },
+    { "x": 41, "y": 36, "modifiers": [{ "type": "dot", "id": "zonePoison", "perTick": 8, "byPct": false, "tickInterval": 2 }] },
+    { "x": 42, "y": 36, "modifiers": [{ "type": "dot", "id": "zonePoison", "perTick": 8, "byPct": false, "tickInterval": 2 }] },
+    { "x": 55, "y": 40, "modifiers": [{ "type": "debuff", "id": "zoneSlow", "stat": "moveSpeed", "modifier": -0.4, "duration": 2 }] },
+    { "x": 56, "y": 40, "modifiers": [{ "type": "debuff", "id": "zoneSlow", "stat": "moveSpeed", "modifier": -0.4, "duration": 2 }] },
+    { "x": 57, "y": 40, "modifiers": [{ "type": "debuff", "id": "zoneSlow", "stat": "moveSpeed", "modifier": -0.4, "duration": 2 }] },
+    { "x": 55, "y": 41, "modifiers": [{ "type": "debuff", "id": "zoneSlow", "stat": "moveSpeed", "modifier": -0.4, "duration": 2 }] },
+    { "x": 56, "y": 41, "modifiers": [{ "type": "debuff", "id": "zoneSlow", "stat": "moveSpeed", "modifier": -0.4, "duration": 2 }] },
+    { "x": 57, "y": 41, "modifiers": [{ "type": "debuff", "id": "zoneSlow", "stat": "moveSpeed", "modifier": -0.4, "duration": 2 }] }
+  ],
   "particles": [],
   "enemySpawns": [
     {

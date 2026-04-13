@@ -595,6 +595,64 @@ Top-level object keyed by preset name. Defines particle burst effects used by `P
 
 ---
 
+## statusEffects.json
+
+Top-level object keyed by status effect ID. Defines the display metadata (name, description, icon) for buffs and debuffs shown in the player's status bar. Both skill-applied effects and tile-zone effects reference entries in this file.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name shown on tooltip |
+| `description` | string | Tooltip description |
+| `type` | string | `"buff"` or `"debuff"` — determines icon row placement (buffs top, debuffs bottom) |
+| `icon` | string | Path to a 32×32 icon sprite (relative to `public/`), e.g. `"assets/sprites/status/chilled.png"` |
+
+### Skill-applied effects
+
+| ID | Name | Type | Icon |
+|----|------|------|------|
+| `battleShout` | Battle Shout | buff | battleShout.png |
+| `arcaneIntellect` | Arcane Intellect | buff | arcaneIntellect.png |
+| `evasion` | Evasion | buff | evasion.png |
+| `inspired` | Inspired | buff | inspired.png |
+| `manaShield` | Mana Shield | buff | manaShield.png |
+| `sprinting` | Sprint | buff | sprinting.png |
+| `chilled` | Chilled | debuff | chilled.png |
+| `stunned` | Stunned | debuff | stunned.png |
+| `sundered` | Sundered | debuff | sundered.png |
+| `weakened` | Weakened | debuff | weakened.png |
+| `poisoned` | Poisoned | debuff | poisoned.png |
+
+### Tile-zone effects
+
+Used by the `tileModifiers` system in map JSON files (see MAP_GUIDE.md):
+
+| ID | Name | Type | Icon | Typical use |
+|----|------|------|------|-------------|
+| `zoneSlow` | Bogged Down | debuff | chilled.png | Speed reduction on swamp/mud tiles |
+| `zonePoison` | Toxic Fumes | debuff | poisoned.png | Poison DoT on toxic terrain |
+| `zoneBurning` | Scorched | debuff | poisoned.png | Fire DoT on lava/scorched tiles |
+| `zoneHealing` | Sacred Ground | buff | evasion.png | HoT near waystones or shrines |
+| `zoneCourage` | Emboldened | buff | battleShout.png | Damage buff on hallowed ground |
+| `zoneWeakness` | Enfeebled | debuff | weakened.png | Damage debuff on cursed ground |
+
+**Example:**
+```json
+"zonePoison": {
+  "name": "Toxic Fumes",
+  "description": "Taking poison damage from noxious terrain.",
+  "type": "debuff",
+  "icon": "assets/sprites/status/poisoned.png"
+}
+```
+
+**To add a status effect:**
+1. Add the entry to `statusEffects.json` with a unique key
+2. Place a 32×32 icon at `public/assets/sprites/status/{name}.png` (or reuse an existing icon path)
+3. Reference the effect ID in a skill's `buff`/`debuff` object, or in map `tileModifiers`
+4. The client will automatically display the icon when the effect is active on the player
+
+---
+
 ## Asset Checklist
 
 When adding new content, ensure the matching sprite/icon exists:
@@ -605,6 +663,7 @@ When adding new content, ensure the matching sprite/icon exists:
 | npcs.json | `public/assets/sprites/entities/{npcId}.png` | 48×48 |
 | items.json | `public/assets/sprites/icons/{itemId}.png` | 32×32 |
 | skills.json | `public/assets/sprites/skills/{icon}.png` | 32×32 |
+| statusEffects.json | `public/assets/sprites/status/{name}.png` | 32×32 |
 | tilePalette.json | `public/assets/sprites/tiles/{tileName}.png` | 48×48 |
 | props.json | `public/assets/sprites/props/{propType}.png` | varies |
 | particles.json | *(no sprites — drawn procedurally)* | — |

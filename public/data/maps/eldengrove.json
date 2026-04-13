@@ -22473,6 +22473,14 @@
     }
   ],
   "extraBlocked": [],
+  "tileModifiers": [
+    { "x": 25, "y": 27, "modifiers": [{ "type": "hot", "id": "zoneHealing", "perTick": 0.05, "byPct": true, "tickInterval": 2 }] },
+    { "x": 26, "y": 27, "modifiers": [{ "type": "hot", "id": "zoneHealing", "perTick": 0.05, "byPct": true, "tickInterval": 2 }] },
+    { "x": 27, "y": 27, "modifiers": [{ "type": "hot", "id": "zoneHealing", "perTick": 0.05, "byPct": true, "tickInterval": 2 }] },
+    { "x": 25, "y": 28, "modifiers": [{ "type": "hot", "id": "zoneHealing", "perTick": 0.05, "byPct": true, "tickInterval": 2 }] },
+    { "x": 26, "y": 28, "modifiers": [{ "type": "hot", "id": "zoneHealing", "perTick": 0.05, "byPct": true, "tickInterval": 2 }] },
+    { "x": 27, "y": 28, "modifiers": [{ "type": "hot", "id": "zoneHealing", "perTick": 0.05, "byPct": true, "tickInterval": 2 }] }
+  ],
   "enemySpawns": [
     {
       "type": "wolf",

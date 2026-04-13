@@ -165,6 +165,8 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `buy_item` | `npcId, itemId` | Buy from vendor (proximity + gold validated) |
 | `equip_item` | `index` | Equip item from inventory |
 | `unequip_item` | `slot` | Unequip item from equipment slot (`mainHand`, `offHand`, `armor`, `helmet`, `pants`, `boots`, `ring1`, `ring2`, or `amulet`) |
+| `drop_item` | `index` | Destroy an inventory item (permanent items like hearthstone are protected) |
+| `use_skill` | `skillId, enemyId?` | Use a skill (class, level, mana, range, cooldown validated) |
 | `complete_quest` | `questId, npcId` | Turn in quest at NPC |
 | `quest_state_update` | `questId, state` | Sync quest accept/progress (can't set "completed") |
 | `use_hearthstone` | — | Begin hearthstone cast |
@@ -195,6 +197,9 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `buy_item_result` | Item bought | `ok, item, index, gold, buyPrice` |
 | `equip_item_result` | Equip swap | `ok, index, slot, newItem, oldItem, hp, maxHp, mana, maxMana, damage` |
 | `unequip_item_result` | Unequip | `ok, reason?, slot, item, index, hp, maxHp, mana, maxMana, damage` |
+| `drop_item_result` | Item dropped | `ok, inventory[], message` |
+| `skill_result` | Skill used | `ok, skillId, damage?, enemyHp?, mana, maxMana, buff?, debuff?` |
+| `projectile_hit` | Ranged hit | `skillId, enemyId, damage, enemyHp, enemyMaxHp, debuff?` |
 | `quest_complete_result` | Quest turned in | `ok, questId, xp, gold, items[], playerGold, playerXp, playerLevel, hp, maxHp, mana, maxMana` |
 | `attune_result` | Waystone attune | `ok, reason?, hearthstone?` |
 | `hearthstone_result` | Use HS validation fail | `ok: false, reason, remaining?` |
@@ -211,6 +216,8 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `player_damaged` | Enemy hits you | `damage, hp, maxHp, attackerName` |
 | `you_died` | Death | `goldLost` |
 | `you_respawned` | Auto-respawn | `x, y, hp, maxHp, mana, maxMana` |
+| `combat_visual` | Combat effect | Polymorphic: melee/skill hit, self-target, enemy attack, projectile hit (broadcast to map, excludes source) |
+| `projectile_spawn` | Ranged launch | `attackerId, sx, sy, targetEnemyId, speed, weaponId?, skillId?, damageType?` (broadcast) |
 
 ---
 
@@ -276,6 +283,12 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
     type: "hearthstone",
     startedAt: 1712345670000,
     duration: 8000             // ms
+  },
+  activeBuffs: [                // Active buff/debuff effects
+    { id: "battleShout", stat: "damage", modifier: 0.2, byPct: true, expiresAt: 1712345700000 }
+  ],
+  _tileDoTs: {                  // Internal: per-zone DoT/HoT tick tracking
+    "zonePoison": { lastTickAt: 1712345690000 }
   }
 }
 ```
@@ -302,6 +315,7 @@ Stored in `world.maps` — a `Map<mapId, MapEntry>`:
 
 - `isBlocked(worldX, worldY, radius, floor)` — 9-point circle collision
 - `isSafeZone(worldX, worldY)` — Returns true if inside a safe zone
+- `getTileModifiers(worldX, worldY, floor)` — Returns array of tile modifiers at position, or `null`. Used by `updateTileModifiers()` for zone effects.
 - `spawnPoint` — `{ x, y }` world coordinates
 - `tileSize` — usually 48
 
@@ -326,6 +340,7 @@ Stored in `world.maps` — a `Map<mapId, MapEntry>`:
   lastAttackAt: 0,
   targetPlayerId: null,    // Currently chasing
   loot: [...]              // Drop table from enemy type
+  activeDebuffs: [...]       // Active debuffs (DoTs, slows, etc.)
 }
 ```
 
@@ -351,14 +366,17 @@ Every ~16.67ms the server runs:
 
 | Step | Method | What It Does |
 |------|--------|--------------|
-| 1 | `updateEnemyAi` | Per-map: aggro, chase, attack, leash, wander |
-| 2 | `updateEnemyRespawns` | Respawn dead enemies when timer expires |
-| 3 | `updateDropPickups` | Auto-pickup loot within 42px; expire old drops |
-| 4 | `updatePlayerDeaths` | Respawn dead players after 4.2s |
-| 5 | `updatePlayerRegen` | Regen: +7 mana/s, +1.8 hp/s |
-| 6 | `updatePlayerCasts` | Complete hearthstone casts when duration elapsed |
-| 7 | `broadcastWorldState` | Send `"state"` message to all players |
-| 8 | Auto-save (every 60s) | `_autoSaveAll()` → `database.saveCharacterProgress()` for each player |
+| 1 | `updateProjectiles` | Per-map: move server projectiles, resolve hits |
+| 2 | `updateEnemyAi` | Per-map: aggro, chase, attack, leash, wander |
+| 3 | `updateEnemyRespawns` | Respawn dead enemies when timer expires |
+| 4 | `updateDropPickups` | Auto-pickup loot within 42px; expire old drops |
+| 5 | `updatePlayerDeaths` | Respawn dead players after 4.2s |
+| 6 | `updatePlayerRegen` | Regen: +7 mana/s, +1.8 hp/s |
+| 7 | `updatePlayerCasts` | Complete hearthstone casts when duration elapsed |
+| 8 | `updateBuffsAndDebuffs` | Expire buffs/debuffs; tick DoTs on enemies |
+| 9 | `updateTileModifiers` | Apply zone buffs/debuffs/DoTs/HoTs to players on modifier tiles |
+| 10 | `broadcastWorldState` | Send `"state"` message to all players |
+| 11 | Auto-save (every 60s) | `_autoSaveAll()` → `database.saveCharacterProgress()` for each player |
 
 ---
 
@@ -825,7 +843,7 @@ SELECT name, level, gold FROM characters ORDER BY gold DESC LIMIT 10;
 
 Map JSON files: `public/data/maps/{mapId}.json`
 
-Each map contains: `terrain`, `palette`, `portals`, `enemySpawns`, `npcs`, `safeZones`, `trees`, `buildings`, `statues`, `extraBlocked`
+Each map contains: `terrain`, `palette`, `portals`, `enemySpawns`, `npcs`, `safeZones`, `trees`, `buildings`, `statues`, `extraBlocked`, `particles`, `tileModifiers`
 
 ### Portal Format
 ```json

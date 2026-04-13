@@ -21,16 +21,18 @@ All values are sourced directly from the codebase. If something below disagrees 
 12. [Loot & Drops](#12-loot--drops)
 13. [Player Regen & Death](#13-player-regen--death)
 14. [Casting & Concentration](#14-casting--concentration)
-15. [Client Projectile System](#15-client-projectile-system)
-16. [Particle System](#16-particle-system)
-17. [Audio System](#17-audio-system)
-18. [Camera](#18-camera)
-19. [Render Order](#19-render-order)
-20. [Client Update Order](#20-client-update-order)
-21. [Authority Model](#21-authority-model)
-22. [Message Catalog](#22-message-catalog)
-23. [End-to-End Flow Examples](#23-end-to-end-flow-examples)
-24. [Glossary](#24-glossary)
+15. [Tile Modifier Zones](#15-tile-modifier-zones)
+16. [Inventory Context Menu & Dropping Items](#16-inventory-context-menu--dropping-items)
+17. [Client Projectile System](#17-client-projectile-system)
+18. [Particle System](#18-particle-system)
+19. [Audio System](#19-audio-system)
+20. [Camera](#20-camera)
+21. [Render Order](#21-render-order)
+22. [Client Update Order](#22-client-update-order)
+23. [Authority Model](#23-authority-model)
+24. [Message Catalog](#24-message-catalog)
+25. [End-to-End Flow Examples](#25-end-to-end-flow-examples)
+26. [Glossary](#26-glossary)
 
 ---
 
@@ -48,15 +50,16 @@ The server runs a fixed-rate game loop:
 ### Execution order per tick
 
 ```
-1. updateProjectiles(mapEntry, dt)      — per map
-2. updateEnemyAi(mapEntry, dt, now)     — per map
-3. updateEnemyRespawns(mapEntry, now)   — per map
-4. updateDropPickups(mapEntry, mapId, now) — per map
-5. updatePlayerDeaths(now)              — all players
-6. updatePlayerRegen(dt)                — all players
-7. updatePlayerCasts(now)               — all players
-8. updateBuffsAndDebuffs(now)           — all players + enemies
-9. broadcastWorldState()                — sends state to each client
+ 1. updateProjectiles(mapEntry, dt)       — per map
+ 2. updateEnemyAi(mapEntry, dt, now)      — per map
+ 3. updateEnemyRespawns(mapEntry, now)    — per map
+ 4. updateDropPickups(mapEntry, mapId, now) — per map
+ 5. updatePlayerDeaths(now)               — all players
+ 6. updatePlayerRegen(dt)                 — all players
+ 7. updatePlayerCasts(now)                — all players
+ 8. updateBuffsAndDebuffs(now)            — all players + enemies
+ 9. updateTileModifiers(now)              — all players (zone effects)
+10. broadcastWorldState()                 — sends state to each client
 ```
 
 **Important:** Projectiles update *before* enemy AI. This means a projectile can kill an enemy before the enemy gets its AI tick for that frame.
@@ -699,7 +702,139 @@ The `concentration: true` flag is set on item definitions (e.g., Hearthstone in 
 
 ---
 
-## 15. Client Projectile System
+## 15. Tile Modifier Zones
+
+**Files:** `game/ServerWorld.js` (class `CollisionMap`, `updateTileModifiers()`), map JSONs (e.g., `darkwood.json`, `eldengrove.json`), `public/data/statusEffects.json`
+
+Invisible tile-based zones that apply buffs, debuffs, damage-over-time (DoT), or healing-over-time (HoT) to players standing on them. Defined per-map in the same JSON format as `extraBlocked` tiles.
+
+### Map JSON schema
+
+Each map can include a `tileModifiers` array:
+
+```json
+"tileModifiers": [
+  {
+    "x": 40, "y": 35, "floor": 0,
+    "modifiers": [
+      { "type": "dot", "id": "zonePoison", "stat": "dot", "modifier": 0, "duration": 4, "perTick": 8, "tickInterval": 2 }
+    ]
+  },
+  {
+    "x": 25, "y": 27, "floor": 0,
+    "modifiers": [
+      { "type": "hot", "id": "zoneHealing", "stat": "hot", "modifier": 0, "duration": 4, "perTick": 12, "tickInterval": 2 }
+    ]
+  },
+  {
+    "x": 55, "y": 40, "floor": 0,
+    "modifiers": [
+      { "type": "debuff", "id": "zoneSlow", "stat": "speed", "modifier": -50, "duration": 3, "byPct": true }
+    ]
+  }
+]
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `x`, `y` | yes | Tile coordinates (same scale as terrain grid) |
+| `floor` | no | Floor number (default 0) |
+| `modifiers[].type` | yes | One of: `buff`, `debuff`, `dot`, `hot` |
+| `modifiers[].id` | yes | Status effect ID (must match an entry in `statusEffects.json`) |
+| `modifiers[].stat` | yes | Stat key (`speed`, `damage`, `defense`, `dot`, `hot`, etc.) |
+| `modifiers[].modifier` | yes | Flat or percentage value to apply |
+| `modifiers[].duration` | yes | Duration in seconds |
+| `modifiers[].perTick` | DoT/HoT | Damage or healing per tick |
+| `modifiers[].tickInterval` | DoT/HoT | Seconds between ticks (default 2) |
+| `modifiers[].byPct` | no | If `true`, `modifier` is a percentage (e.g., `-50` = −50% speed) |
+
+### Four modifier types
+
+| Type | Effect | Example |
+|------|--------|---------|
+| `buff` | Positive stat modifier added to `player.activeBuffs[]` | `zoneCourage`: +15% damage |
+| `debuff` | Negative stat modifier added to `player.activeBuffs[]` | `zoneSlow`: −50% speed |
+| `dot` | Periodic damage via `player._tileDoTs` tracking | `zonePoison`: 8 dmg every 2s |
+| `hot` | Periodic healing via `player._tileDoTs` tracking | `zoneHealing`: 12 hp every 2s |
+
+### CollisionMap loading
+
+`CollisionMap.buildFromMapData()` reads `tileModifiers` and stores them in a `Map` keyed by `"tx,ty,floor"`. The `getTileModifiers(worldX, worldY, floor)` method converts world coordinates to tile coordinates and returns the modifier array (or `null`).
+
+### Server processing — `updateTileModifiers(now)`
+
+Runs once per tick (step 9 in the tick loop), after `updateBuffsAndDebuffs`.
+
+For each connected player:
+
+1. **Look up tile modifiers** at the player's current position and floor.
+2. **For each modifier on the tile:**
+   - **`buff` / `debuff`:** Find or create matching entry in `player.activeBuffs[]` by `id`, refresh `expiresAt` to `now + duration`. On first application, push a new buff entry with `{ id, stat, modifier, byPct, expiresAt, fromTileZone: true }`.
+   - **`dot`:** Track per-player timing in `player._tileDoTs[id]`. On each `tickInterval`, subtract `perTick` from `player.hp`. If HP ≤ 0, trigger `onPlayerDeath()`. Send `player_damaged` message.
+   - **`hot`:** Same timing as DoT, but adds `perTick` to `player.hp` (capped at `maxHp`). Sends `heal_result` message.
+3. **Auto-expire:** When a player leaves a tile zone, the buff/debuff's `expiresAt` naturally expires (~2s after stepping off). DoT entries in `_tileDoTs` are cleaned up when no matching modifier is found.
+
+### Current zones in maps
+
+| Map | Location | Type | Effect |
+|-----|----------|------|--------|
+| Darkwood Forest | 40,35 (3×2 area) | DoT (poison) | 8 dmg / 2s (`zonePoison`) |
+| Darkwood Forest | 55,40 (3×2 area) | Debuff (slow) | −50% speed (`zoneSlow`) |
+| Eldengrove | 25–27, 27–28 (waystone area) | HoT (healing) | 12 hp / 2s (`zoneHealing`) |
+
+### Status effect entries
+
+Zone effects use entries in `statusEffects.json` for client-side icon display:
+
+| ID | Display Name | Icon |
+|----|-------------|------|
+| `zoneSlow` | Bogged Down | chilled.png |
+| `zonePoison` | Toxic Fumes | poisoned.png |
+| `zoneBurning` | Scorched | poisoned.png |
+| `zoneHealing` | Sacred Ground | evasion.png |
+| `zoneCourage` | Emboldened | battleShout.png |
+| `zoneWeakness` | Enfeebled | weakened.png |
+
+---
+
+## 16. Inventory Context Menu & Dropping Items
+
+**Files:** `public/js/systems/UISystem.js` (context menu), `public/js/systems/NetworkSystem.js` (`sendDropItem`, `onDropItemResult`), `game/ServerWorld.js` (`handleDropItem`)
+
+### Right-click context menu
+
+Inventory items no longer equip on left-click. Instead, right-clicking an inventory slot opens a context menu with actions appropriate to the item type:
+
+| Option | Shown when | Action |
+|--------|-----------|--------|
+| **Use** | Item is a consumable or hearthstone (`type === "consumable"` or `id === "hearthstone"`) | Calls `handleUseItem(index)` |
+| **Equip** | Item has an `equipSlot` | Triggers `equipItemAtIndex(index)` (optimistic client swap + server `equip_item` message) |
+| **Drop** | Item is not permanent (`permanent !== true`) | Sends `drop_item` message to server |
+
+The context menu is a DOM element (`.item-context-menu`) positioned at the click coordinates, clamped to the viewport. It is dismissed by:
+- Clicking any option
+- Clicking outside the menu
+- Pressing `Escape`
+- Closing the inventory panel
+
+### Drop item flow
+
+1. **Client:** `NetworkSystem.sendDropItem(index)` sends `{ type: "drop_item", index }`.
+2. **Server:** `handleDropItem(player, msg)` validates:
+   - `index` is a valid occupied inventory slot
+   - Item is not flagged `permanent: true` (e.g., Hearthstone cannot be dropped)
+3. **Server:** Sets `player.inventory[index] = null`, sends back `drop_item_result` with the full inventory snapshot.
+4. **Client:** `onDropItemResult(msg)` syncs inventory from the server snapshot and shows a status message.
+
+> **Note:** Dropped items are destroyed, not placed on the ground as loot.
+
+### CSS
+
+The context menu uses `.item-context-menu` (fixed position, panel background, gold border, z-index 9999) and `.item-ctx-option` (hover with gold highlight). The Drop option uses `.item-ctx-option.ctx-danger` for a red color warning.
+
+---
+
+## 17. Client Projectile System
 
 **File:** `public/js/systems/ProjectileSystem.js`
 
@@ -748,7 +883,7 @@ Stores last 6 positions. Draws lines with decreasing alpha (`(count - i) / count
 
 ---
 
-## 16. Particle System
+## 18. Particle System
 
 **File:** `public/js/systems/ParticleSystem.js`
 
@@ -824,7 +959,7 @@ Particles are drawn as filled rectangles (`fillRect`) at world position minus ca
 
 ---
 
-## 17. Audio System
+## 19. Audio System
 
 **File:** `public/js/systems/AudioManager.js`
 
@@ -860,7 +995,7 @@ All volume settings are saved to and loaded from `localStorage` (`sfxVolume`, `b
 
 ---
 
-## 18. Camera
+## 20. Camera
 
 **File:** `public/js/core/Game.js` — `updateCamera()`
 
@@ -903,7 +1038,7 @@ The raw float values are kept for smooth lerp accumulation.
 
 ---
 
-## 19. Render Order
+## 21. Render Order
 
 **File:** `public/js/core/Game.js` — `render()`
 
@@ -923,7 +1058,7 @@ All positions are drawn relative to the integer-snapped camera.
 
 ---
 
-## 20. Client Update Order
+## 22. Client Update Order
 
 **File:** `public/js/core/Game.js` — `update(dt)`
 
@@ -947,7 +1082,7 @@ All positions are drawn relative to the integer-snapped camera.
 
 ---
 
-## 21. Authority Model
+## 23. Authority Model
 
 A clear breakdown of what runs where and who has the final say.
 
@@ -957,7 +1092,7 @@ A clear breakdown of what runs where and who has the final say.
 |--------|---------|
 | **HP / Mana / Death** | All damage, healing, regen, and death states are computed on the server. The client never subtracts HP. |
 | **Projectile damage** | Server tracks its own projectile objects, moves them each tick, and applies damage only when *its* copy hits. Client projectiles are cosmetic. |
-| **Gold / Inventory / Equipment** | Every gold change, item pickup, buy, sell, equip, and swap is validated and executed on the server. Client receives the result. |
+| **Gold / Inventory / Equipment** | Every gold change, item pickup, buy, sell, equip, drop, and swap is validated and executed on the server. Client receives the result. |
 | **XP / Levelling / Stats** | XP grants, level-ups, and stat recalculations (`_recalcStats`) happen server-side. Client applies values from messages. |
 | **Enemy state** | Enemy HP, position, AI state, and death are all server-side. Client only renders what the `state` message tells it. |
 | **Cooldowns** | Attack and skill cooldowns are enforced on the server. The client also tracks them for UI feedback but the server rejects early attempts. |
@@ -965,6 +1100,7 @@ A clear breakdown of what runs where and who has the final say.
 | **Loot ownership** | Drop ownership and expiry timers are server-side. Pickup validation (distance, ownership window) is server-side. |
 | **Map transitions** | Server validates portal proximity before allowing a map change. |
 | **Collision (validation)** | Server checks `isBlocked()` on every move. Clients that send impossible positions are silently rejected. |
+| **Tile modifier zones** | Zone buffs, debuffs, DoTs, and HoTs are applied entirely server-side in `updateTileModifiers()`. Client only sees the resulting `activeBuffs` and HP changes. |
 
 ### Client-predicted (act immediately, reconcile later)
 
@@ -995,11 +1131,11 @@ A clear breakdown of what runs where and who has the final say.
 
 ---
 
-## 22. Message Catalog
+## 24. Message Catalog
 
 Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
 
-### Client → Server (22 types)
+### Client → Server (23 types)
 
 | `type` | Payload | Handler |
 |--------|---------|---------|
@@ -1024,9 +1160,10 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `bank_withdraw` | `bankIndex` | `handleBankWithdraw()` |
 | `hotbar_update` | `hotbar` (array of 10) | `handleHotbarUpdate()` |
 | `swap_items` | `from`, `to`, `fromContainer`, `toContainer` | `handleSwapItems()` |
+| `drop_item` | `index` | `handleDropItem()` |
 | `respawn` | *(none)* | *(no-op — death timer auto-respawns)* |
 
-### Server → Client — Unicast (29 types)
+### Server → Client — Unicast (30 types)
 
 | `type` | Key payload fields | Sent by |
 |--------|--------------------|---------|
@@ -1056,6 +1193,7 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `bank_result` | `ok`, `action`, `invIndex?`, `bankIndex?`, `inventory[]`, `bank[]` | `handleBankDeposit/Withdraw()` |
 | `hotbar_result` | `ok`, `hotbar[]` | `handleHotbarUpdate()` |
 | `swap_result` | `ok`, `inventory[]`, `bank[]` | `handleSwapItems()` |
+| `drop_item_result` | `ok`, `inventory[]`, `message` | `handleDropItem()` |
 | `auth_error` | `error` | `server.js` auth |
 | `kicked` | `reason` | `server.js` duplicate-login / admin |
 | `chat` | `channel`, `from`, `text`, `playerId?`, `to?` | `handleChat()` / admin |
@@ -1104,13 +1242,13 @@ The client's `onCombatVisual()` handler branches on `projectileHit`, `selfTarget
 
 ---
 
-## 23. End-to-End Flow Examples
+## 25. End-to-End Flow Examples
 
 Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 23a. Melee Attack
+### 25a. Melee Attack
 
 ```
 1. Player clicks enemy                      [client — CombatSystem.handleWorldClick]
@@ -1145,7 +1283,7 @@ Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 23b. Ranged Attack (Bow)
+### 25b. Ranged Attack (Bow)
 
 ```
 1. Player clicks enemy                      [client]
@@ -1188,7 +1326,7 @@ Key difference from melee: **damage is deferred**. The server's invisible projec
 
 ---
 
-### 23c. Player Death and Respawn
+### 25c. Player Death and Respawn
 
 ```
 1. Enemy attacks player in updateEnemyAi()  [server]
@@ -1228,7 +1366,7 @@ The `respawn` client→server message is a no-op. Respawn is entirely timer-driv
 
 ---
 
-### 23d. Equipping an Item
+### 25d. Equipping an Item
 
 ```
 1. Player clicks weapon in inventory        [client — UISystem]
@@ -1268,7 +1406,7 @@ The client's optimistic swap gives instant UI feedback. The server response over
 
 ---
 
-### 23e. Map Change via Portal
+### 25e. Map Change via Portal
 
 ```
 1. checkPortals() detects overlap           [client — Game.update, every frame]
@@ -1305,7 +1443,7 @@ The client loads map data *first*, then tells the server. If the server rejects 
 
 ---
 
-### 23f. Buying from a Shop
+### 25f. Buying from a Shop
 
 ```
 1. Player clicks "Buy" in shop UI           [client — UISystem]
@@ -1332,7 +1470,7 @@ No optimistic update — client waits for the server to confirm the purchase.
 
 ---
 
-### 23g. Using a Consumable (Health Potion)
+### 25g. Using a Consumable (Health Potion)
 
 ```
 1. Player clicks potion in inventory/hotbar [client — UISystem]
@@ -1356,7 +1494,7 @@ No optimistic update — client waits for the server to confirm the purchase.
 
 ---
 
-## 24. Glossary
+## 26. Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -1389,3 +1527,5 @@ No optimistic update — client waits for the server to confirm the purchase.
 | **Linear regression (tick mapping)** | Least-squares fit over 120 `{tick, time}` samples to convert client timestamps to fractional server ticks. |
 | **Sequence number (`seq`)** | Integer tagged on each move message. Server acks it so the client can identify which prediction to compare against. |
 | **blendMode** | Canvas compositing mode. Most particles use `"lighter"` (additive blending) for glow effects. |
+| **Tile modifier** | An invisible map zone defined in `tileModifiers` that applies a buff, debuff, DoT, or HoT to players standing on it. |
+| **Context menu** | Right-click popup on inventory items offering Equip, Use, or Drop actions depending on item type. |

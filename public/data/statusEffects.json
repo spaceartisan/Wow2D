@@ -64,5 +64,42 @@
     "description": "Taking damage over time.",
     "type": "debuff",
     "icon": "assets/sprites/status/poisoned.png"
+  },
+
+  "zoneSlow": {
+    "name": "Bogged Down",
+    "description": "Move speed reduced by treacherous terrain.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/chilled.png"
+  },
+  "zonePoison": {
+    "name": "Toxic Fumes",
+    "description": "Taking poison damage from noxious terrain.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/poisoned.png"
+  },
+  "zoneBurning": {
+    "name": "Scorched",
+    "description": "Taking fire damage.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/poisoned.png"
+  },
+  "zoneHealing": {
+    "name": "Sacred Ground",
+    "description": "Slowly restoring health.",
+    "type": "buff",
+    "icon": "assets/sprites/status/evasion.png"
+  },
+  "zoneCourage": {
+    "name": "Emboldened",
+    "description": "Damage increased by hallowed ground.",
+    "type": "buff",
+    "icon": "assets/sprites/status/battleShout.png"
+  },
+  "zoneWeakness": {
+    "name": "Enfeebled",
+    "description": "Damage reduced by cursed ground.",
+    "type": "debuff",
+    "icon": "assets/sprites/status/weakened.png"
   }
 }
