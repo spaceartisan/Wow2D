@@ -65,7 +65,8 @@ export class Game {
       Object.keys(enemies),
       Object.keys(npcs),
       Object.keys(items),
-      this.world.propDefs
+      this.world.propDefs,
+      skills
     );
 
     this.quests = new QuestSystem(this);
@@ -316,6 +317,7 @@ export class Game {
     const result = this.world.checkStairs(player.x, player.y, dt);
     if (result && this.world.currentFloor !== prevFloor) {
       this._syncMapParticles();
+      this.minimap.invalidate();
     }
   }
 
@@ -355,7 +357,8 @@ export class Game {
       }
 
       this.centerCameraOnPlayer();
-      this.ui.addMessage(`Entered ${mapId}.`);
+      const mapName = this.world.mapData?.name || mapId;
+      this.ui.addMessage(`Entered ${mapName}.`);
     } catch (err) {
       console.error("Map transition failed:", err);
       this.ui.addMessage("Failed to enter the new area.");

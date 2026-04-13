@@ -24,9 +24,9 @@ export class MinimapSystem {
     this.fullCanvas = document.createElement("canvas");
     this.fullCtx = this.fullCanvas.getContext("2d");
 
-    // Pre-rendered terrain image (regenerated on map load)
+    // Pre-rendered terrain image (regenerated on map load or floor change)
     this._terrainImg = null;
-    this._terrainMapId = null;
+    this._terrainCacheKey = null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -35,12 +35,15 @@ export class MinimapSystem {
 
   /**
    * Build a 1-pixel-per-tile image of the entire map terrain.
-   * Called once per map load.
+   * When on an upper floor inside a building, overlay the building grid.
+   * Called once per map load / floor change.
    */
   _buildTerrainImage() {
     const world = this.game.world;
     if (!world || !world.terrain || !world.tilePalette) return;
-    if (this._terrainMapId === world.mapId) return; // already cached
+
+    const cacheKey = `${world.mapId}:${world.currentFloor}`;
+    if (this._terrainCacheKey === cacheKey) return; // already cached
 
     const w = world.width;
     const h = world.height;
@@ -51,21 +54,56 @@ export class MinimapSystem {
     const imgData = ctx.createImageData(w, h);
     const d = imgData.data;
 
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = world.terrain[y]?.[x] ?? 0;
-        const tile = world.tilePalette[idx];
-        const c = tile ? tile.color : [60, 60, 60];
-        const off = (y * w + x) * 4;
-        d[off] = c[0];
-        d[off + 1] = c[1];
-        d[off + 2] = c[2];
+    // Build base terrain (ground floor) or background fill (upper floors)
+    if (world.currentFloor > 0 && world.insideBuilding) {
+      // Upper floor: fill with dark background, then draw only the building grid
+      const bg = [17, 17, 17]; // matches minimap background (#111)
+      for (let i = 0; i < w * h; i++) {
+        const off = i * 4;
+        d[off] = bg[0];
+        d[off + 1] = bg[1];
+        d[off + 2] = bg[2];
         d[off + 3] = 255;
       }
+      const bld = world.insideBuilding;
+      const floorGrid = bld.upperFloors[world.currentFloor - 1];
+      if (floorGrid) {
+        for (let ly = 0; ly < floorGrid.length; ly++) {
+          for (let lx = 0; lx < floorGrid[0].length; lx++) {
+            const idx = floorGrid[ly][lx];
+            if (idx < 0) continue;
+            const tile = world.tilePalette[idx];
+            if (!tile) continue;
+            const tx = bld.ox + lx;
+            const ty = bld.oy + ly;
+            if (tx < 0 || tx >= w || ty < 0 || ty >= h) continue;
+            const off = (ty * w + tx) * 4;
+            d[off] = tile.color[0];
+            d[off + 1] = tile.color[1];
+            d[off + 2] = tile.color[2];
+            d[off + 3] = 255;
+          }
+        }
+      }
+    } else {
+      // Ground floor: draw full terrain
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = world.terrain[y]?.[x] ?? 0;
+          const tile = world.tilePalette[idx];
+          const c = tile ? tile.color : [60, 60, 60];
+          const off = (y * w + x) * 4;
+          d[off] = c[0];
+          d[off + 1] = c[1];
+          d[off + 2] = c[2];
+          d[off + 3] = 255;
+        }
+      }
     }
+
     ctx.putImageData(imgData, 0, 0);
     this._terrainImg = cvs;
-    this._terrainMapId = world.mapId;
+    this._terrainCacheKey = cacheKey;
   }
 
   /* ------------------------------------------------------------------ */
@@ -110,9 +148,10 @@ export class MinimapSystem {
     );
 
     // ── Draw enemies (red dots) ──
+    const currentFloor = world.currentFloor;
     const enemies = this.game.entities.enemies || [];
     for (const e of enemies) {
-      if (e.dead) continue;
+      if (e.dead || (e.floor || 0) !== currentFloor) continue;
       const etx = Math.floor(e.x / ts);
       const ety = Math.floor(e.y / ts);
       const dx = (etx - sx) * scale;
@@ -125,6 +164,7 @@ export class MinimapSystem {
     // ── Draw other players (cyan dots) ──
     const others = this.game.entities.remotePlayers || [];
     for (const op of others) {
+      if ((op.floor || 0) !== currentFloor) continue;
       const otx = Math.floor(op.x / ts);
       const oty = Math.floor(op.y / ts);
       const dx = (otx - sx) * scale;
@@ -350,7 +390,7 @@ export class MinimapSystem {
    * Invalidate the terrain cache (call on map change).
    */
   invalidate() {
-    this._terrainMapId = null;
+    this._terrainCacheKey = null;
     this._terrainImg = null;
   }
 }

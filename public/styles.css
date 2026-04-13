@@ -1245,6 +1245,14 @@ input, textarea {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  gap: 6px;
+}
+
+.skill-panel-icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
 }
 
 .skill-name {

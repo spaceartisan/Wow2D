@@ -659,6 +659,18 @@ export class UISystem {
     });
   }
 
+  _skillTooltipText(skillDef) {
+    let tip = skillDef.name;
+    if (skillDef.type) tip += `  [${skillDef.type}]`;
+    if (skillDef.manaCost) tip += `\nMana: ${skillDef.manaCost}`;
+    if (skillDef.cooldown) tip += `\nCooldown: ${skillDef.cooldown}s`;
+    if (skillDef.damage) tip += `\nDamage: ${skillDef.damage}`;
+    if (skillDef.healAmount) tip += `\nHeals: ${skillDef.healAmount}`;
+    if (skillDef.range) tip += `\nRange: ${skillDef.range}`;
+    if (skillDef.description) tip += `\n${skillDef.description}`;
+    return tip;
+  }
+
   _itemTooltipText(item) {
     let tip = item.name;
     if (item.type === "weapon") {
@@ -967,6 +979,7 @@ export class UISystem {
     const hotbar = p.hotbar;
     const sprites = this.game.sprites;
     const itemDefs = this.game.data?.items || {};
+    const skillDefs = this.game.data?.skills || {};
 
     const slotEls = document.querySelectorAll("#action-bar .hotbar-slot");
     slotEls.forEach((el, i) => {
@@ -978,28 +991,28 @@ export class UISystem {
 
       el.classList.remove("has-content");
       el.classList.remove("hotbar-unavailable");
+      el.title = "";
 
       if (!entry) return;
 
       el.classList.add("has-content");
 
       if (entry.type === "skill") {
-        const skillIcons = { attack: "sword", heal: "heal" };
-        const skillNames = { attack: "Attack", heal: "Heal" };
-        const iconKey = skillIcons[entry.skillId];
-        if (iconKey) {
-          const icon = sprites && sprites.get(`icons/${iconKey}`);
-          if (icon) {
-            const img = document.createElement("img");
-            img.src = icon.src;
-            img.className = "hotbar-icon";
-            el.insertBefore(img, keySpan);
-          }
+        const skillDef = skillDefs[entry.skillId];
+        const iconName = skillDef?.icon || entry.skillId;
+        const icon = sprites && sprites.get(`skills/${iconName}`);
+        if (icon) {
+          const img = document.createElement("img");
+          img.src = icon.src;
+          img.className = "hotbar-icon";
+          el.insertBefore(img, keySpan);
         }
         const label = document.createElement("span");
         label.className = "hotbar-label";
-        label.textContent = skillNames[entry.skillId] || entry.skillId;
+        label.textContent = skillDef?.name || entry.skillId;
         el.insertBefore(label, keySpan);
+
+        if (skillDef) el.title = this._skillTooltipText(skillDef);
       } else if (entry.type === "item") {
         const def = itemDefs[entry.itemId];
         if (def) {
@@ -1014,6 +1027,8 @@ export class UISystem {
           label.className = "hotbar-label";
           label.textContent = def.name;
           el.insertBefore(label, keySpan);
+
+          el.title = this._itemTooltipText(def);
 
           // Show qty from inventory (0 = grayed out)
           const invSlot = p.inventorySlots.find(s => s && s.id === entry.itemId);
@@ -1133,19 +1148,20 @@ export class UISystem {
     ghost.className = "drag-ghost";
 
     if (pd.source === "skill") {
-      const skillIcons = { attack: "sword", heal: "heal" };
-      const iconKey = skillIcons[pd.skillId];
-      const icon = iconKey && sprites && sprites.get(`icons/${iconKey}`);
+      const skillDef = this.game.data?.skills?.[pd.skillId];
+      const iconName = skillDef?.icon || pd.skillId;
+      const icon = sprites && sprites.get(`skills/${iconName}`);
       if (icon) { const img = document.createElement("img"); img.src = icon.src; ghost.append(img); }
-      else { const span = document.createElement("span"); span.className = "drag-ghost-name"; span.textContent = pd.skillId; ghost.append(span); }
+      else { const span = document.createElement("span"); span.className = "drag-ghost-name"; span.textContent = skillDef?.name || pd.skillId; ghost.append(span); }
       ghost.style.left = `${e.clientX - 20}px`;
       ghost.style.top = `${e.clientY - 20}px`;
       document.body.append(ghost);
       this._drag = { container: "skill", index: -1, item: null, skillId: pd.skillId, ghost };
     } else if (pd.source === "hotbar") {
       if (pd.entry.type === "skill") {
-        const skillIcons = { attack: "sword", heal: "heal" };
-        const icon = sprites && sprites.get(`icons/${skillIcons[pd.entry.skillId]}`);
+        const skillDef = this.game.data?.skills?.[pd.entry.skillId];
+        const iconName = skillDef?.icon || pd.entry.skillId;
+        const icon = sprites && sprites.get(`skills/${iconName}`);
         if (icon) { const img = document.createElement("img"); img.src = icon.src; ghost.append(img); }
       } else if (pd.entry.type === "item") {
         const def = this.game.data?.items?.[pd.entry.itemId];
@@ -1595,6 +1611,15 @@ export class UISystem {
 
       const header = document.createElement("div");
       header.className = "skill-header";
+
+      const iconName = skill.icon || skill.id;
+      const iconImg = this.game.sprites && this.game.sprites.get(`skills/${iconName}`);
+      if (iconImg) {
+        const img = document.createElement("img");
+        img.src = iconImg.src;
+        img.className = "skill-panel-icon";
+        header.append(img);
+      }
 
       const skillNameSpan = document.createElement("span");
       skillNameSpan.className = "skill-name";

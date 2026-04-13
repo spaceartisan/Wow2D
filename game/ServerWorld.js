@@ -1846,8 +1846,9 @@ class ServerWorld {
     for (const spawn of spawns) {
       const type = spawn.type;
       const positions = spawn.positions || [];
+      const floor = spawn.floor || 0;
       for (const [tx, ty] of positions) {
-        const e = this.makeEnemy(type, tx * tileSize, ty * tileSize);
+        const e = this.makeEnemy(type, tx * tileSize, ty * tileSize, floor);
         if (e) enemies.push(e);
       }
     }
@@ -1855,7 +1856,7 @@ class ServerWorld {
     return enemies;
   }
 
-  makeEnemy(type, x, y) {
+  makeEnemy(type, x, y, floor = 0) {
     const t = ENEMY_TYPES[type];
     if (!t) {
       console.warn(`[ServerWorld] Unknown enemy type: ${type}`);
@@ -1868,6 +1869,7 @@ class ServerWorld {
       x, y,
       spawnX: x,
       spawnY: y,
+      floor,
       radius: t.radius || 15,
       hp: t.maxHp,
       maxHp: t.maxHp,
@@ -2126,8 +2128,10 @@ class ServerWorld {
       let closestPlayer = null;
       let closestDist = Infinity;
 
+      const enemyFloor = enemy.floor || 0;
       for (const [, player] of this.players) {
         if (player.dead || player.mapId !== mapEntry._mapId) continue;
+        if ((player.floor || 0) !== enemyFloor) continue;
         const d = dist(enemy.x, enemy.y, player.x, player.y);
         if (d < closestDist) {
           closestDist = d;
@@ -2141,6 +2145,7 @@ class ServerWorld {
       } else if (enemy.targetPlayerId) {
         const target = this.players.get(enemy.targetPlayerId);
         if (!target || target.dead || target.mapId !== mapEntry._mapId ||
+            (target.floor || 0) !== enemyFloor ||
             dist(enemy.x, enemy.y, target.x, target.y) > enemy.aggroRange * 1.6 ||
             mapEntry.collision.isSafeZone(target.x, target.y)) {
           enemy.targetPlayerId = null;
@@ -2232,10 +2237,11 @@ class ServerWorld {
   }
 
   _moveEnemy(enemy, vx, vy, dt, collision) {
+    const floor = enemy.floor || 0;
     const nx = enemy.x + vx * dt;
-    if (!collision.isBlocked(nx, enemy.y, enemy.radius)) enemy.x = nx;
+    if (!collision.isBlocked(nx, enemy.y, enemy.radius, floor)) enemy.x = nx;
     const ny = enemy.y + vy * dt;
-    if (!collision.isBlocked(enemy.x, ny, enemy.radius)) enemy.y = ny;
+    if (!collision.isBlocked(enemy.x, ny, enemy.radius, floor)) enemy.y = ny;
   }
 
   updateEnemyRespawns(mapEntry, now) {
@@ -2475,6 +2481,7 @@ class ServerWorld {
       color: e.color,
       radius: e.radius,
       level: e.level || 1,
+      floor: e.floor || 0,
       debuffs: (e.activeDebuffs || []).map(d => ({
         id: d.id, stat: d.stat, modifier: d.modifier,
         remaining: Math.max(0, (d.expiresAt - now) / 1000)
@@ -2510,7 +2517,8 @@ class ServerWorld {
       y: p.y,
       hp: p.hp,
       maxHp: p.maxHp,
-      dead: p.dead
+      dead: p.dead,
+      floor: p.floor || 0
     };
   }
 

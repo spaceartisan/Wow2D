@@ -955,7 +955,10 @@ export class NetworkSystem {
         this.game.entities.npcs = this.game.entities.createNpcs();
         this.game.entities.statues = this.game.entities.createStatues();
         this.game.minimap.invalidate();
+        this.game._syncMapParticles();
       });
+    } else {
+      this.game._syncMapParticles();
     }
   }
 
@@ -1167,6 +1170,8 @@ export class NetworkSystem {
       this.game.world.loadMap(msg.mapId).then(() => {
         this.game.entities.npcs = this.game.entities.createNpcs();
         this.game.entities.statues = this.game.entities.createStatues();
+        this.game.particles.clear();
+        this.game._syncMapParticles();
       });
       this._resetEntities(msg);
     }

@@ -17,7 +17,7 @@ export class SpriteManager {
    * Preload all required sprites. Call once during game init.
    * Fetches the sprite manifest, then loads every image in parallel.
    */
-  async load(tilePalette, enemyIds, npcIds, itemIds, propDefs) {
+  async load(tilePalette, enemyIds, npcIds, itemIds, propDefs, skillDefs) {
     const promises = [];
 
     // Tiles — one per palette entry
@@ -57,6 +57,18 @@ export class SpriteManager {
     if (itemIds) {
       for (const id of itemIds) {
         promises.push(this._loadOne(`icons/${id}`));
+      }
+    }
+
+    // Skill icons
+    if (skillDefs) {
+      const seen = new Set();
+      for (const skill of Object.values(skillDefs)) {
+        const iconName = skill.icon || skill.id;
+        if (!seen.has(iconName)) {
+          seen.add(iconName);
+          promises.push(this._loadOne(`skills/${iconName}`));
+        }
       }
     }
 

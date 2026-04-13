@@ -97,7 +97,8 @@ export class EntitySystem {
         id: s.id,
         name: s.name,
         x: s.tx * tileSize,
-        y: s.ty * tileSize
+        y: s.ty * tileSize,
+        floor: s.floor || 0
       });
     }
 
@@ -109,7 +110,9 @@ export class EntitySystem {
     let closest = null;
     let bestDist = Infinity;
 
+    const floor = this.game.world.currentFloor;
     for (const statue of this.statues) {
+      if ((statue.floor || 0) !== floor) continue;
       const dist = distance(player.x, player.y, statue.x, statue.y);
       if (dist < range && dist < bestDist) {
         closest = statue;
@@ -198,20 +201,22 @@ export class EntitySystem {
 
   getEnemyAtWorld(worldX, worldY) {
     const clickableRadius = 24;
+    const floor = this.game.world.currentFloor;
     return (
       this.enemies.find(
         (enemy) =>
-          !enemy.dead && distance(worldX, worldY, enemy.x, enemy.y) <= enemy.radius + clickableRadius
+          !enemy.dead && (enemy.floor || 0) === floor && distance(worldX, worldY, enemy.x, enemy.y) <= enemy.radius + clickableRadius
       ) || null
     );
   }
 
   getPlayerAtWorld(worldX, worldY) {
     const clickableRadius = 24;
+    const floor = this.game.world.currentFloor;
     return (
       this.remotePlayers.find(
         (rp) =>
-          !rp.dead && distance(worldX, worldY, rp.x, rp.y) <= 16 + clickableRadius
+          !rp.dead && (rp.floor || 0) === floor && distance(worldX, worldY, rp.x, rp.y) <= 16 + clickableRadius
       ) || null
     );
   }
@@ -403,7 +408,9 @@ export class EntitySystem {
     }
 
     // Draw statues (waystone pillars)
+    const currentFloor = this.game.world.currentFloor;
     for (const statue of this.statues) {
+      if ((statue.floor || 0) !== currentFloor) continue;
       const x = statue.x - camera.x;
       const y = statue.y - camera.y;
 
@@ -439,7 +446,7 @@ export class EntitySystem {
     }
 
     for (const enemy of this.enemies) {
-      if (enemy.dead) {
+      if (enemy.dead || (enemy.floor || 0) !== currentFloor) {
         continue;
       }
 
@@ -473,7 +480,7 @@ export class EntitySystem {
 
     // draw remote players
     for (const rp of this.remotePlayers) {
-      if (rp.dead) continue;
+      if (rp.dead || (rp.floor || 0) !== currentFloor) continue;
 
       const x = Math.round(rp.x - camera.x);
       const y = Math.round(rp.y - camera.y);
