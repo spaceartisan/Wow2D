@@ -31,6 +31,8 @@
       <button class="tab" data-tab="particles">Particles</button>
       <button class="tab" data-tab="skills">Skills</button>
       <button class="tab" data-tab="statusEffects">Status Effects</button>
+      <button class="tab" data-tab="gatheringSkills">Gathering</button>
+      <button class="tab" data-tab="resourceNodes">Resources</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -1437,8 +1439,8 @@
                         <span id="skillIconStatusBadge" class="badge muted">Unchecked</span>
                       </div>
                       <div class="sprite-meta">
-                        <div><span class="field-label">Expected path</span><code id="skillIconPathLabel">public/assets/sprites/icons/&lt;icon&gt;.png</code></div>
-                        <div><span class="subtle">Same folder as item icons.</span></div>
+                        <div><span class="field-label">Expected path</span><code id="skillIconPathLabel">public/assets/sprites/skills/&lt;icon&gt;.png</code></div>
+                        <div><span class="subtle">32×32 pixel-art icons in the skills sprite folder.</span></div>
                       </div>
                     </div>
                   </div>
@@ -1508,6 +1510,24 @@
                     <label class="field">
                       <span>Projectile Speed <span class="subtle">(px/s, ranged only)</span></span>
                       <input id="skillProjectileSpeedInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Weapon Requirements <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(optional)</span></h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field checkbox-field">
+                      <input id="skillRequiresWeaponInput" type="checkbox" />
+                      <span>Requires Weapon</span>
+                    </label>
+                    <label class="field checkbox-field">
+                      <input id="skillRequiresShieldInput" type="checkbox" />
+                      <span>Requires Shield</span>
+                    </label>
+                    <label class="field">
+                      <span>Weapon Types <span class="subtle">(comma-sep)</span></span>
+                      <input id="skillRequiresWeaponTypeInput" type="text" placeholder="e.g. staff, sword" />
                     </label>
                   </div>
                 </section>
@@ -1721,6 +1741,218 @@
               <div id="statusEffectDiagnosticsList" class="diagnostics-list empty-diagnostics">
                 <p>No messages yet.</p>
               </div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="gatheringSkills">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Gathering</h2>
+            <div class="inline-actions">
+              <button id="addGatheringSkillButton" class="button secondary small">Add</button>
+              <button id="duplicateGatheringSkillButton" class="button secondary small">Duplicate</button>
+              <button id="deleteGatheringSkillButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="gatheringSkillSearchInput" type="text" placeholder="Find skill id or name" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="gatheringSkillEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Tool Types</span>
+                <strong id="gatheringSkillToolCount">0</strong>
+              </div>
+            </div>
+            <div id="gatheringSkillList" class="tile-list" role="listbox" aria-label="Gathering skill entries"></div>
+          </div>
+        </section>
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Gathering Skills Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/gatheringSkills.json</code> — the three gathering professions (mining, logging, fishing)</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateGatheringSkillsButton" class="button secondary">Validate</button>
+              <button id="reloadGatheringSkillsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Skill</h3>
+                <span id="selectedGatheringSkillLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="gatheringSkillEmptyState" class="empty-state">
+                <p>Select a gathering skill to begin editing.</p>
+              </div>
+              <form id="gatheringSkillForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Skill ID</span><input id="gatheringSkillIdInput" type="text" /></label>
+                  <label class="field"><span>Name</span><input id="gatheringSkillNameInput" type="text" /></label>
+                </div>
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Icon <span class="subtle">(key)</span></span><input id="gatheringSkillIconInput" type="text" placeholder="e.g. mining" /></label>
+                  <label class="field"><span>Tool Type</span><input id="gatheringSkillToolTypeInput" type="text" placeholder="e.g. pickaxe" /></label>
+                </div>
+                <label class="field"><span>Description</span><textarea id="gatheringSkillDescriptionInput" rows="2"></textarea></label>
+                <section class="inline-json">
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                  <pre id="gatheringSkillJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="gatheringSkillValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="gatheringSkillDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="resourceNodes">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Resources</h2>
+            <div class="inline-actions">
+              <button id="addResourceNodeButton" class="button secondary small">Add</button>
+              <button id="duplicateResourceNodeButton" class="button secondary small">Duplicate</button>
+              <button id="deleteResourceNodeButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="resourceNodeSearchInput" type="text" placeholder="Find node id, name, or skill" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="resourceNodeEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Skills</span>
+                <strong id="resourceNodeSkillCount">0</strong>
+              </div>
+            </div>
+            <div id="resourceNodeList" class="tile-list" role="listbox" aria-label="Resource node entries"></div>
+          </div>
+        </section>
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Resource Nodes Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/resourceNodes.json</code> — sprites at <code>public/assets/sprites/gathering/{nodeType}.png</code></p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateResourceNodesButton" class="button secondary">Validate</button>
+              <button id="reloadResourceNodesButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Node</h3>
+                <span id="selectedResourceNodeLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="resourceNodeEmptyState" class="empty-state">
+                <p>Select a resource node to begin editing.</p>
+              </div>
+              <form id="resourceNodeForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Node ID</span><input id="resourceNodeIdInput" type="text" /></label>
+                  <label class="field"><span>Name</span><input id="resourceNodeNameInput" type="text" /></label>
+                </div>
+
+                <section class="sprite-section">
+                  <div class="sprite-preview-card sprite-preview-card--inline">
+                    <div class="sprite-preview-frame sprite-preview-frame--sm">
+                      <img id="resourceNodeSpriteImage" class="sprite-preview-image hidden" alt="Resource node sprite" />
+                      <div id="resourceNodeSpriteFallback" class="sprite-fallback sprite-fallback--sm">
+                        <div id="resourceNodeColorPreview" class="color-preview sprite-fallback-color-sm"></div>
+                      </div>
+                    </div>
+                    <div class="sprite-preview-meta-col">
+                      <div class="sprite-preview-header">
+                        <span class="field-label">Sprite Preview</span>
+                        <span id="resourceNodeSpriteStatusBadge" class="badge muted">Unchecked</span>
+                      </div>
+                      <div class="sprite-meta">
+                        <div><span class="field-label">Expected path</span><code id="resourceNodeSpritePathLabel">public/assets/sprites/gathering/&lt;id&gt;.png</code></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <div class="split-grid three-columns">
+                  <label class="field">
+                    <span>Skill</span>
+                    <select id="resourceNodeSkillInput">
+                      <option value="mining">mining</option>
+                      <option value="logging">logging</option>
+                      <option value="fishing">fishing</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Tool Type</span>
+                    <select id="resourceNodeToolTypeInput">
+                      <option value="pickaxe">pickaxe</option>
+                      <option value="hatchet">hatchet</option>
+                      <option value="fishing_rod">fishing_rod</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Tool Tier</span>
+                    <select id="resourceNodeToolTierInput">
+                      <option value="1">1 — Basic</option>
+                      <option value="2">2 — Improved</option>
+                      <option value="3">3 — Advanced</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="split-grid four-columns">
+                  <label class="field"><span>Required Level</span><input id="resourceNodeRequiredLevelInput" type="number" step="1" min="1" /></label>
+                  <label class="field"><span>XP Per Gather</span><input id="resourceNodeXpInput" type="number" step="1" min="0" /></label>
+                  <label class="field"><span>Max Harvests</span><input id="resourceNodeMaxHarvestsInput" type="number" step="1" min="1" /></label>
+                  <label class="field"><span>Respawn Ticks <span class="subtle">(60/s)</span></span><input id="resourceNodeRespawnTicksInput" type="number" step="1" min="1" /></label>
+                </div>
+
+                <label class="field"><span>Gather Item <span class="subtle">(item id)</span></span><input id="resourceNodeGatherItemInput" type="text" placeholder="e.g. copperOre" /></label>
+
+                <div class="color-row">
+                  <label class="field color-picker-field">
+                    <span>Fallback Color</span>
+                    <input id="resourceNodeColorPicker" class="color-picker color-picker-sm" type="color" />
+                  </label>
+                  <label class="field"><span>R</span><input id="resourceNodeRInput" type="number" min="0" max="255" /></label>
+                  <label class="field"><span>G</span><input id="resourceNodeGInput" type="number" min="0" max="255" /></label>
+                  <label class="field"><span>B</span><input id="resourceNodeBInput" type="number" min="0" max="255" /></label>
+                </div>
+
+                <section class="inline-json">
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                  <pre id="resourceNodeJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="resourceNodeValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="resourceNodeDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
             </section>
           </div>
         </section>

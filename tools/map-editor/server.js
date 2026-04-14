@@ -54,6 +54,20 @@ app.get("/api/particles", (_req, res) => {
   res.json(data);
 });
 
+app.get("/api/resourceNodes", (_req, res) => {
+  const filePath = path.join(DATA_DIR, "resourceNodes.json");
+  if (!fs.existsSync(filePath)) return res.json({});
+  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  res.json(data);
+});
+
+app.get("/api/statusEffects", (_req, res) => {
+  const filePath = path.join(DATA_DIR, "statusEffects.json");
+  if (!fs.existsSync(filePath)) return res.json({});
+  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  res.json(data);
+});
+
 app.get("/api/bgm", (_req, res) => {
   const bgmDir = path.join(PROJECT_ROOT, "public", "assets", "bgm");
   if (!fs.existsSync(bgmDir)) return res.json([]);

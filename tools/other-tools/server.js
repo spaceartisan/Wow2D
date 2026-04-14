@@ -113,6 +113,34 @@ const ITEM_ICON_DIR_CANDIDATES = [
   path.resolve(process.cwd(), '../public/assets/sprites/icons'),
   path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/icons'),
 ];
+const SKILL_ICON_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sprites/skills'),
+  path.resolve(process.cwd(), '../../public/assets/sprites/skills'),
+  path.resolve(process.cwd(), 'public/assets/sprites/skills'),
+  path.resolve(process.cwd(), '../public/assets/sprites/skills'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/skills'),
+];
+const GATHERING_SPRITE_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../../public/assets/sprites/gathering'),
+  path.resolve(process.cwd(), '../../public/assets/sprites/gathering'),
+  path.resolve(process.cwd(), 'public/assets/sprites/gathering'),
+  path.resolve(process.cwd(), '../public/assets/sprites/gathering'),
+  path.resolve(process.cwd(), '../../wow2d/public/assets/sprites/gathering'),
+];
+const GATHERING_SKILLS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/gatheringSkills.json'),
+  path.resolve(process.cwd(), '../../public/data/gatheringSkills.json'),
+  path.resolve(process.cwd(), 'public/data/gatheringSkills.json'),
+  path.resolve(process.cwd(), '../public/data/gatheringSkills.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/gatheringSkills.json'),
+];
+const RESOURCE_NODES_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/resourceNodes.json'),
+  path.resolve(process.cwd(), '../../public/data/resourceNodes.json'),
+  path.resolve(process.cwd(), 'public/data/resourceNodes.json'),
+  path.resolve(process.cwd(), '../public/data/resourceNodes.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/resourceNodes.json'),
+];
 const SFX_DIR_CANDIDATES = [
   path.resolve(__dirname, '../../public/assets/sfx'),
   path.resolve(process.cwd(), '../../public/assets/sfx'),
@@ -140,6 +168,10 @@ function resolveExistingPlayerBasePath() { return firstExisting(PLAYER_BASE_CAND
 function resolveExistingTileSpriteDir() { return firstExisting(TILE_SPRITE_DIR_CANDIDATES); }
 function resolveExistingEntitySpriteDir() { return firstExisting(ENTITY_SPRITE_DIR_CANDIDATES); }
 function resolveExistingItemIconDir() { return firstExisting(ITEM_ICON_DIR_CANDIDATES); }
+function resolveExistingSkillIconDir() { return firstExisting(SKILL_ICON_DIR_CANDIDATES); }
+function resolveExistingGatheringSpriteDir() { return firstExisting(GATHERING_SPRITE_DIR_CANDIDATES); }
+function resolveExistingGatheringSkillsPath() { return firstExisting(GATHERING_SKILLS_CANDIDATES); }
+function resolveExistingResourceNodesPath() { return firstExisting(RESOURCE_NODES_CANDIDATES); }
 function resolveExistingSfxDir() { return firstExisting(SFX_DIR_CANDIDATES); }
 
 function listTileSpriteIds() {
@@ -254,6 +286,27 @@ function validateQuests(quests) {
   return null;
 }
 
+function validateGatheringSkills(gs) {
+  if (!gs || typeof gs !== 'object' || Array.isArray(gs)) return 'gatheringSkills must be an object keyed by skill id.';
+  for (const [key, entry] of Object.entries(gs)) {
+    if (!key.trim()) return 'Gathering skill ids cannot be blank.';
+    if (!entry || typeof entry !== 'object') return `Entry for "${key}" must be an object.`;
+    for (const field of ['id','name','description','toolType']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    if (entry.id !== key) return `Entry for "${key}": id must match the object key.`;
+  }
+  return null;
+}
+function validateResourceNodes(rn) {
+  if (!rn || typeof rn !== 'object' || Array.isArray(rn)) return 'resourceNodes must be an object keyed by node type id.';
+  for (const [key, entry] of Object.entries(rn)) {
+    if (!key.trim()) return 'Node type ids cannot be blank.';
+    if (!entry || typeof entry !== 'object') return `Entry for "${key}" must be an object.`;
+    for (const field of ['name','skill','requiredToolType','gatherItem']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
+    for (const field of ['requiredLevel','requiredToolTier','xpPerGather','maxHarvests','respawnTicks']) if (typeof entry[field] !== 'number') return `Entry for "${key}" must contain ${field}: number.`;
+    if (!Array.isArray(entry.color) || entry.color.length !== 3) return `Entry for "${key}" must contain color: [r,g,b].`;
+  }
+  return null;
+}
 function validateStatusEffects(statusEffects) {
   if (!statusEffects || typeof statusEffects !== 'object' || Array.isArray(statusEffects)) return 'statusEffects must be an object keyed by effect id.';
   for (const [key, entry] of Object.entries(statusEffects)) {
@@ -345,7 +398,7 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
 
   // Serve status effect icons by their relative path (e.g. assets/sprites/status/stunned.png)
   if (pathname.startsWith('/api/status-sprite/') && req.method === 'GET') {
@@ -369,10 +422,47 @@ const server = http.createServer(async (req, res) => {
     try {
       const iconId = pathname.replace('/api/skill-icon/', '').trim();
       if (!iconId) return sendText(res, 400, 'Missing icon id');
-      const iconPath = safeAssetPath(resolveExistingItemIconDir(), iconId);
+      const iconPath = safeAssetPath(resolveExistingSkillIconDir(), iconId);
       if (!iconPath) return sendText(res, 403, 'Forbidden');
       return serveFile(res, iconPath);
     } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname.startsWith('/api/gathering-sprite/') && req.method === 'GET') {
+    try {
+      const nodeId = pathname.replace('/api/gathering-sprite/', '').trim();
+      if (!nodeId) return sendText(res, 400, 'Missing node id');
+      const spritePath = safeAssetPath(resolveExistingGatheringSpriteDir(), nodeId);
+      if (!spritePath) return sendText(res, 403, 'Forbidden');
+      return serveFile(res, spritePath);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+  if (pathname === '/api/gathering-skills' && req.method === 'GET') {
+    try { return sendJson(res, 200, { gatheringSkills: JSON.parse(await fs.promises.readFile(resolveExistingGatheringSkillsPath(), 'utf8')), path: resolveExistingGatheringSkillsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingGatheringSkillsPath() }); }
+  }
+  if (pathname === '/api/gathering-skills' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateGatheringSkills(body.gatheringSkills);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingGatheringSkillsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.gatheringSkills, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingGatheringSkillsPath() }); }
+  }
+  if (pathname === '/api/resource-nodes' && req.method === 'GET') {
+    try { return sendJson(res, 200, { resourceNodes: JSON.parse(await fs.promises.readFile(resolveExistingResourceNodesPath(), 'utf8')), path: resolveExistingResourceNodesPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingResourceNodesPath() }); }
+  }
+  if (pathname === '/api/resource-nodes' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateResourceNodes(body.resourceNodes);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingResourceNodesPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.resourceNodes, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingResourceNodesPath() }); }
   }
 
   if (pathname === '/api/status-effects' && req.method === 'GET') {
@@ -608,6 +698,10 @@ server.listen(PORT, () => {
   console.log(`Particles target: ${resolveExistingParticlesPath()}`);
   console.log(`Skills target:    ${resolveExistingSkillsPath()}`);
   console.log(`Status effects:   ${resolveExistingStatusEffectsPath()}`);
+  console.log(`Gathering skills: ${resolveExistingGatheringSkillsPath()}`);
+  console.log(`Resource nodes:   ${resolveExistingResourceNodesPath()}`);
+  console.log(`Skill icon dir:   ${resolveExistingSkillIconDir()}`);
+  console.log(`Gathering dir:    ${resolveExistingGatheringSpriteDir()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);
   console.log(`Tile sprite dir: ${resolveExistingTileSpriteDir()}`);
   console.log(`Entity sprite dir: ${resolveExistingEntitySpriteDir()}`);

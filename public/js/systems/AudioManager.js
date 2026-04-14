@@ -25,7 +25,8 @@ export class AudioManager {
       "ui_click", "enemy_death", "chat_msg", "error", "footstep",
       "casting", "player_hit",
       "arrow_hit", "bow_shoot", "magic_hit", "staff_swing",
-      "bite_hit", "punch_hit", "punch_swing", "potion_drink"
+      "bite_hit", "punch_hit", "punch_swing", "potion_drink",
+      "gather_mining", "gather_chopping", "gather_fishing"
     ];
 
     this._loaded = false;

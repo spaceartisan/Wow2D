@@ -1327,6 +1327,9 @@ export class NetworkSystem {
     }
     this.game.ui._inventoryDirty = true;
     this.game.ui._hotbarDirty = true;
+    // Play gathering SFX based on skill type
+    const gatherSfx = { mining: "gather_mining", logging: "gather_chopping", fishing: "gather_fishing" };
+    this.game.audio.play(gatherSfx[msg.skillId] || "pickup");
     this.game.ui.addMessage(`You gathered ${msg.itemName}. (+${msg.xpGained} ${msg.skillId} XP)`);
     if (msg.leveledUp) {
       this.game.ui.addMessage(`${msg.skillId.charAt(0).toUpperCase() + msg.skillId.slice(1)} leveled up to ${msg.newLevel}!`, "gold");

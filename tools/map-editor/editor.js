@@ -10,6 +10,8 @@ const S = {
   npcDefs: {},             // npcs.json
   propDefs: {},            // props.json
   particleDefs: {},        // particles.json
+  resourceNodeDefs: {},    // resourceNodes.json
+  statusEffectDefs: {},    // statusEffects.json
 
   // Map data
   mapId: "",
@@ -30,10 +32,12 @@ const S = {
   statues: [],
   safeZones: [],
   extraBlocked: [],        // [[tx,ty],...]
+  tileModifiers: [],       // { x, y, floor, modifiers: [...] }
+  resourceNodes: [],       // { type, tx, ty, floor }
 
   // Editor state
   tool: "paint",           // paint | erase | fill | pick
-  objMode: null,           // portal | enemy | npc | prop | particle | building | statue | safezone | blocked | null
+  objMode: null,           // portal | enemy | npc | prop | particle | building | statue | safezone | blocked | tilemod | resourcenode | null
   selectedPaletteIdx: 0,
   brushSize: 1,
   zoom: 1,
@@ -96,13 +100,15 @@ const wrap = $("#canvasWrap");
 
 /* ── Init ─────────────────────────────────── */
 async function init() {
-  const [palette, enemies, npcs, propDefs, particleDefs, bgmFiles] = await Promise.all([
+  const [palette, enemies, npcs, propDefs, particleDefs, bgmFiles, resourceNodeDefs, statusEffectDefs] = await Promise.all([
     fetch("/api/palette").then(r => r.json()),
     fetch("/api/enemies").then(r => r.json()),
     fetch("/api/npcs").then(r => r.json()),
     fetch("/api/props").then(r => r.json()),
     fetch("/api/particles").then(r => r.json()),
     fetch("/api/bgm").then(r => r.json()),
+    fetch("/api/resourceNodes").then(r => r.json()),
+    fetch("/api/statusEffects").then(r => r.json()),
   ]);
   S.globalPalette = palette;
   S.enemyDefs = enemies;
@@ -110,6 +116,8 @@ async function init() {
   S.propDefs = propDefs;
   S.particleDefs = particleDefs;
   S.bgmFiles = bgmFiles;
+  S.resourceNodeDefs = resourceNodeDefs;
+  S.statusEffectDefs = statusEffectDefs;
   populateBgmDropdown();
 
   // Preload all tile sprites
@@ -157,6 +165,8 @@ function newMap(w, h) {
   S.statues = [];
   S.safeZones = [];
   S.extraBlocked = [];
+  S.tileModifiers = [];
+  S.resourceNodes = [];
 
   S.undoStack = [];
   S.redoStack = [];
@@ -181,16 +191,18 @@ async function loadMap(id) {
   S.palette = data.palette || [];
   S.terrain = data.terrain || [];
   S.portals = data.portals || [];
-  S.enemySpawns = data.enemySpawns || [];
+  S.enemySpawns = (data.enemySpawns || []).map(e => ({ ...e, floor: e.floor || 0 }));
   S.npcs = (data.npcs || []).map(n => ({ ...n, floor: n.floor || 0 }));
   // Merge legacy trees into props as type "tree" (backward compat for old map files)
   const loadedTrees = (data.trees || []).map(t => ({ tx: t.tx, ty: t.ty, type: "tree" }));
   S.props = [...loadedTrees, ...(data.props || [])].map(p => ({ ...p, floor: p.floor || 0 }));
   S.particles = (data.particles || []).map(p => ({ ...p, floor: p.floor || 0 }));
   S.buildings = data.buildings || [];
-  S.statues = data.statues || [];
+  S.statues = (data.statues || []).map(s => ({ ...s, floor: s.floor || 0 }));
   S.safeZones = data.safeZones || [];
   S.extraBlocked = data.extraBlocked || [];
+  S.tileModifiers = (data.tileModifiers || []).map(t => ({ ...t, floor: t.floor || 0 }));
+  S.resourceNodes = (data.resourceNodes || []).map(r => ({ ...r, floor: r.floor || 0 }));
 
   S.undoStack = [];
   S.redoStack = [];
@@ -244,10 +256,32 @@ function buildMapJSON() {
     return e;
   });
   obj.extraBlocked = S.extraBlocked;
-  obj.enemySpawns = S.enemySpawns;
-  obj.npcs = S.npcs;
-  obj.statues = S.statues;
+  obj.enemySpawns = S.enemySpawns.map(e => {
+    const entry = { type: e.type, positions: e.positions };
+    if (e.floor) entry.floor = e.floor;
+    return entry;
+  });
+  obj.npcs = S.npcs.map(n => {
+    const entry = { npcId: n.npcId, tx: n.tx, ty: n.ty };
+    if (n.floor) entry.floor = n.floor;
+    return entry;
+  });
+  obj.statues = S.statues.map(s => {
+    const entry = { id: s.id, name: s.name, tx: s.tx, ty: s.ty };
+    if (s.floor) entry.floor = s.floor;
+    return entry;
+  });
   obj.portals = S.portals;
+  obj.tileModifiers = S.tileModifiers.map(t => {
+    const entry = { x: t.x, y: t.y, modifiers: t.modifiers };
+    if (t.floor) entry.floor = t.floor;
+    return entry;
+  });
+  obj.resourceNodes = S.resourceNodes.map(r => {
+    const entry = { type: r.type, tx: r.tx, ty: r.ty };
+    if (r.floor) entry.floor = r.floor;
+    return entry;
+  });
   return obj;
 }
 
@@ -488,6 +522,83 @@ function render() {
       ctx.fillText(p.preset, dx + 1, dy + sz + 8 * z);
     }
 
+    // Enemies on this floor
+    for (const es of S.enemySpawns) {
+      if ((es.floor || 0) !== S.editingFloor) continue;
+      const eSprite = getSprite(entitySpritePath(es.type));
+      for (const [ex, ey] of es.positions) {
+        const lx = ex - bld.x, ly = ey - bld.y;
+        if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+        const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+        if (eSprite) {
+          ctx.drawImage(eSprite, dx, dy, sz, sz);
+        } else {
+          ctx.fillStyle = "rgba(255, 60, 60, 0.5)";
+          ctx.beginPath();
+          ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = "#f38ba8";
+        ctx.font = `${8 * z}px sans-serif`;
+        ctx.fillText(es.type, dx + 1, dy + 10 * z);
+      }
+    }
+
+    // Statues on this floor
+    for (const s of S.statues) {
+      if ((s.floor || 0) !== S.editingFloor) continue;
+      const lx = s.tx - bld.x, ly = s.ty - bld.y;
+      if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+      const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+      const cx = dx + sz / 2, cy = dy + sz / 2;
+      ctx.fillStyle = "rgba(100, 255, 180, 0.4)";
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - sz * 0.4);
+      ctx.lineTo(cx + sz * 0.3, cy);
+      ctx.lineTo(cx, cy + sz * 0.4);
+      ctx.lineTo(cx - sz * 0.3, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#a6e3a1";
+      ctx.font = `${8 * z}px sans-serif`;
+      ctx.fillText(s.name || "Waystone", dx, dy - 2);
+    }
+
+    // Tile Modifiers on this floor
+    for (const t of S.tileModifiers) {
+      if ((t.floor || 0) !== S.editingFloor) continue;
+      const lx = t.x - bld.x, ly = t.y - bld.y;
+      if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+      const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+      const modType = t.modifiers[0] ? t.modifiers[0].type : "debuff";
+      const colors = { buff: "rgba(100, 255, 100, 0.35)", debuff: "rgba(255, 100, 100, 0.35)", dot: "rgba(180, 50, 220, 0.35)", hot: "rgba(50, 220, 150, 0.35)" };
+      ctx.fillStyle = colors[modType] || "rgba(200, 200, 50, 0.35)";
+      ctx.fillRect(dx, dy, sz, sz);
+      ctx.fillStyle = "#cdd6f4";
+      ctx.font = `${7 * z}px sans-serif`;
+      ctx.fillText(t.modifiers[0] ? t.modifiers[0].id : "mod", dx + 1, dy + sz - 2 * z);
+    }
+
+    // Resource Nodes on this floor
+    for (const r of S.resourceNodes) {
+      if ((r.floor || 0) !== S.editingFloor) continue;
+      const lx = r.tx - bld.x, ly = r.ty - bld.y;
+      if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
+      const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
+      const def = S.resourceNodeDefs[r.type];
+      const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(180, 140, 60, 0.6)";
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#f9e2af";
+      ctx.lineWidth = 1.5 * z;
+      ctx.stroke();
+      ctx.fillStyle = "#f9e2af";
+      ctx.font = `${7 * z}px sans-serif`;
+      ctx.fillText(def ? def.name : r.type, dx + 1, dy + sz + 8 * z);
+    }
+
     // Floor label overlay — draw in screen space
     ctx.restore();
     ctx.fillStyle = "rgba(249, 226, 175, 0.15)";
@@ -580,8 +691,9 @@ function render() {
     ctx.fillText(p.preset + pFloorTag, dx + 1, dy + sz + 8 * z);
   }
 
-  // Enemy spawns
+  // Enemy spawns (ground floor only)
   for (const es of S.enemySpawns) {
+    if ((es.floor || 0) !== 0) continue;
     const eSprite = getSprite(entitySpritePath(es.type));
     for (const [ex, ey] of es.positions) {
       const dx = ex * ts * z, dy = ey * ts * z, sz = ts * z;
@@ -620,8 +732,9 @@ function render() {
     ctx.fillText(def ? def.name : n.npcId, dx, dy - 2);
   }
 
-  // Statues (waystones)
+  // Statues (waystones) — ground floor only
   for (const s of S.statues) {
+    if ((s.floor || 0) !== 0) continue;
     const cx = (s.tx + 0.5) * ts * z, cy = (s.ty + 0.5) * ts * z;
     ctx.fillStyle = "rgba(100, 255, 180, 0.4)";
     // diamond shape
@@ -635,6 +748,46 @@ function render() {
     ctx.fillStyle = "#a6e3a1";
     ctx.font = `${8 * z}px sans-serif`;
     ctx.fillText(s.name || "Waystone", s.tx * ts * z, s.ty * ts * z - 2);
+  }
+
+  // Tile Modifiers — ground floor only
+  for (const t of S.tileModifiers) {
+    if ((t.floor || 0) !== 0) continue;
+    const dx = t.x * ts * z, dy = t.y * ts * z, sz = ts * z;
+    const modType = t.modifiers[0] ? t.modifiers[0].type : "debuff";
+    const colors = {
+      buff: "rgba(100, 255, 100, 0.35)",
+      debuff: "rgba(255, 100, 100, 0.35)",
+      dot: "rgba(180, 50, 220, 0.35)",
+      hot: "rgba(50, 220, 150, 0.35)",
+    };
+    ctx.fillStyle = colors[modType] || "rgba(200, 200, 50, 0.35)";
+    ctx.fillRect(dx, dy, sz, sz);
+    ctx.strokeStyle = colors[modType] ? colors[modType].replace("0.35", "0.8") : "rgba(200, 200, 50, 0.8)";
+    ctx.lineWidth = 1.5 * z;
+    ctx.strokeRect(dx, dy, sz, sz);
+    ctx.fillStyle = "#cdd6f4";
+    ctx.font = `${7 * z}px sans-serif`;
+    const label = t.modifiers[0] ? t.modifiers[0].id : "mod";
+    ctx.fillText(label, dx + 1, dy + sz - 2 * z);
+  }
+
+  // Resource Nodes — ground floor only
+  for (const r of S.resourceNodes) {
+    if ((r.floor || 0) !== 0) continue;
+    const dx = r.tx * ts * z, dy = r.ty * ts * z, sz = ts * z;
+    const def = S.resourceNodeDefs[r.type];
+    const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(180, 140, 60, 0.6)";
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#f9e2af";
+    ctx.lineWidth = 1.5 * z;
+    ctx.stroke();
+    ctx.fillStyle = "#f9e2af";
+    ctx.font = `${7 * z}px sans-serif`;
+    ctx.fillText(def ? def.name : r.type, dx + 1, dy + sz + 8 * z);
   }
 
   // Spawn point
@@ -779,6 +932,8 @@ function handleObjClick(tx, ty) {
     case "particle": placeParticle(tx, ty); break;
     case "statue": placeStatue(tx, ty); break;
     case "blocked": toggleBlocked(tx, ty); break;
+    case "tilemod": placeTileModifier(tx, ty); break;
+    case "resourcenode": placeResourceNode(tx, ty); break;
   }
   updateObjectList();
   render();
@@ -824,8 +979,9 @@ function handleObjDragEnd() {
 function placeEnemy(tx, ty) {
   const type = getSelectedEnemyType();
   if (!type) { alert("Select an enemy type in the Properties panel first."); return; }
-  let group = S.enemySpawns.find(e => e.type === type);
-  if (!group) { group = { type, positions: [] }; S.enemySpawns.push(group); }
+  const floor = $("#enemyFloor") ? parseInt($("#enemyFloor").value) || 0 : 0;
+  let group = S.enemySpawns.find(e => e.type === type && (e.floor || 0) === floor);
+  if (!group) { group = { type, positions: [], floor }; S.enemySpawns.push(group); }
   // Don't duplicate position
   if (!group.positions.some(([px, py]) => px === tx && py === ty)) {
     group.positions.push([tx, ty]);
@@ -880,7 +1036,40 @@ function placeParticle(tx, ty) {
 function placeStatue(tx, ty) {
   const id = `${S.mapId || "map"}_waystone_${S.statues.length + 1}`;
   const name = `Waystone ${S.statues.length + 1}`;
-  S.statues.push({ id, name, tx, ty });
+  const floor = $("#statueFloor") ? parseInt($("#statueFloor").value) || 0 : 0;
+  S.statues.push({ id, name, tx, ty, floor });
+}
+
+function placeTileModifier(tx, ty) {
+  const modType = $("#tilemodType") ? $("#tilemodType").value : "debuff";
+  const modId = $("#tilemodId") ? $("#tilemodId").value : "zoneSlow";
+  const stat = $("#tilemodStat") ? $("#tilemodStat").value.trim() : "speed";
+  const modifier = $("#tilemodModifier") ? parseFloat($("#tilemodModifier").value) || 0 : 0;
+  const duration = $("#tilemodDuration") ? parseFloat($("#tilemodDuration").value) || 3 : 3;
+  const perTick = $("#tilemodPerTick") ? parseFloat($("#tilemodPerTick").value) || 0 : 0;
+  const tickInterval = $("#tilemodTickInterval") ? parseFloat($("#tilemodTickInterval").value) || 2 : 2;
+  const byPct = $("#tilemodByPct") ? $("#tilemodByPct").checked : false;
+  const floor = $("#tilemodFloor") ? parseInt($("#tilemodFloor").value) || 0 : 0;
+
+  // Don't duplicate same tile+floor
+  if (S.tileModifiers.some(t => t.x === tx && t.y === ty && (t.floor || 0) === floor)) return;
+
+  const mod = { type: modType, id: modId, stat, modifier, duration };
+  if (modType === "dot" || modType === "hot") {
+    mod.perTick = perTick;
+    mod.tickInterval = tickInterval;
+  }
+  if (byPct) mod.byPct = true;
+
+  S.tileModifiers.push({ x: tx, y: ty, floor, modifiers: [mod] });
+}
+
+function placeResourceNode(tx, ty) {
+  const type = $("#resourceNodeType") ? $("#resourceNodeType").value : "";
+  if (!type) { alert("Select a resource node type in the Properties panel first."); return; }
+  const floor = $("#resourceNodeFloor") ? parseInt($("#resourceNodeFloor").value) || 0 : 0;
+  if (S.resourceNodes.some(r => r.tx === tx && r.ty === ty && (r.floor || 0) === floor)) return;
+  S.resourceNodes.push({ type, tx, ty, floor });
 }
 
 function showStatueDialog(idx) {
@@ -893,6 +1082,7 @@ function showStatueDialog(idx) {
     <div class="modal-row">
       <label>TX: <input id="dlgStatueTx" type="number" value="${s.tx}"></label>
       <label>TY: <input id="dlgStatueTy" type="number" value="${s.ty}"></label>
+      <label>Floor: <input id="dlgStatueFloor" type="number" value="${s.floor || 0}" min="0"></label>
     </div>
     <br>
     <button class="primary" id="dlgStatueOk">Save</button>
@@ -904,6 +1094,7 @@ function showStatueDialog(idx) {
       name: $("#dlgStatueName").value.trim(),
       tx: parseInt($("#dlgStatueTx").value) || s.tx,
       ty: parseInt($("#dlgStatueTy").value) || s.ty,
+      floor: parseInt($("#dlgStatueFloor").value) || 0,
     };
     hideModal();
     updateObjectList();
@@ -1025,9 +1216,12 @@ function hideModal() {
   $("#modalOverlay").classList.add("hidden");
 }
 
-function showPortalDialog(x, y, w, h, editIdx) {
+async function showPortalDialog(x, y, w, h, editIdx) {
   const isEdit = editIdx !== undefined;
   const existing = isEdit ? S.portals[editIdx] : null;
+  const maps = await fetch("/api/maps").then(r => r.json());
+  const curTarget = existing ? existing.targetMap : "";
+  const mapOpts = maps.map(m => `<option value="${m}"${m === curTarget ? " selected" : ""}>${m}</option>`).join("");
   showModal(`
     <h2>${isEdit ? "Edit" : "New"} Portal</h2>
     <div class="modal-row">
@@ -1036,7 +1230,7 @@ function showPortalDialog(x, y, w, h, editIdx) {
       <label>W: <input id="dlgPW" type="number" value="${existing ? existing.w : w}"></label>
       <label>H: <input id="dlgPH" type="number" value="${existing ? existing.h : h}"></label>
     </div>
-    <label>Target Map ID: <input id="dlgTargetMap" type="text" placeholder="eldengrove" value="${existing ? existing.targetMap : ""}"></label>
+    <label>Target Map ID: <select id="dlgTargetMap"><option value="">(select)</option>${mapOpts}</select></label>
     <div class="modal-row">
       <label>Target TX: <input id="dlgTargetTx" type="number" value="${existing ? existing.targetTx : 5}"></label>
       <label>Target TY: <input id="dlgTargetTy" type="number" value="${existing ? existing.targetTy : 5}"></label>
@@ -1241,6 +1435,9 @@ function updatePropsPanel() {
       <label>Enemy Type:
         <select id="enemyTypeSelect">${opts}</select>
       </label>
+      <label>Floor:
+        <input id="enemyFloor" type="number" value="0" min="0" max="10" style="width:50px">
+      </label>
       <p class="muted">Click on map to place spawn positions.</p>
     `;
   } else if (S.objMode === "npc") {
@@ -1290,9 +1487,56 @@ function updatePropsPanel() {
   } else if (S.objMode === "safezone") {
     panel.innerHTML = `<p class="muted">Click and drag on the map to define safe zone rectangle.</p>`;
   } else if (S.objMode === "statue") {
-    panel.innerHTML = `<p class="muted">Click on the map to place a waystone.</p>`;
+    panel.innerHTML = `
+      <label>Floor:
+        <input id="statueFloor" type="number" value="0" min="0" max="10" style="width:50px">
+      </label>
+      <p class="muted">Click on the map to place a waystone.</p>
+    `;
   } else if (S.objMode === "blocked") {
     panel.innerHTML = `<p class="muted">Click tiles to toggle extra blocked status.</p>`;
+  } else if (S.objMode === "tilemod") {
+    // Filter status effects to zone-prefixed ones, plus all available
+    const zoneEffects = Object.keys(S.statusEffectDefs).filter(k => k.startsWith("zone"));
+    const otherEffects = Object.keys(S.statusEffectDefs).filter(k => !k.startsWith("zone"));
+    const idOpts = [...zoneEffects, ...otherEffects].map(k => {
+      const def = S.statusEffectDefs[k];
+      return `<option value="${k}">${def.name} (${k})</option>`;
+    }).join("");
+    panel.innerHTML = `
+      <label>Modifier Type:
+        <select id="tilemodType">
+          <option value="debuff">debuff</option>
+          <option value="buff">buff</option>
+          <option value="dot">dot</option>
+          <option value="hot">hot</option>
+        </select>
+      </label>
+      <label>Status Effect ID:
+        <select id="tilemodId">${idOpts}</select>
+      </label>
+      <label>Stat: <input id="tilemodStat" type="text" value="speed" style="width:80px"></label>
+      <label>Modifier: <input id="tilemodModifier" type="number" value="-50" style="width:60px"></label>
+      <label>Duration (s): <input id="tilemodDuration" type="number" value="3" min="0" style="width:50px"></label>
+      <label>Per Tick: <input id="tilemodPerTick" type="number" value="0" style="width:50px"></label>
+      <label>Tick Interval: <input id="tilemodTickInterval" type="number" value="2" min="0" style="width:50px"></label>
+      <label><input id="tilemodByPct" type="checkbox" checked> By Percentage</label>
+      <label>Floor: <input id="tilemodFloor" type="number" value="0" min="0" max="10" style="width:50px"></label>
+      <p class="muted">Click tiles to place modifier zones.</p>
+    `;
+  } else if (S.objMode === "resourcenode") {
+    const types = Object.keys(S.resourceNodeDefs);
+    const opts = types.map(t => {
+      const def = S.resourceNodeDefs[t];
+      return `<option value="${t}">${def.name} (${t})</option>`;
+    }).join("");
+    panel.innerHTML = `
+      <label>Node Type:
+        <select id="resourceNodeType">${opts}</select>
+      </label>
+      <label>Floor: <input id="resourceNodeFloor" type="number" value="0" min="0" max="10" style="width:50px"></label>
+      <p class="muted">Click to place resource node.</p>
+    `;
   } else {
     panel.innerHTML = `<p class="muted">Select a tool or object mode.</p>`;
   }
@@ -1314,8 +1558,9 @@ function updateObjectList() {
   });
 
   S.enemySpawns.forEach((es, i) => {
+    const floorTag = es.floor ? ` F${es.floor}` : "";
     html += `<div class="obj-item" data-type="enemyGroup" data-idx="${i}">
-      <span>👹 ${es.type} ×${es.positions.length}</span>
+      <span>👹 ${es.type} ×${es.positions.length}${floorTag}</span>
       <span class="obj-del" data-type="enemyGroup" data-idx="${i}">✕</span>
     </div>`;
   });
@@ -1343,8 +1588,9 @@ function updateObjectList() {
   });
 
   S.statues.forEach((s, i) => {
+    const floorTag = s.floor ? ` F${s.floor}` : "";
     html += `<div class="obj-item" data-type="statue" data-idx="${i}">
-      <span>💎 ${s.name} (${s.tx},${s.ty})</span>
+      <span>💎 ${s.name} (${s.tx},${s.ty})${floorTag}</span>
       <span style="display:flex;gap:4px;align-items:center;">
         <span class="obj-edit-statue" data-idx="${i}" title="Edit waystone" style="color:#89b4fa;cursor:pointer;font-size:10px;">✎</span>
         <span class="obj-del" data-type="statue" data-idx="${i}">✕</span>
@@ -1371,6 +1617,24 @@ function updateObjectList() {
     html += `<div class="obj-item" data-type="particle" data-idx="${i}">
       <span>✨ ${p.preset} (${p.tx},${p.ty})${floorTag}</span>
       <span class="obj-del" data-type="particle" data-idx="${i}">✕</span>
+    </div>`;
+  });
+
+  S.tileModifiers.forEach((t, i) => {
+    const floorTag = t.floor ? ` F${t.floor}` : "";
+    const modNames = t.modifiers.map(m => m.id).join(", ");
+    html += `<div class="obj-item" data-type="tilemod" data-idx="${i}">
+      <span>⚡ ${modNames} (${t.x},${t.y})${floorTag}</span>
+      <span class="obj-del" data-type="tilemod" data-idx="${i}">✕</span>
+    </div>`;
+  });
+
+  S.resourceNodes.forEach((r, i) => {
+    const floorTag = r.floor ? ` F${r.floor}` : "";
+    const def = S.resourceNodeDefs[r.type];
+    html += `<div class="obj-item" data-type="resourcenode" data-idx="${i}">
+      <span>⛏ ${def ? def.name : r.type} (${r.tx},${r.ty})${floorTag}</span>
+      <span class="obj-del" data-type="resourcenode" data-idx="${i}">✕</span>
     </div>`;
   });
 
@@ -1437,6 +1701,8 @@ function deleteObject(type, idx) {
     case "safezone": S.safeZones.splice(idx, 1); break;
     case "prop": S.props.splice(idx, 1); break;
     case "particle": S.particles.splice(idx, 1); break;
+    case "tilemod": S.tileModifiers.splice(idx, 1); break;
+    case "resourcenode": S.resourceNodes.splice(idx, 1); break;
   }
   updateObjectList();
   render();
@@ -1465,6 +1731,16 @@ function deleteObjectAtTile(tx, ty) {
       if (i >= 0) { S.particles.splice(i, 1); updateObjectList(); render(); }
       return;
     }
+    if (S.objMode === "tilemod") {
+      const i = S.tileModifiers.findIndex(t => t.x === worldTx && t.y === worldTy && (t.floor || 0) === fl);
+      if (i >= 0) { S.tileModifiers.splice(i, 1); updateObjectList(); render(); }
+      return;
+    }
+    if (S.objMode === "resourcenode") {
+      const i = S.resourceNodes.findIndex(r => r.tx === worldTx && r.ty === worldTy && (r.floor || 0) === fl);
+      if (i >= 0) { S.resourceNodes.splice(i, 1); updateObjectList(); render(); }
+      return;
+    }
 
     // No category — try all types on this floor
     const ni = S.npcs.findIndex(n => n.tx === worldTx && n.ty === worldTy && (n.floor || 0) === fl);
@@ -1473,6 +1749,10 @@ function deleteObjectAtTile(tx, ty) {
     if (pi >= 0) { S.props.splice(pi, 1); updateObjectList(); render(); return; }
     const pti = S.particles.findIndex(p => p.tx === worldTx && p.ty === worldTy && (p.floor || 0) === fl);
     if (pti >= 0) { S.particles.splice(pti, 1); updateObjectList(); render(); return; }
+    const tmi = S.tileModifiers.findIndex(t => t.x === worldTx && t.y === worldTy && (t.floor || 0) === fl);
+    if (tmi >= 0) { S.tileModifiers.splice(tmi, 1); updateObjectList(); render(); return; }
+    const rni = S.resourceNodes.findIndex(r => r.tx === worldTx && r.ty === worldTy && (r.floor || 0) === fl);
+    if (rni >= 0) { S.resourceNodes.splice(rni, 1); updateObjectList(); render(); return; }
     return;
   }
 
@@ -1531,6 +1811,16 @@ function deleteObjectAtTile(tx, ty) {
         if (i >= 0) { S.particles.splice(i, 1); updateObjectList(); render(); }
         return;
       }
+      case "tilemod": {
+        const i = S.tileModifiers.findIndex(t => t.x === tx && t.y === ty);
+        if (i >= 0) { S.tileModifiers.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
+      case "resourcenode": {
+        const i = S.resourceNodes.findIndex(r => r.tx === tx && r.ty === ty);
+        if (i >= 0) { S.resourceNodes.splice(i, 1); updateObjectList(); render(); }
+        return;
+      }
     }
     return;
   }
@@ -1568,6 +1858,12 @@ function deleteObjectAtTile(tx, ty) {
 
   const pti = S.particles.findIndex(p => p.tx === tx && p.ty === ty);
   if (pti >= 0) { S.particles.splice(pti, 1); updateObjectList(); render(); return; }
+
+  const tmi = S.tileModifiers.findIndex(t => t.x === tx && t.y === ty);
+  if (tmi >= 0) { S.tileModifiers.splice(tmi, 1); updateObjectList(); render(); return; }
+
+  const rni = S.resourceNodes.findIndex(r => r.tx === tx && r.ty === ty);
+  if (rni >= 0) { S.resourceNodes.splice(rni, 1); updateObjectList(); render(); return; }
 }
 
 /* ── Floor Editing ─────────────────────────── */

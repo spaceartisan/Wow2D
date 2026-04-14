@@ -261,6 +261,62 @@ function footstep() {
   return samples;
 }
 
+function gatherMining() {
+  // Pickaxe strike — sharp metallic clink + rocky crumble
+  const dur = 0.35;
+  const n = Math.floor(SAMPLE_RATE * dur);
+  const samples = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    // Metallic pick strike
+    const strike = Math.sin(2 * Math.PI * 900 * t) * envelope(t, 0.003, 0.01, 0.08, dur) * 0.35;
+    const strike2 = Math.sin(2 * Math.PI * 1400 * t) * envelope(t, 0.003, 0.008, 0.06, dur) * 0.2;
+    // Low rocky thud
+    const thud = Math.sin(2 * Math.PI * 120 * t) * envelope(t, 0.005, 0.02, 0.1, dur) * 0.4;
+    // Crumbly noise tail
+    const crumble = noise() * envelope(t, 0.02, 0.05, 0.25, dur) * 0.15;
+    samples[i] = strike + strike2 + thud + crumble;
+  }
+  return samples;
+}
+
+function gatherChopping() {
+  // Axe chop — woody thwack + splintering
+  const dur = 0.3;
+  const n = Math.floor(SAMPLE_RATE * dur);
+  const samples = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    // Woody thwack (lower than metallic)
+    const thwack = Math.sin(2 * Math.PI * 250 * t) * envelope(t, 0.003, 0.015, 0.08, dur) * 0.45;
+    const thwack2 = Math.sin(2 * Math.PI * 400 * t) * envelope(t, 0.003, 0.01, 0.06, dur) * 0.2;
+    // Splintering noise
+    const splinter = noise() * envelope(t, 0.01, 0.04, 0.2, dur) * 0.2;
+    // Subtle low body
+    const body = Math.sin(2 * Math.PI * 90 * t) * envelope(t, 0.005, 0.02, 0.06, dur) * 0.25;
+    samples[i] = thwack + thwack2 + splinter + body;
+  }
+  return samples;
+}
+
+function gatherFishing() {
+  // Water splash — bubbly noise + gentle plop
+  const dur = 0.4;
+  const n = Math.floor(SAMPLE_RATE * dur);
+  const samples = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    // Water plop (low sine burst)
+    const plop = Math.sin(2 * Math.PI * 180 * t) * envelope(t, 0.005, 0.02, 0.1, dur) * 0.35;
+    // Bubbly modulated noise
+    const bubble = noise() * Math.abs(Math.sin(2 * Math.PI * 12 * t)) * envelope(t, 0.02, 0.1, 0.25, dur) * 0.2;
+    // High water ripple
+    const ripple = Math.sin(2 * Math.PI * (600 + Math.sin(t * 30) * 200) * t) * envelope(t, 0.03, 0.05, 0.3, dur) * 0.1;
+    samples[i] = plop + bubble + ripple;
+  }
+  return samples;
+}
+
 // ── Generate all ──────────────────────────────────
 
 const sfxList = [
@@ -276,6 +332,9 @@ const sfxList = [
   ["chat_msg.wav",    chatMessage],
   ["error.wav",       errorSound],
   ["footstep.wav",    footstep],
+  ["gather_mining.wav",   gatherMining],
+  ["gather_chopping.wav", gatherChopping],
+  ["gather_fishing.wav",  gatherFishing],
 ];
 
 const outDir = path.join(__dirname, "public", "assets", "sfx");

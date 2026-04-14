@@ -114,6 +114,17 @@
     statusEffectSearch: '',
     statusEffectDirty: false,
     statusEffectIconExists: null,
+
+    gatheringSkills: {},
+    selectedGatheringSkillKey: null,
+    gatheringSkillSearch: '',
+    gatheringSkillDirty: false,
+
+    resourceNodes: {},
+    selectedResourceNodeKey: null,
+    resourceNodeSearch: '',
+    resourceNodeDirty: false,
+    resourceNodeSpriteExists: null,
   };
 
   const els = {};
@@ -131,11 +142,14 @@
     'enemyHitParticleInput','enemyHitSfxInput',
     'itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput',
     'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput',
-    'statusEffectSearchInput','statusEffectList','statusEffectEntryCount','statusEffectBuffCount','selectedStatusEffectLabel','statusEffectEmptyState','statusEffectForm','statusEffectIdInput','statusEffectNameInput','statusEffectDescriptionInput','statusEffectTypeInput','statusEffectIconInput','statusEffectJsonPreview','statusEffectDiagnosticsList','statusEffectValidationSummary','addStatusEffectButton','duplicateStatusEffectButton','deleteStatusEffectButton','validateStatusEffectsButton','reloadStatusEffectsButton','statusEffectIconPreviewImage','statusEffectIconPreviewFallback','statusEffectIconStatusBadge','statusEffectIconPathLabel'
+    'statusEffectSearchInput','statusEffectList','statusEffectEntryCount','statusEffectBuffCount','selectedStatusEffectLabel','statusEffectEmptyState','statusEffectForm','statusEffectIdInput','statusEffectNameInput','statusEffectDescriptionInput','statusEffectTypeInput','statusEffectIconInput','statusEffectJsonPreview','statusEffectDiagnosticsList','statusEffectValidationSummary','addStatusEffectButton','duplicateStatusEffectButton','deleteStatusEffectButton','validateStatusEffectsButton','reloadStatusEffectsButton','statusEffectIconPreviewImage','statusEffectIconPreviewFallback','statusEffectIconStatusBadge','statusEffectIconPathLabel',
+    'skillRequiresWeaponInput','skillRequiresShieldInput','skillRequiresWeaponTypeInput',
+    'gatheringSkillSearchInput','gatheringSkillList','gatheringSkillEntryCount','gatheringSkillToolCount','selectedGatheringSkillLabel','gatheringSkillEmptyState','gatheringSkillForm','gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillIconInput','gatheringSkillToolTypeInput','gatheringSkillDescriptionInput','gatheringSkillJsonPreview','gatheringSkillDiagnosticsList','gatheringSkillValidationSummary','addGatheringSkillButton','duplicateGatheringSkillButton','deleteGatheringSkillButton','validateGatheringSkillsButton','reloadGatheringSkillsButton',
+    'resourceNodeSearchInput','resourceNodeList','resourceNodeEntryCount','resourceNodeSkillCount','selectedResourceNodeLabel','resourceNodeEmptyState','resourceNodeForm','resourceNodeIdInput','resourceNodeNameInput','resourceNodeSpriteImage','resourceNodeSpriteFallback','resourceNodeSpriteStatusBadge','resourceNodeSpritePathLabel','resourceNodeColorPreview','resourceNodeSkillInput','resourceNodeToolTypeInput','resourceNodeToolTierInput','resourceNodeRequiredLevelInput','resourceNodeXpInput','resourceNodeMaxHarvestsInput','resourceNodeRespawnTicksInput','resourceNodeGatherItemInput','resourceNodeColorPicker','resourceNodeRInput','resourceNodeGInput','resourceNodeBInput','resourceNodeJsonPreview','resourceNodeDiagnosticsList','resourceNodeValidationSummary','addResourceNodeButton','duplicateResourceNodeButton','deleteResourceNodeButton','validateResourceNodesButton','reloadResourceNodesButton'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : state.tileDirty)))))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : state.tileDirty)))))))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -156,6 +170,8 @@
   function setParticleDirty(v){ state.particleDirty = v; updateDirtyBadge(); }
   function setSkillDirty(v){ state.skillDirty = v; updateDirtyBadge(); }
   function setStatusEffectDirty(v){ state.statusEffectDirty = v; updateDirtyBadge(); }
+  function setGatheringSkillDirty(v){ state.gatheringSkillDirty = v; updateDirtyBadge(); }
+  function setResourceNodeDirty(v){ state.resourceNodeDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -1965,7 +1981,7 @@
 
   // Skills
   function getSkillIconUrl(icon) { return `/api/skill-icon/${encodeURIComponent(icon)}?v=${Date.now()}`; }
-  function getSkillIconDisplayPath(icon) { return `public/assets/sprites/icons/${icon}.png`; }
+  function getSkillIconDisplayPath(icon) { return `public/assets/sprites/skills/${icon}.png`; }
   function setSkillIconStatus(exists) {
     state.skillIconExists = exists;
     if (exists === true) {
@@ -2050,6 +2066,10 @@
     if (sfx) obj.sfx = sfx;
     if (castSfx) obj.castSfx = castSfx;
     if (projSpeed !== '') obj.projectileSpeed = Number(projSpeed);
+    if (els.skillRequiresWeaponInput.checked) obj.requiresWeapon = true;
+    if (els.skillRequiresShieldInput.checked) obj.requiresShield = true;
+    const weaponTypes = (els.skillRequiresWeaponTypeInput.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+    if (weaponTypes.length) obj.requiresWeaponType = weaponTypes;
     if (type === 'attack' || type === 'debuff') {
       obj.damage = Number(els.skillDamageInput.value || 0);
       obj.damageType = els.skillDamageTypeInput.value;
@@ -2109,6 +2129,9 @@
     els.skillSfxInput.value = skill.sfx || '';
     els.skillCastSfxInput.value = skill.castSfx || '';
     els.skillProjectileSpeedInput.value = skill.projectileSpeed != null ? skill.projectileSpeed : '';
+    els.skillRequiresWeaponInput.checked = !!skill.requiresWeapon;
+    els.skillRequiresShieldInput.checked = !!skill.requiresShield;
+    els.skillRequiresWeaponTypeInput.value = Array.isArray(skill.requiresWeaponType) ? skill.requiresWeaponType.join(', ') : '';
     // Type-specific
     els.skillDamageInput.value = skill.damage ?? '';
     els.skillDamagePerLevelInput.value = skill.damagePerLevel != null ? skill.damagePerLevel : '';
@@ -2332,11 +2355,180 @@
   function duplicateStatusEffect() { const se=getSelectedStatusEffectEntry(); if(!se) return; const key=ensureUniqueStatusEffectKey(`${state.selectedStatusEffectKey}_copy`); state.statusEffects[key]=JSON.parse(JSON.stringify(se)); state.selectedStatusEffectKey=key; setStatusEffectDirty(true); renderStatusEffects(); }
   function deleteStatusEffect() { if(!getSelectedStatusEffectEntry()) return; if(!window.confirm(`Delete status effect "${state.selectedStatusEffectKey}"?`)) return; delete state.statusEffects[state.selectedStatusEffectKey]; state.selectedStatusEffectKey=Object.keys(state.statusEffects)[0]||null; setStatusEffectDirty(true); renderStatusEffects(); }
 
+  // Gathering Skills
+  const GATHERING_TOOL_TYPES = ['pickaxe','hatchet','fishing_rod'];
+  const DEFAULT_NEW_GATHERING_SKILL = { id:'newSkill', name:'New Skill', description:'', icon:'', toolType:'pickaxe' };
+
+  function getVisibleGatheringSkillKeys() { const q=state.gatheringSkillSearch.toLowerCase(); return Object.keys(state.gatheringSkills).filter(k=>!q||k.toLowerCase().includes(q)||String(state.gatheringSkills[k]?.name||'').toLowerCase().includes(q)).sort((a,b)=>a.localeCompare(b)); }
+  function getSelectedGatheringSkillEntry() { return state.selectedGatheringSkillKey ? state.gatheringSkills[state.selectedGatheringSkillKey]||null : null; }
+  function ensureUniqueGatheringSkillKey(base){ let c=base,i=2; while(state.gatheringSkills[c]) c=`${base}_${i++}`; return c; }
+
+  function renderGatheringSkillList() {
+    const visibleKeys = getVisibleGatheringSkillKeys();
+    const allKeys = Object.keys(state.gatheringSkills);
+    els.gatheringSkillEntryCount.textContent = String(allKeys.length);
+    els.gatheringSkillToolCount.textContent = String(new Set(allKeys.map(k=>state.gatheringSkills[k]?.toolType).filter(Boolean)).size);
+    els.gatheringSkillList.innerHTML = '';
+    if (!visibleKeys.length) { const e=document.createElement('div'); e.className='subtle'; e.textContent='No matching skills.'; els.gatheringSkillList.appendChild(e); return; }
+    const COLORS = { pickaxe:'#c8983a', hatchet:'#3fb06a', fishing_rod:'#5a9cf5' };
+    for (const key of visibleKeys) {
+      const gs = state.gatheringSkills[key]||{};
+      const color = COLORS[gs.toolType]||'#888';
+      const btn = document.createElement('button');
+      btn.className = 'tile-list-item'+(key===state.selectedGatheringSkillKey?' active':'');
+      btn.type='button';
+      btn.innerHTML=`<span class="swatch" style="background:${color}"></span><span class="tile-text"><strong class="tile-name">${gs.name||key}</strong><span class="tile-meta">${key} • ${gs.toolType||'?'}</span></span>`;
+      btn.addEventListener('click',()=>{ state.selectedGatheringSkillKey=key; renderGatheringSkillPanel(); renderGatheringSkillList(); });
+      els.gatheringSkillList.appendChild(btn);
+    }
+  }
+  function renderGatheringSkillPanel() {
+    const gs = getSelectedGatheringSkillEntry();
+    if (!gs) { els.selectedGatheringSkillLabel.textContent='Nothing selected'; els.gatheringSkillEmptyState.classList.remove('hidden'); els.gatheringSkillForm.classList.add('hidden'); els.gatheringSkillJsonPreview.textContent=''; return; }
+    els.selectedGatheringSkillLabel.textContent = state.selectedGatheringSkillKey;
+    els.gatheringSkillEmptyState.classList.add('hidden'); els.gatheringSkillForm.classList.remove('hidden');
+    els.gatheringSkillIdInput.value = gs.id||state.selectedGatheringSkillKey;
+    els.gatheringSkillNameInput.value = gs.name||'';
+    els.gatheringSkillDescriptionInput.value = gs.description||'';
+    els.gatheringSkillIconInput.value = gs.icon||'';
+    els.gatheringSkillToolTypeInput.value = gs.toolType||'';
+    els.gatheringSkillJsonPreview.textContent = JSON.stringify({[state.selectedGatheringSkillKey]:gs},null,2);
+  }
+  function syncSelectedGatheringSkillFromForm() {
+    const current = getSelectedGatheringSkillEntry(); if(!current) return;
+    const newKey = (els.gatheringSkillIdInput.value||'').trim()||state.selectedGatheringSkillKey;
+    if (newKey!==state.selectedGatheringSkillKey&&!state.gatheringSkills[newKey]) { const m={}; Object.keys(state.gatheringSkills).forEach(k=>{ m[k===state.selectedGatheringSkillKey?newKey:k]=state.gatheringSkills[k]; }); state.gatheringSkills=m; state.selectedGatheringSkillKey=newKey; }
+    state.gatheringSkills[state.selectedGatheringSkillKey] = { id:state.selectedGatheringSkillKey, name:els.gatheringSkillNameInput.value||'', description:els.gatheringSkillDescriptionInput.value||'', icon:(els.gatheringSkillIconInput.value||'').trim(), toolType:els.gatheringSkillToolTypeInput.value||'' };
+    setGatheringSkillDirty(true); renderGatheringSkillList(); els.gatheringSkillJsonPreview.textContent = JSON.stringify({[state.selectedGatheringSkillKey]:state.gatheringSkills[state.selectedGatheringSkillKey]},null,2);
+  }
+  function renderGatheringSkillDiagnostics(items=[],summary='No validation run yet') { els.gatheringSkillValidationSummary.textContent=summary; els.gatheringSkillDiagnosticsList.innerHTML=''; if(!items.length){els.gatheringSkillDiagnosticsList.className='diagnostics-list empty-diagnostics';els.gatheringSkillDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.gatheringSkillDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.gatheringSkillDiagnosticsList.appendChild(d);} }
+  function renderGatheringSkills() { renderGatheringSkillList(); renderGatheringSkillPanel(); }
+  async function loadGatheringSkills() { const r=await apiFetch('/api/gathering-skills'); state.gatheringSkills=r.gatheringSkills||{}; const keys=Object.keys(state.gatheringSkills); state.selectedGatheringSkillKey=keys.includes(state.selectedGatheringSkillKey)?state.selectedGatheringSkillKey:(keys[0]||null); setGatheringSkillDirty(false); renderGatheringSkills(); renderGatheringSkillDiagnostics([{level:'info',title:'Loaded',message:r.path}],`Loaded ${keys.length} entries`); }
+  async function saveGatheringSkills() { const r=await apiFetch('/api/gathering-skills',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gatheringSkills:state.gatheringSkills})}); setGatheringSkillDirty(false); renderGatheringSkillDiagnostics([{level:'info',title:'Saved',message:r.path}],`Saved ${Object.keys(state.gatheringSkills).length} entries`); }
+  function validateGatheringSkills() {
+    const messages=[]; const entries=Object.entries(state.gatheringSkills);
+    if(!entries.length) messages.push({level:'warning',title:'Empty',message:'No gathering skills defined.'});
+    for(const [key,gs] of entries) {
+      if((gs.id||'')!==key) messages.push({level:'warning',title:`Key/id mismatch: ${key}`,message:`id should match the object key.`});
+      if(!gs.name) messages.push({level:'warning',title:`Missing name: ${key}`,message:'name should be a non-empty string.'});
+      if(!gs.toolType) messages.push({level:'error',title:`Missing toolType: ${key}`,message:'toolType is required.'});
+    }
+    if(!messages.length) messages.push({level:'info',title:'Validation passed',message:'No schema problems.'});
+    const ec=messages.filter(m=>m.level==='error').length; const wc=messages.filter(m=>m.level==='warning').length;
+    renderGatheringSkillDiagnostics(messages,ec||wc?`${ec} error(s), ${wc} warning(s)`:'Validation passed');
+  }
+  function addGatheringSkill() { const k=ensureUniqueGatheringSkillKey('newSkill'); state.gatheringSkills[k]=JSON.parse(JSON.stringify(DEFAULT_NEW_GATHERING_SKILL)); state.gatheringSkills[k].id=k; state.selectedGatheringSkillKey=k; setGatheringSkillDirty(true); renderGatheringSkills(); }
+  function duplicateGatheringSkill() { const gs=getSelectedGatheringSkillEntry(); if(!gs) return; const k=ensureUniqueGatheringSkillKey(`${state.selectedGatheringSkillKey}_copy`); const clone=JSON.parse(JSON.stringify(gs)); clone.id=k; state.gatheringSkills[k]=clone; state.selectedGatheringSkillKey=k; setGatheringSkillDirty(true); renderGatheringSkills(); }
+  function deleteGatheringSkill() { if(!getSelectedGatheringSkillEntry()) return; if(!window.confirm(`Delete "${state.selectedGatheringSkillKey}"?`)) return; delete state.gatheringSkills[state.selectedGatheringSkillKey]; state.selectedGatheringSkillKey=Object.keys(state.gatheringSkills)[0]||null; setGatheringSkillDirty(true); renderGatheringSkills(); }
+
+  // Resource Nodes
+  const RESOURCE_NODE_SKILLS = ['mining','logging','fishing'];
+  const RESOURCE_NODE_TOOL_TYPES = ['pickaxe','hatchet','fishing_rod'];
+  const DEFAULT_NEW_RESOURCE_NODE = { name:'New Node', skill:'mining', requiredLevel:1, requiredToolType:'pickaxe', requiredToolTier:1, xpPerGather:10, gatherItem:'', maxHarvests:3, respawnTicks:1800, color:[128,128,128] };
+  const SKILL_COLORS_RN = { mining:'#c8983a', logging:'#3fb06a', fishing:'#5a9cf5' };
+
+  function getResourceNodeSpriteUrl(id) { return `/api/gathering-sprite/${encodeURIComponent(id)}?v=${Date.now()}`; }
+  function getResourceNodeSpriteDisplayPath(id) { return `public/assets/sprites/gathering/${id}.png`; }
+
+  function setResourceNodeSpriteStatus(exists) {
+    state.resourceNodeSpriteExists=exists;
+    if(exists===true){els.resourceNodeSpriteStatusBadge.textContent='Sprite found';els.resourceNodeSpriteStatusBadge.className='badge online';els.resourceNodeSpriteImage.classList.remove('hidden');els.resourceNodeSpriteFallback.classList.add('hidden');}
+    else if(exists===false){els.resourceNodeSpriteStatusBadge.textContent='Using fallback';els.resourceNodeSpriteStatusBadge.className='badge unsaved';els.resourceNodeSpriteImage.classList.add('hidden');els.resourceNodeSpriteFallback.classList.remove('hidden');}
+    else{els.resourceNodeSpriteStatusBadge.textContent='Checking';els.resourceNodeSpriteStatusBadge.className='badge muted';els.resourceNodeSpriteImage.classList.add('hidden');els.resourceNodeSpriteFallback.classList.remove('hidden');}
+  }
+  function getVisibleResourceNodeKeys() { const q=state.resourceNodeSearch.toLowerCase(); return Object.keys(state.resourceNodes).filter(k=>!q||k.toLowerCase().includes(q)||String(state.resourceNodes[k]?.name||'').toLowerCase().includes(q)||String(state.resourceNodes[k]?.skill||'').toLowerCase().includes(q)).sort((a,b)=>a.localeCompare(b)); }
+  function getSelectedResourceNodeEntry() { return state.selectedResourceNodeKey ? state.resourceNodes[state.selectedResourceNodeKey]||null : null; }
+  function ensureUniqueResourceNodeKey(base){ let c=base,i=2; while(state.resourceNodes[c]) c=`${base}_${i++}`; return c; }
+
+  function buildCurrentResourceNodeObject() {
+    const color = [clampByte(els.resourceNodeRInput.value),clampByte(els.resourceNodeGInput.value),clampByte(els.resourceNodeBInput.value)];
+    return { name:els.resourceNodeNameInput.value||'', skill:els.resourceNodeSkillInput.value||'mining', requiredLevel:Number(els.resourceNodeRequiredLevelInput.value||1), requiredToolType:els.resourceNodeToolTypeInput.value||'pickaxe', requiredToolTier:Number(els.resourceNodeToolTierInput.value||1), xpPerGather:Number(els.resourceNodeXpInput.value||0), gatherItem:(els.resourceNodeGatherItemInput.value||'').trim(), maxHarvests:Number(els.resourceNodeMaxHarvestsInput.value||1), respawnTicks:Number(els.resourceNodeRespawnTicksInput.value||1800), color };
+  }
+  function renderResourceNodeList() {
+    const visibleKeys = getVisibleResourceNodeKeys();
+    const allKeys = Object.keys(state.resourceNodes);
+    els.resourceNodeEntryCount.textContent = String(allKeys.length);
+    els.resourceNodeSkillCount.textContent = String(new Set(allKeys.map(k=>state.resourceNodes[k]?.skill).filter(Boolean)).size);
+    els.resourceNodeList.innerHTML = '';
+    if(!visibleKeys.length){const e=document.createElement('div');e.className='subtle';e.textContent='No matching nodes.';els.resourceNodeList.appendChild(e);return;}
+    for(const key of visibleKeys){
+      const rn=state.resourceNodes[key]||{};
+      const color=Array.isArray(rn.color)?rgbToHex(rn.color):(SKILL_COLORS_RN[rn.skill]||'#888');
+      const btn=document.createElement('button');
+      btn.className='tile-list-item'+(key===state.selectedResourceNodeKey?' active':'');
+      btn.type='button';
+      btn.innerHTML=`<span class="swatch" style="background:${color}"></span><span class="tile-text"><strong class="tile-name">${rn.name||key}</strong><span class="tile-meta">${key} • ${rn.skill||'?'} • lvl ${rn.requiredLevel??'?'}</span></span>`;
+      btn.addEventListener('click',()=>{state.selectedResourceNodeKey=key;renderResourceNodePanel();renderResourceNodeList();});
+      els.resourceNodeList.appendChild(btn);
+    }
+  }
+  function renderResourceNodePanel() {
+    const rn=getSelectedResourceNodeEntry();
+    if(!rn){els.selectedResourceNodeLabel.textContent='Nothing selected';els.resourceNodeEmptyState.classList.remove('hidden');els.resourceNodeForm.classList.add('hidden');els.resourceNodeJsonPreview.textContent='';return;}
+    els.selectedResourceNodeLabel.textContent=state.selectedResourceNodeKey;
+    els.resourceNodeEmptyState.classList.add('hidden');els.resourceNodeForm.classList.remove('hidden');
+    els.resourceNodeIdInput.value=state.selectedResourceNodeKey;
+    els.resourceNodeNameInput.value=rn.name||'';
+    els.resourceNodeSkillInput.value=RESOURCE_NODE_SKILLS.includes(rn.skill)?rn.skill:'mining';
+    els.resourceNodeToolTypeInput.value=RESOURCE_NODE_TOOL_TYPES.includes(rn.requiredToolType)?rn.requiredToolType:'pickaxe';
+    els.resourceNodeToolTierInput.value=String(rn.requiredToolTier||1);
+    els.resourceNodeRequiredLevelInput.value=rn.requiredLevel??1;
+    els.resourceNodeXpInput.value=rn.xpPerGather??0;
+    els.resourceNodeMaxHarvestsInput.value=rn.maxHarvests??3;
+    els.resourceNodeRespawnTicksInput.value=rn.respawnTicks??1800;
+    els.resourceNodeGatherItemInput.value=rn.gatherItem||'';
+    const color=Array.isArray(rn.color)?rn.color.map(clampByte):[128,128,128];
+    const hex=rgbToHex(color);
+    els.resourceNodeColorPicker.value=hex;
+    els.resourceNodeRInput.value=String(color[0]);els.resourceNodeGInput.value=String(color[1]);els.resourceNodeBInput.value=String(color[2]);
+    els.resourceNodeColorPreview.style.background=hex;
+    els.resourceNodeSpritePathLabel.textContent=getResourceNodeSpriteDisplayPath(state.selectedResourceNodeKey);
+    els.resourceNodeJsonPreview.textContent=JSON.stringify({[state.selectedResourceNodeKey]:rn},null,2);
+    setResourceNodeSpriteStatus(null);
+    els.resourceNodeSpriteImage.src=getResourceNodeSpriteUrl(state.selectedResourceNodeKey);
+  }
+  function syncSelectedResourceNodeFromForm() {
+    const current=getSelectedResourceNodeEntry();if(!current)return;
+    const newKey=(els.resourceNodeIdInput.value||'').trim()||state.selectedResourceNodeKey;
+    if(newKey!==state.selectedResourceNodeKey&&!state.resourceNodes[newKey]){const m={};Object.keys(state.resourceNodes).forEach(k=>{m[k===state.selectedResourceNodeKey?newKey:k]=state.resourceNodes[k];});state.resourceNodes=m;state.selectedResourceNodeKey=newKey;}
+    state.resourceNodes[state.selectedResourceNodeKey]=buildCurrentResourceNodeObject();
+    setResourceNodeDirty(true);renderResourceNodeList();
+    const rn=state.resourceNodes[state.selectedResourceNodeKey];
+    const color=Array.isArray(rn.color)?rn.color:[128,128,128];
+    els.resourceNodeColorPreview.style.background=rgbToHex(color);
+    els.resourceNodeJsonPreview.textContent=JSON.stringify({[state.selectedResourceNodeKey]:rn},null,2);
+  }
+  function updateResourceNodeColor(rgb){const rn=getSelectedResourceNodeEntry();if(!rn)return;rn.color=rgb.map(clampByte);setResourceNodeDirty(true);renderResourceNodeList();renderResourceNodePanel();}
+  function renderResourceNodeDiagnostics(items=[],summary='No validation run yet'){els.resourceNodeValidationSummary.textContent=summary;els.resourceNodeDiagnosticsList.innerHTML='';if(!items.length){els.resourceNodeDiagnosticsList.className='diagnostics-list empty-diagnostics';els.resourceNodeDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;}els.resourceNodeDiagnosticsList.className='diagnostics-list';for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.resourceNodeDiagnosticsList.appendChild(d);}}
+  function renderResourceNodes(){renderResourceNodeList();renderResourceNodePanel();}
+  async function loadResourceNodes(){const r=await apiFetch('/api/resource-nodes');state.resourceNodes=r.resourceNodes||{};const keys=Object.keys(state.resourceNodes);state.selectedResourceNodeKey=keys.includes(state.selectedResourceNodeKey)?state.selectedResourceNodeKey:(keys[0]||null);setResourceNodeDirty(false);renderResourceNodes();renderResourceNodeDiagnostics([{level:'info',title:'Loaded',message:r.path}],`Loaded ${keys.length} entries`);}
+  async function saveResourceNodes(){const r=await apiFetch('/api/resource-nodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resourceNodes:state.resourceNodes})});setResourceNodeDirty(false);renderResourceNodeDiagnostics([{level:'info',title:'Saved',message:r.path}],`Saved ${Object.keys(state.resourceNodes).length} entries`);}
+  function validateResourceNodes(){
+    const messages=[]; const entries=Object.entries(state.resourceNodes); const itemIds=new Set(Object.keys(state.items));
+    if(!entries.length) messages.push({level:'warning',title:'Empty',message:'No resource nodes defined.'});
+    for(const [key,rn] of entries){
+      if(!rn.name) messages.push({level:'warning',title:`Missing name: ${key}`,message:'name should be a non-empty string.'});
+      if(!RESOURCE_NODE_SKILLS.includes(rn.skill)) messages.push({level:'error',title:`Invalid skill: ${key}`,message:`skill must be one of ${RESOURCE_NODE_SKILLS.join(', ')}.`});
+      if(!RESOURCE_NODE_TOOL_TYPES.includes(rn.requiredToolType)) messages.push({level:'warning',title:`Unusual toolType: ${key}`,message:`requiredToolType "${rn.requiredToolType}" is not a known tool type.`});
+      if(typeof rn.requiredToolTier!=='number'||rn.requiredToolTier<1||rn.requiredToolTier>3) messages.push({level:'warning',title:`Tool tier: ${key}`,message:'requiredToolTier should be 1, 2, or 3.'});
+      if(!rn.gatherItem) messages.push({level:'error',title:`Missing gatherItem: ${key}`,message:'gatherItem must reference an item id.'});
+      else if(!itemIds.has(rn.gatherItem)) messages.push({level:'warning',title:`Unknown gatherItem: ${key}`,message:`"${rn.gatherItem}" not found in items.json.`});
+      if(typeof rn.xpPerGather!=='number') messages.push({level:'error',title:`xpPerGather: ${key}`,message:'xpPerGather must be a number.'});
+      if(!Array.isArray(rn.color)||rn.color.length!==3) messages.push({level:'error',title:`color: ${key}`,message:'color must be [r,g,b].'});
+    }
+    if(!messages.length) messages.push({level:'info',title:'Validation passed',message:'No schema problems.'});
+    const ec=messages.filter(m=>m.level==='error').length; const wc=messages.filter(m=>m.level==='warning').length;
+    renderResourceNodeDiagnostics(messages,ec||wc?`${ec} error(s), ${wc} warning(s)`:'Validation passed');
+  }
+  function addResourceNode(){const k=ensureUniqueResourceNodeKey('newNode');state.resourceNodes[k]=JSON.parse(JSON.stringify(DEFAULT_NEW_RESOURCE_NODE));state.selectedResourceNodeKey=k;setResourceNodeDirty(true);renderResourceNodes();}
+  function duplicateResourceNode(){const rn=getSelectedResourceNodeEntry();if(!rn)return;const k=ensureUniqueResourceNodeKey(`${state.selectedResourceNodeKey}_copy`);state.resourceNodes[k]=JSON.parse(JSON.stringify(rn));state.selectedResourceNodeKey=k;setResourceNodeDirty(true);renderResourceNodes();}
+  function deleteResourceNode(){if(!getSelectedResourceNodeEntry())return;if(!window.confirm(`Delete "${state.selectedResourceNodeKey}"?`))return;delete state.resourceNodes[state.selectedResourceNodeKey];state.selectedResourceNodeKey=Object.keys(state.resourceNodes)[0]||null;setResourceNodeDirty(true);renderResourceNodes();}
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : loadPalette())))))))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : loadPalette())))))))))));
     els.saveButton.addEventListener('click', () => {
-      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects' };
+      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes' };
       const label = tabNames[state.activeTab] || state.activeTab;
       if (!window.confirm(`Save ${label} to disk?\n\nThis will overwrite the JSON file.`)) return;
       if (state.activeTab === 'items') saveItems();
@@ -2348,6 +2540,8 @@
       else if (state.activeTab === 'particles') saveParticles();
       else if (state.activeTab === 'skills') saveSkills();
       else if (state.activeTab === 'statusEffects') saveStatusEffects();
+      else if (state.activeTab === 'gatheringSkills') saveGatheringSkills();
+      else if (state.activeTab === 'resourceNodes') saveResourceNodes();
       else savePalette();
     });
     els.reloadButton.addEventListener('click', loadPalette);
@@ -2497,6 +2691,33 @@
       else setStatusEffectIconStatus(false);
     });
 
+    els.skillRequiresWeaponInput.addEventListener('change', syncSelectedSkillFromForm);
+    els.skillRequiresShieldInput.addEventListener('change', syncSelectedSkillFromForm);
+    els.skillRequiresWeaponTypeInput.addEventListener('input', syncSelectedSkillFromForm);
+
+    els.reloadGatheringSkillsButton.addEventListener('click', loadGatheringSkills);
+    els.validateGatheringSkillsButton.addEventListener('click', validateGatheringSkills);
+    els.addGatheringSkillButton.addEventListener('click', addGatheringSkill);
+    els.duplicateGatheringSkillButton.addEventListener('click', duplicateGatheringSkill);
+    els.deleteGatheringSkillButton.addEventListener('click', deleteGatheringSkill);
+    els.gatheringSkillSearchInput.addEventListener('input', e=>{ state.gatheringSkillSearch=e.target.value||''; renderGatheringSkillList(); });
+    ['gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillDescriptionInput','gatheringSkillIconInput','gatheringSkillToolTypeInput'].forEach(id=>els[id].addEventListener('input',syncSelectedGatheringSkillFromForm));
+
+    els.reloadResourceNodesButton.addEventListener('click', loadResourceNodes);
+    els.validateResourceNodesButton.addEventListener('click', validateResourceNodes);
+    els.addResourceNodeButton.addEventListener('click', addResourceNode);
+    els.duplicateResourceNodeButton.addEventListener('click', duplicateResourceNode);
+    els.deleteResourceNodeButton.addEventListener('click', deleteResourceNode);
+    els.resourceNodeSearchInput.addEventListener('input', e=>{ state.resourceNodeSearch=e.target.value||''; renderResourceNodeList(); });
+    ['resourceNodeIdInput','resourceNodeNameInput','resourceNodeGatherItemInput','resourceNodeRequiredLevelInput','resourceNodeXpInput','resourceNodeMaxHarvestsInput','resourceNodeRespawnTicksInput'].forEach(id=>els[id].addEventListener('input',syncSelectedResourceNodeFromForm));
+    els.resourceNodeSkillInput.addEventListener('change', syncSelectedResourceNodeFromForm);
+    els.resourceNodeToolTypeInput.addEventListener('change', syncSelectedResourceNodeFromForm);
+    els.resourceNodeToolTierInput.addEventListener('change', syncSelectedResourceNodeFromForm);
+    els.resourceNodeColorPicker.addEventListener('input', e=>updateResourceNodeColor(hexToRgb(e.target.value)));
+    [els.resourceNodeRInput,els.resourceNodeGInput,els.resourceNodeBInput].forEach(input=>input.addEventListener('input',()=>updateResourceNodeColor([els.resourceNodeRInput.value,els.resourceNodeGInput.value,els.resourceNodeBInput.value])));
+    els.resourceNodeSpriteImage.addEventListener('load',()=>setResourceNodeSpriteStatus(true));
+    els.resourceNodeSpriteImage.addEventListener('error',()=>setResourceNodeSpriteStatus(false));
+
     // SFX play buttons — single delegated listener covers all tabs
     document.addEventListener('click', e => {
       const btn = e.target.closest('.sfx-play-btn');
@@ -2508,7 +2729,7 @@
     });
 
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -2526,7 +2747,9 @@
     renderParticles();
     renderSkills();
     renderStatusEffects();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects()]); }
+    renderGatheringSkills();
+    renderResourceNodes();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -2537,6 +2760,8 @@
       renderParticleDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderSkillDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderStatusEffectDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderGatheringSkillDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderResourceNodeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 
