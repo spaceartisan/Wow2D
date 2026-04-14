@@ -1,4 +1,4 @@
-> **AI Disclaimer:** This project was completely built by AI. My main driving question was, can I create an entire MMORPG development eco-system in AI. Apparently yes. I made sure that the vast majority of features were extensible through the use of jsons. Using jsons made it easy for me to get AI to make tools assisting in world development.
+> **AI Disclaimer:** This project was completely built by AI. My main driving question was, can I create an entire MMORPG development eco-system in AI. Apparently yes. I made sure that the vast majority of features were extensible through the use of jsons. Using jsons made it easy for me to get AI to make tools assisting in world development. May God have mercy on all of us.
 
 For clarity, background loops for music was not AI generated. Loops were found at the following link:
 - https://pixabay.com/users/darren_hirst-47836735/
