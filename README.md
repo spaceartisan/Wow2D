@@ -88,11 +88,19 @@ http://localhost:3000
 - Safe zones
 - Waystone system — attune your hearthstone to teleport back to town (floor-aware placement)
 - Gathering system — mine ore, chop trees, and catch fish from resource nodes placed on maps
-  - Three professions: Mining, Logging, Fishing — each with independent XP and levels
+  - Three gathering professions: Mining, Logging, Fishing — each with independent XP and levels
   - Nine resource node types across three tiers (e.g., Copper Vein → Tin Vein → Iron Deposit)
   - Requires the correct tool type and tier in inventory (pickaxe, hatchet, or fishing rod)
-  - Auto-gather with `E` key (2.5s cooldown between attempts)
+  - Auto-gather with `E` key (2.5s cooldown between attempts) with green progress bar
+  - Client-side tool validation before gathering begins
   - Professions panel (`G`) shows skill levels and XP progress
+- Crafting system — process raw materials at crafting station NPCs
+  - Three processing professions: Smelting, Milling, Cooking — each with independent XP and levels
+  - Nine recipes across three tiers (e.g., Copper Bar, Tin Bar, Iron Bar for Smelting)
+  - Interact with crafting station NPCs (Smelter Hilda, Sawyer Brom, Cook Marta) to open the crafting panel
+  - Crafting timer with copper-themed progress bar
+  - Continuous crafting mode — toggle to auto-repeat recipes
+  - Recipes defined in `recipes.json` with skill requirements, input materials, and output items
 - Procedural map generation via `generate-maps.js`
 
 ### Minimap & World Map
@@ -131,7 +139,8 @@ http://localhost:3000
 
 ### Persistence
 - SQLite database for accounts, characters, and sessions
-- Character progression saved on disconnect (level, XP, gold, HP, mana, inventory, equipment, bank, hotbar)
+- Character progression saved on disconnect, auto-save (every 60s), and on key events (XP gains, quest completions, gathering, crafting)
+- Player position persistence — map, coordinates, and floor saved to DB and restored on login
 - Session tokens with 24-hour expiry and periodic cleanup
 - PBKDF2 password hashing with per-account salts
 - Rate-limited auth endpoints
@@ -174,8 +183,9 @@ public/
     particles.json             Particle effect presets (burst + continuous emitters)
     skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support) with icon references
     statusEffects.json         Buff/debuff and zone-effect display metadata and icon paths
-    gatheringSkills.json       Gathering profession definitions (mining, logging, fishing)
+    gatheringSkills.json       Gathering & processing profession definitions (mining, logging, fishing, smelting, milling, cooking)
     resourceNodes.json         Resource node type definitions (ores, trees, fish spots)
+    recipes.json               Crafting recipe definitions (smelting, milling, cooking recipes)
     enemies.json               Enemy type definitions
     items.json                 Item definitions (weapons, armor, shields, helmets, pants, boots, rings, amulets, quivers, consumables, junk)
     npcs.json                  NPC definitions

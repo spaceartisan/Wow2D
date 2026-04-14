@@ -82,6 +82,7 @@ export class EntitySystem {
         questIds: def.questIds || [],
         type: def.type || "generic",
         shop: def.shop || null,
+        craftingSkill: def.craftingSkill || null,
         floor: placement.floor ?? 0
       });
     }

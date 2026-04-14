@@ -62,7 +62,11 @@ DB file: `data/azerfall.db` (SQLite, WAL mode, foreign keys ON)
 | `hearthstone` | TEXT | `'null'` | JSON: attunement object or null |
 | `bank` | TEXT | `'[]'` | JSON: 48-slot array |
 | `hotbar` | TEXT | `'[]'` | JSON: 10-slot array |
-| `gathering_skills` | TEXT | `'{"mining":{"level":1,"xp":0},"logging":{"level":1,"xp":0},"fishing":{"level":1,"xp":0}}'` | JSON: gathering skill levels and XP |
+| `gathering_skills` | TEXT | `'{}'` | JSON: gathering skill levels and XP |
+| `map_id` | TEXT | `'eldengrove'` | Last known map ID for position persistence |
+| `pos_x` | REAL | `-1` | Last known X position (world pixels, -1 = use spawn) |
+| `pos_y` | REAL | `-1` | Last known Y position (world pixels, -1 = use spawn) |
+| `floor` | INTEGER | `0` | Last known floor (0 = ground, 1+ = upper floors) |
 | `created_at` | INTEGER | epoch ms | |
 
 ### `sessions`
@@ -90,7 +94,7 @@ All functions are synchronous (better-sqlite3). The module exports these plus th
 | `createCharacter` | `(token, name, class)` | Max 5 per account. Returns `{ ok, characters }` or `{ error }`. |
 | `deleteCharacter` | `(token, charId)` | Validates ownership. Returns `{ ok, characters }` or `{ error }`. |
 | `loadCharacter` | `(charId, username)` | Full load with JSON parsing. Returns character object or `null`. |
-| `saveCharacterProgress` | `(charId, data)` | Saves: level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar. |
+| `saveCharacterProgress` | `(charId, data)` | Saves: level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor. |
 | `cleanExpiredSessions` | `()` | Deletes expired session rows. |
 
 ### Raw Prepared Statements
@@ -104,8 +108,8 @@ stmts.getCharacters       // SELECT id, name, char_class AS charClass, level, cr
 stmts.countCharacters     // SELECT COUNT(*) AS cnt FROM characters WHERE username = ?
 stmts.insertCharacter     // INSERT INTO characters (username, name, char_class) VALUES (?, ?, ?)
 stmts.deleteCharacter     // DELETE FROM characters WHERE id = ? AND username = ?
-stmts.getCharacterById    // SELECT id, name, ..., bank, hotbar ... WHERE id = ? AND username = ?
-stmts.saveCharacter       // UPDATE characters SET level=?, xp=?, gold=?, hp=?, mana=?, inventory=?, equipment=?, quests=?, hearthstone=?, bank=?, hotbar=? WHERE id=?
+stmts.getCharacterById    // SELECT id, name, ..., bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor ... WHERE id = ? AND username = ?
+stmts.saveCharacter       // UPDATE characters SET level=?, xp=?, ..., gathering_skills=?, map_id=?, pos_x=?, pos_y=?, floor=? WHERE id=?
 stmts.insertSession       // INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)
 stmts.getSession          // SELECT * FROM sessions WHERE token = ? AND expires_at > ?
 stmts.deleteSession       // DELETE FROM sessions WHERE token = ?
@@ -178,6 +182,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `hotbar_update` | `hotbar` (10-slot array) | Save hotbar layout |
 | `swap_items` | `from, to, fromIndex, toIndex` | Swap/stack between `"inventory"` and/or `"bank"` |
 | `gather` | `nodeId` | Harvest a resource node (range, tool, skill level, cooldown validated) |
+| `craft` | `recipeId` | Craft an item at a crafting station (proximity, skill level, materials validated) |
 | `respawn` | — | Signal ready to respawn (actual respawn is tick-driven) |
 
 ### Server → Client Messages
@@ -186,7 +191,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 |------|------|------------|
 | `auth_error` | Bad token | `error` |
 | `kicked` | Duplicate login | `reason` |
-| `welcome` | Join success | `playerId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana` |
+| `welcome` | Join success | `playerId, mapId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana, gatheringSkills, resourceNodes, x, y, floor` |
 | `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, damage }` — enemies and players include `floor` field |
 | `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead, floor }` |
 | `player_left` | Player leaves map | `playerId` |
@@ -212,6 +217,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `hotbar_result` | Hotbar saved | `ok, hotbar` |
 | `swap_result` | Item swap | `ok, reason?, inventory, bank` |
 | `gather_result` | Gather attempt | `success, reason?, itemId?, itemName?, inventory?, gatheringSkills?, skillId?, xpGained?, leveledUp?, newLevel?` |
+| `craft_result` | Craft attempt | `success, reason?, recipeId?, outputItem?, inventory?, gatheringSkills?, xpGained?, leveledUp?, newLevel?` |
 | `enemy_killed` | Kill confirmed | `enemyId, enemyType, xpReward` |
 | `drop_spawned` | Loot appears | `drop: { id, x, y }` |
 | `drop_removed` | Loot taken | `dropId` |
@@ -293,10 +299,13 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   _tileDoTs: {                  // Internal: per-zone DoT/HoT tick tracking
     "zonePoison": { lastTickAt: 1712345690000 }
   },
-  gatheringSkills: {             // Gathering profession levels
+  gatheringSkills: {             // Gathering & processing profession levels
     mining: { level: 1, xp: 0 },
     logging: { level: 1, xp: 0 },
-    fishing: { level: 1, xp: 0 }
+    fishing: { level: 1, xp: 0 },
+    smelting: { level: 1, xp: 0 },
+    milling: { level: 1, xp: 0 },
+    cooking: { level: 1, xp: 0 }
   },
   lastGatherTick: 0              // Tick of last successful gather (cooldown)
 }
@@ -397,6 +406,12 @@ Every ~16.67ms the server runs:
 |---------|-----------|
 | Player disconnect | Full character state → DB |
 | Auto-save (every 60s) | All connected players → DB |
+| XP gained (enemy kills, level-ups) | Character state → DB |
+| Quest completed | Character state → DB |
+| Gathering success | Character state → DB |
+| Crafting success | Character state → DB |
+
+All save operations use the `_savePlayer(p)` helper method, which calls `database.saveCharacterProgress()` with the player's full state including position (mapId, x, y, floor).
 
 ### What Gets Saved
 
@@ -406,7 +421,8 @@ Every ~16.67ms the server runs:
 level, xp, gold, hp, mana,
 inventory (JSON), equipment (JSON), quests (JSON),
 hearthstone (JSON), bank (JSON), hotbar (JSON),
-gathering_skills (JSON)
+gathering_skills (JSON),
+map_id, pos_x, pos_y, floor
 ```
 
 ### What Does NOT Persist
@@ -414,7 +430,6 @@ gathering_skills (JSON)
 - Enemy state (all enemies reset on server restart)
 - Loot drops on the ground
 - Active casts
-- Player world position (respawns at map spawn point)
 
 ---
 
@@ -523,7 +538,12 @@ function savePlayer(playerId) {
     quests: p.quests,
     hearthstone: p.hearthstone,
     bank: p.bank,
-    hotbar: p.hotbar
+    hotbar: p.hotbar,
+    gatheringSkills: p.gatheringSkills,
+    mapId: p.mapId,
+    posX: p.x,
+    posY: p.y,
+    floor: p.floor || 0
   });
   return true;
 }

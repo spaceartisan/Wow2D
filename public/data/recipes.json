@@ -1,0 +1,92 @@
+{
+  "smelt_copper": {
+    "id": "smelt_copper",
+    "name": "Copper Bar",
+    "skill": "smelting",
+    "requiredLevel": 1,
+    "xp": 12,
+    "input": { "copperOre": 2 },
+    "output": { "id": "copperBar", "qty": 1 },
+    "craftTime": 2.0
+  },
+  "smelt_tin": {
+    "id": "smelt_tin",
+    "name": "Tin Bar",
+    "skill": "smelting",
+    "requiredLevel": 10,
+    "xp": 30,
+    "input": { "tinOre": 2 },
+    "output": { "id": "tinBar", "qty": 1 },
+    "craftTime": 2.5
+  },
+  "smelt_iron": {
+    "id": "smelt_iron",
+    "name": "Iron Bar",
+    "skill": "smelting",
+    "requiredLevel": 20,
+    "xp": 60,
+    "input": { "ironOre": 3 },
+    "output": { "id": "ironBar", "qty": 1 },
+    "craftTime": 3.0
+  },
+  "mill_oak": {
+    "id": "mill_oak",
+    "name": "Oak Plank",
+    "skill": "milling",
+    "requiredLevel": 1,
+    "xp": 12,
+    "input": { "oakLog": 2 },
+    "output": { "id": "oakPlank", "qty": 1 },
+    "craftTime": 2.0
+  },
+  "mill_maple": {
+    "id": "mill_maple",
+    "name": "Maple Plank",
+    "skill": "milling",
+    "requiredLevel": 10,
+    "xp": 30,
+    "input": { "mapleLog": 2 },
+    "output": { "id": "maplePlank", "qty": 1 },
+    "craftTime": 2.5
+  },
+  "mill_yew": {
+    "id": "mill_yew",
+    "name": "Yew Plank",
+    "skill": "milling",
+    "requiredLevel": 20,
+    "xp": 60,
+    "input": { "yewLog": 3 },
+    "output": { "id": "yewPlank", "qty": 1 },
+    "craftTime": 3.0
+  },
+  "cook_trout": {
+    "id": "cook_trout",
+    "name": "Grilled Trout",
+    "skill": "cooking",
+    "requiredLevel": 1,
+    "xp": 12,
+    "input": { "rawTrout": 1 },
+    "output": { "id": "grilledTrout", "qty": 1 },
+    "craftTime": 1.5
+  },
+  "cook_salmon": {
+    "id": "cook_salmon",
+    "name": "Baked Salmon",
+    "skill": "cooking",
+    "requiredLevel": 10,
+    "xp": 30,
+    "input": { "rawSalmon": 1 },
+    "output": { "id": "bakedSalmon", "qty": 1 },
+    "craftTime": 2.0
+  },
+  "cook_lobster": {
+    "id": "cook_lobster",
+    "name": "Roasted Lobster",
+    "skill": "cooking",
+    "requiredLevel": 20,
+    "xp": 60,
+    "input": { "rawLobster": 1 },
+    "output": { "id": "roastedLobster", "qty": 1 },
+    "craftTime": 2.5
+  }
+}

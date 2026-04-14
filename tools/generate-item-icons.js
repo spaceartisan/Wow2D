@@ -577,6 +577,90 @@ function drawAntidote(ctx) {
   ctx.fillRect(13, 12, 2, 8);
 }
 
+// ── METAL BAR ICONS ────────────────────────────────────────────
+function drawBar(ctx, barColor, highlightColor) {
+  bg(ctx, "#3a3a3a");
+  highlight(ctx);
+  // Bar shape — a 3D-ish ingot
+  ctx.fillStyle = barColor;
+  ctx.beginPath();
+  ctx.moveTo(6, 20);
+  ctx.lineTo(10, 12);
+  ctx.lineTo(26, 12);
+  ctx.lineTo(26, 20);
+  ctx.closePath();
+  ctx.fill();
+  // Top face
+  ctx.fillStyle = highlightColor;
+  ctx.beginPath();
+  ctx.moveTo(10, 12);
+  ctx.lineTo(14, 8);
+  ctx.lineTo(26, 8);
+  ctx.lineTo(26, 12);
+  ctx.closePath();
+  ctx.fill();
+  // Shine
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  ctx.fillRect(12, 9, 8, 2);
+}
+
+// ── PLANK ICONS ────────────────────────────────────────────────
+function drawPlank(ctx, woodColor, grainColor) {
+  bg(ctx, "#3a3a2a");
+  highlight(ctx);
+  // Plank shape
+  ctx.fillStyle = woodColor;
+  ctx.beginPath();
+  ctx.roundRect(5, 10, 22, 12, 2);
+  ctx.fill();
+  // Wood grain lines
+  ctx.strokeStyle = grainColor;
+  ctx.lineWidth = 0.5;
+  for (let y = 13; y <= 19; y += 3) {
+    ctx.beginPath();
+    ctx.moveTo(7, y);
+    ctx.lineTo(25, y);
+    ctx.stroke();
+  }
+  // Highlight
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(6, 11, 20, 3);
+}
+
+// ── MEAL ICONS ─────────────────────────────────────────────────
+function drawMeal(ctx, fishColor, plateColor) {
+  bg(ctx, "#3a2a2a");
+  highlight(ctx);
+  // Plate
+  ctx.fillStyle = plateColor;
+  ctx.beginPath();
+  ctx.ellipse(16, 20, 11, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Cooked fish on plate
+  ctx.fillStyle = fishColor;
+  ctx.beginPath();
+  ctx.ellipse(16, 17, 8, 4, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Grill marks
+  ctx.strokeStyle = "rgba(80,40,0,0.5)";
+  ctx.lineWidth = 1;
+  for (let x = 10; x <= 22; x += 3) {
+    ctx.beginPath();
+    ctx.moveTo(x, 14);
+    ctx.lineTo(x, 20);
+    ctx.stroke();
+  }
+  // Steam
+  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+  ctx.lineWidth = 0.8;
+  for (let x = 12; x <= 20; x += 4) {
+    ctx.beginPath();
+    ctx.moveTo(x, 12);
+    ctx.quadraticCurveTo(x + 1, 9, x, 6);
+    ctx.stroke();
+  }
+}
+
 // ── Generate all icons ─────────────────────────────────────────
 function generate() {
   console.log("Generating item icons (32x32)...\n");
@@ -623,6 +707,21 @@ function generate() {
     minorManaPotion:      (ctx) => drawPotion(ctx, "#3366cc", "small"),
     manaPotion:           (ctx) => drawPotion(ctx, "#3366cc", "med"),
     antidote:             (ctx) => drawAntidote(ctx),
+
+    // Bars (smelting output)
+    copperBar:    (ctx) => drawBar(ctx, "#b87333", "#d4956a"),
+    tinBar:       (ctx) => drawBar(ctx, "#a0a0a0", "#c8c8c8"),
+    ironBar:      (ctx) => drawBar(ctx, "#6a6a70", "#8a8a90"),
+
+    // Planks (milling output)
+    oakPlank:     (ctx) => drawPlank(ctx, "#8a7050", "#6a5a3a"),
+    maplePlank:   (ctx) => drawPlank(ctx, "#c09060", "#a07a4a"),
+    yewPlank:     (ctx) => drawPlank(ctx, "#6a3a2a", "#4a2a1a"),
+
+    // Meals (cooking output)
+    grilledTrout:   (ctx) => drawMeal(ctx, "#c09070", "#d8d0c0"),
+    bakedSalmon:    (ctx) => drawMeal(ctx, "#e08060", "#d8d0c0"),
+    roastedLobster: (ctx) => drawMeal(ctx, "#cc4040", "#d8d0c0"),
   };
 
   let count = 0;

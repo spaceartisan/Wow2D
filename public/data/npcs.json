@@ -67,5 +67,32 @@
     "defaultDialog": "Nothing beats a day by the water. Looking for a rod?",
     "questIds": [],
     "shop": ["basicFishingRod", "improvedFishingRod", "fineFishingRod"]
+  },
+  "smelter_hilda": {
+    "id": "smelter_hilda",
+    "name": "Smelter Hilda",
+    "color": "#e07030",
+    "type": "crafting_station",
+    "craftingSkill": "smelting",
+    "defaultDialog": "The forge burns hot. Bring me your ores and I'll smelt them down.",
+    "questIds": []
+  },
+  "sawyer_brom": {
+    "id": "sawyer_brom",
+    "name": "Sawyer Brom",
+    "color": "#a08040",
+    "type": "crafting_station",
+    "craftingSkill": "milling",
+    "defaultDialog": "Good timber deserves a clean cut. I'll turn your logs into planks.",
+    "questIds": []
+  },
+  "cook_marta": {
+    "id": "cook_marta",
+    "name": "Cook Marta",
+    "color": "#c86040",
+    "type": "crafting_station",
+    "craftingSkill": "cooking",
+    "defaultDialog": "A warm meal keeps you fighting. Bring what you've caught and I'll prepare it.",
+    "questIds": []
   }
 }

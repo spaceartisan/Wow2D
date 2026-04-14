@@ -1150,6 +1150,162 @@ input, textarea {
   cursor: not-allowed;
 }
 
+/* ── Crafting panel ───────────────────────────────────── */
+
+#crafting-panel {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 370px;
+  padding: 10px;
+  max-height: 480px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.crafting-skill-info {
+  font-size: 11px;
+  color: var(--accent-gold-bright);
+  margin-bottom: 8px;
+  text-align: right;
+}
+
+.crafting-progress {
+  margin-bottom: 8px;
+}
+
+.crafting-progress-label {
+  font-size: 10px;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+
+.crafting-progress-track {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border-dim);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.crafting-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #b87333, #d4a05a);
+  border-radius: 4px;
+  transition: width 0.05s linear;
+}
+
+.crafting-continuous {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 6px;
+  border: 1px solid var(--panel-border-dim);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s;
+}
+
+.crafting-continuous:hover {
+  border-color: var(--accent-gold);
+  color: var(--text-main);
+}
+
+.crafting-continuous input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--panel-border-dim);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.crafting-continuous input[type="checkbox"]:checked {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold-bright);
+}
+
+.crafting-continuous input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: -1px;
+  left: 1px;
+  font-size: 12px;
+  color: #1a1a1a;
+  font-weight: bold;
+}
+
+.crafting-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.crafting-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--panel-border-dim);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.crafting-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.crafting-item-name {
+  font-size: 11px;
+  color: var(--text-main);
+}
+
+.crafting-item-inputs {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.crafting-item-meta {
+  font-size: 10px;
+  color: var(--accent-gold-bright);
+  white-space: nowrap;
+  margin-right: 6px;
+}
+
+.btn-craft {
+  padding: 3px 10px;
+  border: 1px solid var(--btn-border);
+  border-radius: 3px;
+  background: var(--btn-bg);
+  color: var(--accent-gold-bright);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: inherit;
+  text-transform: uppercase;
+}
+
+.btn-craft:hover {
+  filter: var(--btn-hover);
+}
+
+.btn-craft.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── target panel: friendly bar ───────────────────────── */
 
 .bar.enemy.friendly span {
@@ -2007,6 +2163,46 @@ input, textarea {
   background: linear-gradient(90deg, #b98d2f, #d4a943, #ffd866);
   border-radius: 2px;
   transition: width 0.1s linear;
+}
+
+/* ── gathering progress bar ───────────────────────────────── */
+
+.gather-bar-container {
+  position: absolute;
+  bottom: 28%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(280px, 60%);
+  z-index: 12;
+  pointer-events: none;
+}
+
+.gather-bar-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text-bright);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+
+.gather-bar-track {
+  width: 100%;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #5a8a4a;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 0 8px rgba(90, 138, 74, 0.25);
+}
+
+.gather-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3a7a2a, #5aaa3a, #7acc55);
+  border-radius: 2px;
+  transition: width 0.05s linear;
 }
 
 /* ── bank panel ───────────────────────────────────────── */

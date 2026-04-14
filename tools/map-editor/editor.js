@@ -89,6 +89,7 @@ function getSprite(path) {
 function tileSpritePath(name) { return `/assets/sprites/tiles/${name}.png`; }
 function entitySpritePath(name) { return `/assets/sprites/entities/${name}.png`; }
 function propSpritePath(name) { return `/assets/sprites/props/${name}.png`; }
+function gatheringSpritePath(name) { return `/assets/sprites/gathering/${name}.png`; }
 
 /* ── DOM refs ─────────────────────────────── */
 const $ = (s) => document.querySelector(s);
@@ -128,6 +129,8 @@ async function init() {
   // Preload prop sprites from props.json + portal
   for (const pName of Object.keys(propDefs)) loadSprite(propSpritePath(pName));
   loadSprite(propSpritePath("portal"));
+  // Preload gathering sprites for resource nodes
+  for (const rName of Object.keys(resourceNodeDefs)) loadSprite(gatheringSpritePath(rName));
 
   setupEventListeners();
 
@@ -586,14 +589,19 @@ function render() {
       if (lx < 0 || ly < 0 || lx >= bld.w || ly >= bld.h) continue;
       const dx = lx * ts * z, dy = ly * ts * z, sz = ts * z;
       const def = S.resourceNodeDefs[r.type];
-      const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(180, 140, 60, 0.6)";
-      ctx.fillStyle = c;
-      ctx.beginPath();
-      ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#f9e2af";
-      ctx.lineWidth = 1.5 * z;
-      ctx.stroke();
+      const rSprite = getSprite(gatheringSpritePath(r.type));
+      if (rSprite) {
+        ctx.drawImage(rSprite, dx, dy, sz, sz);
+      } else {
+        const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(180, 140, 60, 0.6)";
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#f9e2af";
+        ctx.lineWidth = 1.5 * z;
+        ctx.stroke();
+      }
       ctx.fillStyle = "#f9e2af";
       ctx.font = `${7 * z}px sans-serif`;
       ctx.fillText(def ? def.name : r.type, dx + 1, dy + sz + 8 * z);
@@ -777,14 +785,19 @@ function render() {
     if ((r.floor || 0) !== 0) continue;
     const dx = r.tx * ts * z, dy = r.ty * ts * z, sz = ts * z;
     const def = S.resourceNodeDefs[r.type];
-    const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(180, 140, 60, 0.6)";
-    ctx.fillStyle = c;
-    ctx.beginPath();
-    ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#f9e2af";
-    ctx.lineWidth = 1.5 * z;
-    ctx.stroke();
+    const rSprite = getSprite(gatheringSpritePath(r.type));
+    if (rSprite) {
+      ctx.drawImage(rSprite, dx, dy, sz, sz);
+    } else {
+      const c = def && def.color ? `rgb(${def.color.join(",")})` : "rgba(180, 140, 60, 0.6)";
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(dx + sz / 2, dy + sz / 2, sz * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#f9e2af";
+      ctx.lineWidth = 1.5 * z;
+      ctx.stroke();
+    }
     ctx.fillStyle = "#f9e2af";
     ctx.font = `${7 * z}px sans-serif`;
     ctx.fillText(def ? def.name : r.type, dx + 1, dy + sz + 8 * z);
@@ -1442,7 +1455,11 @@ function updatePropsPanel() {
     `;
   } else if (S.objMode === "npc") {
     const ids = Object.keys(S.npcDefs);
-    const opts = ids.map(id => `<option value="${id}">${S.npcDefs[id].name} (${id})</option>`).join("");
+    const opts = ids.map(id => {
+      const def = S.npcDefs[id];
+      const typeTag = def.type ? ` [${def.type}]` : "";
+      return `<option value="${id}">${def.name} (${id})${typeTag}</option>`;
+    }).join("");
     panel.innerHTML = `
       <label>NPC:
         <select id="npcIdSelect">${opts}</select>

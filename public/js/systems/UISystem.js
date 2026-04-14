@@ -55,6 +55,9 @@ export class UISystem {
     this.professionsOpen = false;
     this.shopOpen = false;
     this.bankOpen = false;
+    this.craftingOpen = false;
+    this._craftingSkill = null;
+    this._craftContinuous = false;
     this._shopNpcId = null;
     this._shopItems = [];
     this._inventoryDirty = true;
@@ -121,6 +124,7 @@ export class UISystem {
     if (this.npcDialogOpen) this.closeNpcDialog();
     if (this.shopOpen) this.closeShop();
     if (this.bankOpen) this.closeBank();
+    if (this.craftingOpen) this.closeCraftingStation();
     if (this.questLogOpen) this.toggleQuestLog();
     if (this.charSheetOpen) this.toggleCharSheet();
     if (this.skillsOpen) this.toggleSkills();
@@ -514,6 +518,8 @@ export class UISystem {
 
     this.updateTargetPanel();
     this.updateCastBar();
+    this.updateCraftingBar();
+    this.updateGatherBar();
 
     // Render player buff icons
     this._renderBuffStrip(this.el.playerBuffs, player.activeBuffs || [], true);
@@ -1886,6 +1892,246 @@ export class UISystem {
       card.append(header, desc, meta);
       body.append(card);
     }
+  }
+
+  /* ── Crafting Station UI ───────────────────────────── */
+
+  openCraftingStation(skillId) {
+    this._craftingSkill = skillId;
+    this.craftingOpen = true;
+
+    let panel = document.getElementById("crafting-panel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "crafting-panel";
+      panel.className = "hud-card";
+      panel.innerHTML = `
+        <div class="panel-header">
+          <span id="crafting-title">Crafting</span>
+          <button class="panel-close" id="crafting-close-btn">X</button>
+        </div>
+        <div id="crafting-skill-info" class="crafting-skill-info"></div>
+        <div id="crafting-progress" class="crafting-progress hidden">
+          <div class="crafting-progress-label" id="crafting-progress-label"></div>
+          <div class="crafting-progress-track">
+            <div class="crafting-progress-fill" id="crafting-progress-fill"></div>
+          </div>
+        </div>
+        <label class="crafting-continuous" id="crafting-continuous-label">
+          <input type="checkbox" id="crafting-continuous-cb" /> Continuous
+        </label>
+        <div id="crafting-grid" class="crafting-grid"></div>
+      `;
+      document.getElementById("hud").appendChild(panel);
+      document.getElementById("crafting-close-btn").addEventListener("click", () => this.closeCraftingStation());
+      document.getElementById("crafting-continuous-cb").addEventListener("change", (e) => {
+        this._craftContinuous = e.target.checked;
+      });
+      if (this.dragManager) this.dragManager.makeDraggable(panel);
+    }
+    panel.classList.remove("hidden");
+
+    // Restore continuous toggle state
+    const cb = document.getElementById("crafting-continuous-cb");
+    if (cb) cb.checked = this._craftContinuous;
+
+    const skillDef = this.game.data.gatheringSkills?.[skillId];
+    document.getElementById("crafting-title").textContent = skillDef ? skillDef.name : "Crafting";
+
+    this.renderCraftingPanel();
+  }
+
+  renderCraftingPanel() {
+    const skillId = this._craftingSkill;
+    if (!skillId) return;
+
+    const recipes = this.game.data.recipes || {};
+    const items = this.game.data.items || {};
+    const player = this.game.entities.player;
+    const playerSkill = player.gatheringSkills?.[skillId] || { level: 1, xp: 0 };
+    const sprites = this.game.sprites;
+
+    // Show skill level info
+    const skillInfo = document.getElementById("crafting-skill-info");
+    if (skillInfo) {
+      const xpNeeded = Math.floor(50 * Math.pow(1.5, playerSkill.level - 1));
+      skillInfo.textContent = `Level ${playerSkill.level}  ·  ${playerSkill.xp} / ${xpNeeded} XP`;
+    }
+
+    const grid = document.getElementById("crafting-grid");
+    if (!grid) return;
+    grid.textContent = "";
+
+    // Filter recipes for this skill
+    const skillRecipes = Object.values(recipes).filter(r => r.skill === skillId);
+    skillRecipes.sort((a, b) => a.requiredLevel - b.requiredLevel);
+
+    for (const recipe of skillRecipes) {
+      const row = document.createElement("div");
+      row.className = "crafting-item";
+
+      const locked = playerSkill.level < recipe.requiredLevel;
+
+      // Output icon
+      const outDef = items[recipe.output.id];
+      const icon = sprites && sprites.get(`icons/${outDef?.icon || recipe.output.id}`);
+      if (icon) {
+        const img = document.createElement("img");
+        img.src = icon.src;
+        img.className = "item-icon";
+        img.width = 28;
+        img.height = 28;
+        row.append(img);
+      }
+
+      const info = document.createElement("div");
+      info.className = "crafting-item-info";
+
+      const nameLine = document.createElement("span");
+      nameLine.className = "crafting-item-name";
+      nameLine.textContent = recipe.name;
+      if (locked) nameLine.style.color = "var(--text-muted)";
+
+      // Input requirements line
+      const inputLine = document.createElement("span");
+      inputLine.className = "crafting-item-inputs";
+      const inputParts = [];
+      let canCraft = !locked;
+      for (const [itemId, qtyNeeded] of Object.entries(recipe.input)) {
+        let have = 0;
+        for (const slot of player.inventorySlots) {
+          if (slot && slot.id === itemId) have += (slot.qty || 1);
+        }
+        const tpl = items[itemId];
+        const iName = tpl?.name || itemId;
+        const enough = have >= qtyNeeded;
+        if (!enough) canCraft = false;
+        inputParts.push(`<span style="color:${enough ? "var(--text-main)" : "#cc4444"}">${have}/${qtyNeeded} ${iName}</span>`);
+      }
+      inputLine.innerHTML = inputParts.join(", ");
+
+      info.append(nameLine, inputLine);
+      row.append(info);
+
+      // XP + level info
+      const meta = document.createElement("span");
+      meta.className = "crafting-item-meta";
+      meta.textContent = locked ? `Lv ${recipe.requiredLevel}` : `+${recipe.xp} XP`;
+      row.append(meta);
+
+      // Craft button
+      const craftBtn = document.createElement("button");
+      craftBtn.textContent = locked ? "🔒" : "Craft";
+      craftBtn.className = "btn-craft";
+      const isCrafting = this.game.crafting.active;
+      if (!canCraft || isCrafting) {
+        craftBtn.disabled = true;
+        craftBtn.classList.add("disabled");
+      }
+      craftBtn.addEventListener("click", () => {
+        if (this.game.network && canCraft && !this.game.crafting.active) {
+          this.game.startCrafting(recipe.id);
+        }
+      });
+      row.append(craftBtn);
+
+      if (outDef?.description) {
+        row.title = outDef.description;
+      }
+
+      grid.append(row);
+    }
+  }
+
+  closeCraftingStation() {
+    this.craftingOpen = false;
+    this._craftingSkill = null;
+    if (this.game.crafting.active) this.game.stopCrafting();
+    const panel = document.getElementById("crafting-panel");
+    if (panel) panel.classList.add("hidden");
+  }
+
+  showCraftingBar(durationSec, label) {
+    const container = document.getElementById("crafting-progress");
+    if (!container) return;
+    container.classList.remove("hidden");
+    document.getElementById("crafting-progress-label").textContent = label;
+    const fill = document.getElementById("crafting-progress-fill");
+    if (fill) fill.style.width = "0%";
+  }
+
+  hideCraftingBar() {
+    const container = document.getElementById("crafting-progress");
+    if (container) container.classList.add("hidden");
+  }
+
+  updateCraftingBar() {
+    if (!this.game.crafting.active) return;
+    const { timer, duration } = this.game.crafting;
+    const pct = Math.min(100, (timer / duration) * 100);
+    const fill = document.getElementById("crafting-progress-fill");
+    if (fill) fill.style.width = `${pct}%`;
+  }
+
+  /** Called from NetworkSystem when a craft succeeds — triggers continuous crafting if enabled */
+  onCraftSuccess(recipeId) {
+    if (this._craftContinuous && this.craftingOpen) {
+      // Check if we still have resources for another craft
+      const recipe = this.game.data.recipes?.[recipeId];
+      if (recipe) {
+        const player = this.game.entities.player;
+        const items = this.game.data.items || {};
+        let canCraft = true;
+        const playerSkill = player.gatheringSkills?.[recipe.skill] || { level: 1 };
+        if (playerSkill.level < recipe.requiredLevel) canCraft = false;
+        for (const [itemId, qtyNeeded] of Object.entries(recipe.input)) {
+          let have = 0;
+          for (const slot of player.inventorySlots) {
+            if (slot && slot.id === itemId) have += (slot.qty || 1);
+          }
+          if (have < qtyNeeded) canCraft = false;
+        }
+        if (canCraft) {
+          this.game.startCrafting(recipeId);
+          return;
+        }
+      }
+    }
+  }
+
+  /* ── Gathering progress bar (on-screen) ────────────── */
+
+  showGatherBar(durationSec, label) {
+    let container = document.getElementById("gather-bar-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "gather-bar-container";
+      container.className = "gather-bar-container";
+      container.innerHTML = `
+        <div class="gather-bar-label" id="gather-bar-label"></div>
+        <div class="gather-bar-track">
+          <div class="gather-bar-fill" id="gather-bar-fill"></div>
+        </div>
+      `;
+      document.getElementById("hud")?.append(container);
+    }
+    container.classList.remove("hidden");
+    document.getElementById("gather-bar-label").textContent = label;
+    const fill = document.getElementById("gather-bar-fill");
+    if (fill) fill.style.width = "0%";
+  }
+
+  hideGatherBar() {
+    const container = document.getElementById("gather-bar-container");
+    if (container) container.classList.add("hidden");
+  }
+
+  updateGatherBar() {
+    if (!this.game.gathering.active) return;
+    const { timer, cooldown } = this.game.gathering;
+    const pct = Math.min(100, (timer / cooldown) * 100);
+    const fill = document.getElementById("gather-bar-fill");
+    if (fill) fill.style.width = `${pct}%`;
   }
 
   /* ── Professions panel ─────────────────────────────── */

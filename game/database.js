@@ -65,6 +65,10 @@ db.exec(`
   alter("bank", "TEXT NOT NULL DEFAULT '[]'");
   alter("hotbar", "TEXT NOT NULL DEFAULT '[]'");
   alter("gathering_skills", "TEXT NOT NULL DEFAULT '{}'");
+  alter("map_id", "TEXT NOT NULL DEFAULT 'eldengrove'");
+  alter("pos_x", "REAL NOT NULL DEFAULT -1");
+  alter("pos_y", "REAL NOT NULL DEFAULT -1");
+  alter("floor", "INTEGER NOT NULL DEFAULT 0");
 }
 
 /* ── add expires_at to sessions if missing ──── */
@@ -87,9 +91,9 @@ const stmts = {
   countCharacters: db.prepare("SELECT COUNT(*) AS cnt FROM characters WHERE username = ?"),
   insertCharacter: db.prepare("INSERT INTO characters (username, name, char_class) VALUES (?, ?, ?)"),
   deleteCharacter: db.prepare("DELETE FROM characters WHERE id = ? AND username = ?"),
-  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
+  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, map_id AS mapId, pos_x AS posX, pos_y AS posY, floor, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
 
-  saveCharacter: db.prepare("UPDATE characters SET level = ?, xp = ?, gold = ?, hp = ?, mana = ?, inventory = ?, equipment = ?, quests = ?, hearthstone = ?, bank = ?, hotbar = ?, gathering_skills = ? WHERE id = ?"),
+  saveCharacter: db.prepare("UPDATE characters SET level = ?, xp = ?, gold = ?, hp = ?, mana = ?, inventory = ?, equipment = ?, quests = ?, hearthstone = ?, bank = ?, hotbar = ?, gathering_skills = ?, map_id = ?, pos_x = ?, pos_y = ?, floor = ? WHERE id = ?"),
 
   insertSession:  db.prepare("INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)"),
   getSession:     db.prepare("SELECT * FROM sessions WHERE token = ? AND expires_at > ?"),
@@ -251,6 +255,10 @@ function saveCharacterProgress(charId, data) {
     bank,
     hotbar,
     gatheringSkills,
+    data.mapId || "eldengrove",
+    data.posX ?? -1,
+    data.posY ?? -1,
+    data.floor ?? 0,
     charId
   );
 }

@@ -661,5 +661,101 @@
     "value": 15,
     "stackSize": 99,
     "description": "A large lobster. A delicacy when cooked."
+  },
+
+  "copperBar": {
+    "id": "copperBar",
+    "name": "Copper Bar",
+    "type": "material",
+    "icon": "copperBar",
+    "value": 8,
+    "stackSize": 99,
+    "description": "A refined copper bar. Used in basic crafting."
+  },
+  "tinBar": {
+    "id": "tinBar",
+    "name": "Tin Bar",
+    "type": "material",
+    "icon": "tinBar",
+    "value": 20,
+    "stackSize": 99,
+    "description": "A polished tin bar. Useful for alloy work."
+  },
+  "ironBar": {
+    "id": "ironBar",
+    "name": "Iron Bar",
+    "type": "material",
+    "icon": "ironBar",
+    "value": 50,
+    "stackSize": 99,
+    "description": "A heavy iron bar. The foundation of fine metalwork."
+  },
+
+  "oakPlank": {
+    "id": "oakPlank",
+    "name": "Oak Plank",
+    "type": "material",
+    "icon": "oakPlank",
+    "value": 8,
+    "stackSize": 99,
+    "description": "A smooth oak plank. Good for general carpentry."
+  },
+  "maplePlank": {
+    "id": "maplePlank",
+    "name": "Maple Plank",
+    "type": "material",
+    "icon": "maplePlank",
+    "value": 20,
+    "stackSize": 99,
+    "description": "A sturdy maple plank. Prized for fine woodwork."
+  },
+  "yewPlank": {
+    "id": "yewPlank",
+    "name": "Yew Plank",
+    "type": "material",
+    "icon": "yewPlank",
+    "value": 50,
+    "stackSize": 99,
+    "description": "An elegant yew plank. Ideal for bows and staves."
+  },
+
+  "grilledTrout": {
+    "id": "grilledTrout",
+    "name": "Grilled Trout",
+    "type": "consumable",
+    "icon": "grilledTrout",
+    "effect": "healHp",
+    "power": 80,
+    "value": 8,
+    "stackSize": 20,
+    "description": "A simply grilled trout. Restores 80 HP.",
+    "useSfx": "pickup",
+    "useParticle": "heal"
+  },
+  "bakedSalmon": {
+    "id": "bakedSalmon",
+    "name": "Baked Salmon",
+    "type": "consumable",
+    "icon": "bakedSalmon",
+    "effect": "healHp",
+    "power": 180,
+    "value": 20,
+    "stackSize": 20,
+    "description": "Oven-baked salmon with herbs. Restores 180 HP.",
+    "useSfx": "pickup",
+    "useParticle": "heal"
+  },
+  "roastedLobster": {
+    "id": "roastedLobster",
+    "name": "Roasted Lobster",
+    "type": "consumable",
+    "icon": "roastedLobster",
+    "effect": "healHp",
+    "power": 350,
+    "value": 50,
+    "stackSize": 20,
+    "description": "A lavish roasted lobster feast. Restores 350 HP.",
+    "useSfx": "pickup",
+    "useParticle": "heal"
   }
 }

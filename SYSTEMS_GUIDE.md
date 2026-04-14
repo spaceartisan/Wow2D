@@ -32,18 +32,10 @@ All values are sourced directly from the codebase. If something below disagrees 
 23. [Authority Model](#23-authority-model)
 24. [Message Catalog](#24-message-catalog)
 25. [Gathering System](#25-gathering-system)
-26. [Label Toggles & Hover Names](#26-label-toggles--hover-names)
-27. [End-to-End Flow Examples](#27-end-to-end-flow-examples)
-17. [Client Projectile System](#17-client-projectile-system)
-18. [Particle System](#18-particle-system)
-19. [Audio System](#19-audio-system)
-20. [Camera](#20-camera)
-21. [Render Order](#21-render-order)
-22. [Client Update Order](#22-client-update-order)
-23. [Authority Model](#23-authority-model)
-24. [Message Catalog](#24-message-catalog)
-25. [End-to-End Flow Examples](#25-end-to-end-flow-examples)
-26. [Glossary](#26-glossary)
+26. [Crafting System](#26-crafting-system)
+27. [Label Toggles & Hover Names](#27-label-toggles--hover-names)
+28. [End-to-End Flow Examples](#28-end-to-end-flow-examples)
+29. [Glossary](#29-glossary)
 
 ---
 
@@ -1148,7 +1140,7 @@ A clear breakdown of what runs where and who has the final say.
 
 Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
 
-### Client → Server (24 types)
+### Client → Server (25 types)
 
 | `type` | Payload | Handler |
 |--------|---------|---------|
@@ -1175,13 +1167,14 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `swap_items` | `from`, `to`, `fromContainer`, `toContainer` | `handleSwapItems()` |
 | `drop_item` | `index` | `handleDropItem()` |
 | `gather` | `nodeId` | `handleGather()` |
+| `craft` | `recipeId` | `handleCraft()` |
 | `respawn` | *(none)* | *(no-op — death timer auto-respawns)* |
 
-### Server → Client — Unicast (31 types)
+### Server → Client — Unicast (32 types)
 
 | `type` | Key payload fields | Sent by |
 |--------|--------------------|---------|
-| `welcome` | `playerId`, `tick`, `tickRate`, `enemies[]`, `players[]`, `drops[]`, full inventory/equipment/stats/quests/bank/hotbar | `addPlayer()` |
+| `welcome` | `playerId`, `tick`, `tickRate`, `mapId`, `x`, `y`, `floor`, `enemies[]`, `players[]`, `drops[]`, `gatheringSkills`, `resourceNodes`, full inventory/equipment/stats/quests/bank/hotbar | `addPlayer()` |
 | `state` | `tick`, `enemies[]`, `players[]`, `drops[]`, `you{…}` | `broadcastWorldState()` — per-player |
 | `attack_result` | `enemyId`, `damage`, `enemyHp`, `enemyMaxHp` | `handleAttack()`, `_resolveProjectileHit()` |
 | `enemy_killed` | `enemyId`, `enemyType`, `xpReward` | `killEnemy()` |
@@ -1209,6 +1202,7 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `swap_result` | `ok`, `inventory[]`, `bank[]` | `handleSwapItems()` |
 | `drop_item_result` | `ok`, `inventory[]`, `message` | `handleDropItem()` |
 | `gather_result` | `success`, `reason?`, `itemId?`, `itemName?`, `inventory?`, `gatheringSkills?`, `skillId?`, `xpGained?`, `leveledUp?`, `newLevel?` | `handleGather()` |
+| `craft_result` | `success`, `reason?`, `recipeId?`, `outputItem?`, `inventory?`, `gatheringSkills?`, `xpGained?`, `leveledUp?`, `newLevel?` | `handleCraft()` |
 | `auth_error` | `error` | `server.js` auth |
 | `kicked` | `reason` | `server.js` duplicate-login / admin |
 | `chat` | `channel`, `from`, `text`, `playerId?`, `to?` | `handleChat()` / admin |
@@ -1257,13 +1251,13 @@ The client's `onCombatVisual()` handler branches on `projectileHit`, `selfTarget
 
 ---
 
-## 27. End-to-End Flow Examples
+## 28. End-to-End Flow Examples
 
 Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 27a. Melee Attack
+### 28a. Melee Attack
 
 ```
 1. Player clicks enemy                      [client — CombatSystem.handleWorldClick]
@@ -1298,7 +1292,7 @@ Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 27b. Ranged Attack (Bow)
+### 28b. Ranged Attack (Bow)
 
 ```
 1. Player clicks enemy                      [client]
@@ -1341,7 +1335,7 @@ Key difference from melee: **damage is deferred**. The server's invisible projec
 
 ---
 
-### 27c. Player Death and Respawn
+### 28c. Player Death and Respawn
 
 ```
 1. Enemy attacks player in updateEnemyAi()  [server]
@@ -1381,7 +1375,7 @@ The `respawn` client→server message is a no-op. Respawn is entirely timer-driv
 
 ---
 
-### 27d. Equipping an Item
+### 28d. Equipping an Item
 
 ```
 1. Player clicks weapon in inventory        [client — UISystem]
@@ -1421,7 +1415,7 @@ The client's optimistic swap gives instant UI feedback. The server response over
 
 ---
 
-### 27e. Map Change via Portal
+### 28e. Map Change via Portal
 
 ```
 1. checkPortals() detects overlap           [client — Game.update, every frame]
@@ -1458,7 +1452,7 @@ The client loads map data *first*, then tells the server. If the server rejects 
 
 ---
 
-### 27f. Buying from a Shop
+### 28f. Buying from a Shop
 
 ```
 1. Player clicks "Buy" in shop UI           [client — UISystem]
@@ -1504,8 +1498,10 @@ Players harvest resource nodes (ore veins, trees, fish spots) placed on maps. Th
 ### Gather flow
 
 1. **Client:** Player presses `E` near a resource node → `startGathering(nodeId)`.
-2. **Client:** `updateGathering(dt)` runs each frame — on 2.5s cooldown, sends `{ type: "gather", nodeId }`.
-3. **Server:** `handleGather(player, msg)` validates:
+2. **Client:** Validates the player has the correct tool type and tier in inventory before proceeding. If no valid tool, a chat error message is shown and gathering does not begin.
+3. **Client:** A green-themed gathering progress bar appears, counting up from 0 to 2.5s.
+4. **Client:** `updateGathering(dt)` runs each frame — on 2.5s cooldown completion, sends `{ type: "gather", nodeId }`.
+5. **Server:** `handleGather(player, msg)` validates:
    - Player is alive, not on cooldown (150 ticks = 2.5s at 60 Hz)
    - Node exists, is active, on same floor, and within 60px range
    - Player has the required gathering skill level
@@ -1513,7 +1509,7 @@ Players harvest resource nodes (ore veins, trees, fish spots) placed on maps. Th
    - Player has inventory space
 4. **Server:** Grants item, awards XP, decrements node harvests. If harvests reach 0, node becomes inactive and starts respawn timer.
 5. **Server:** Sends `gather_result` with updated inventory and skill state.
-6. **Client:** `onGatherResult(msg)` syncs inventory and gathering skills, shows status message.
+6. **Client:** `onGatherResult(msg)` syncs inventory and gathering skills, shows status message. If still gathering, the progress bar re-shows for the next attempt.
 
 ### Auto-gather cancellation
 
@@ -1547,11 +1543,72 @@ Each node type has a `respawnTicks` value. When all harvests are consumed, node 
 
 ### Professions panel
 
-Opened with `G` key. Shows each profession's name, description, current level, and an XP progress bar. XP bar shows `currentXP / xpToLevel`.
+Opened with `G` key. Shows each profession's name, description, current level, and an XP progress bar. XP bar shows `currentXP / xpToLevel`. Includes both gathering professions (Mining, Logging, Fishing) and processing professions (Smelting, Milling, Cooking).
 
 ---
 
-## 26. Label Toggles & Hover Names
+## 26. Crafting System
+
+**Files:** `game/ServerWorld.js` (`handleCraft()`), `public/js/systems/UISystem.js` (crafting panel rendering), `public/js/systems/NetworkSystem.js` (`sendCraft()`, `onCraftResult()`), `public/data/recipes.json`, `public/data/gatheringSkills.json`
+
+### Overview
+
+Players process raw gathered materials into refined items (bars, planks, cooked meals) at crafting station NPCs. Three processing professions — Smelting, Milling, Cooking — have independent XP and levels, sharing the same gatheringSkills data structure as gathering professions but marked with `category: "processing"`.
+
+### Data files
+
+| File | Purpose |
+|------|---------|
+| `recipes.json` | Defines 9 recipes (3 per processing profession, levels 1/10/20) |
+| `gatheringSkills.json` | Defines 6 professions (3 gathering + 3 processing with `category: "processing"`) |
+| `npcs.json` | Crafting station NPCs with `type: "crafting_station"` and `craftingSkill` field |
+
+### Crafting station NPCs
+
+| NPC ID | Name | Skill |
+|--------|------|-------|
+| `smelter_hilda` | Smelter Hilda | `smelting` |
+| `sawyer_brom` | Sawyer Brom | `milling` |
+| `cook_marta` | Cook Marta | `cooking` |
+
+### Craft flow
+
+1. **Client:** Player interacts (`E`) with a crafting station NPC → crafting panel opens showing recipes for that NPC's `craftingSkill`.
+2. **Client:** Player selects a recipe and clicks "Craft". A copper-themed progress bar appears, counting up from 0 to `craftTime`.
+3. **Client:** On timer completion, sends `{ type: "craft", recipeId }` to server.
+4. **Server:** `handleCraft(player, msg)` validates:
+   - Recipe exists in `RECIPES`
+   - Player is near a `crafting_station` NPC with matching `craftingSkill`
+   - Player has the required processing skill level
+   - Player has all required input materials in inventory
+   - Player has inventory space for the output item
+5. **Server:** Consumes input materials, grants output item, awards XP. If level-up occurs, sends updated level.
+6. **Server:** Sends `craft_result` with updated inventory and skill state.
+7. **Server:** Calls `_savePlayer()` to persist progress.
+8. **Client:** `onCraftResult(msg)` syncs inventory and gathering skills, shows status message.
+
+### Continuous crafting
+
+A toggle checkbox in the crafting panel enables continuous mode. When enabled, after a successful craft the client automatically begins the next craft of the same recipe (if materials remain).
+
+### XP formula
+
+Processing professions use the same XP curve as gathering:
+
+$$
+\text{xpToLevel}(n) = \lfloor 50 \times 1.5^{(n-1)} \rfloor
+$$
+
+### Server validation
+
+The server checks proximity to a crafting station NPC by iterating NPCs on the player's current map and verifying:
+- NPC type is `crafting_station`
+- NPC's `craftingSkill` matches the recipe's `skill`
+- Player is within range (tileSize)
+
+---
+
+## 27. Label Toggles & Hover Names
 
 **Files:** `public/js/core/Game.js` (`labelToggles`), `public/js/systems/EntitySystem.js` (conditional label rendering, `_drawHoverName()`), `public/js/systems/WorldSystem.js` (portal/building label guards), `public/js/systems/UISystem.js` (toggle button binding, floor indicator guard)
 
@@ -1594,7 +1651,7 @@ When a player changes floors via stairs, their position is snapped to the center
 
 ---
 
-### 25g. Using a Consumable (Health Potion)
+### 28g. Using a Consumable (Health Potion)
 
 ```
 1. Player clicks potion in inventory/hotbar [client — UISystem]
@@ -1618,7 +1675,7 @@ When a player changes floors via stairs, their position is snapped to the center
 
 ---
 
-## 26. Glossary
+## 29. Glossary
 
 | Term | Definition |
 |------|-----------|

@@ -250,6 +250,10 @@ export class NetworkSystem {
     this.send({ type: "gather", nodeId });
   }
 
+  sendCraft(recipeId) {
+    this.send({ type: "craft", recipeId });
+  }
+
   sendBuyItem(itemId, npcId) {
     this.send({ type: "buy_item", itemId, npcId });
   }
@@ -417,6 +421,9 @@ export class NetworkSystem {
       case "gather_result":
         this.onGatherResult(msg);
         break;
+      case "craft_result":
+        this.onCraftResult(msg);
+        break;
       case "auth_error":
         this._intentionalClose = true;
         this.game.ui.addMessage(`[System] ${msg.error}`);
@@ -496,6 +503,12 @@ export class NetworkSystem {
 
     // Load authoritative inventory, equipment, and stats from server
     const player = this.game.entities.player;
+
+    // Set player position from server
+    if (msg.x !== undefined) player.x = msg.x;
+    if (msg.y !== undefined) player.y = msg.y;
+    if (msg.floor !== undefined) player.floor = msg.floor;
+
     if (msg.inventory) {
       for (let i = 0; i < 20; i++) {
         player.inventorySlots[i] = msg.inventory[i] || null;
@@ -560,6 +573,17 @@ export class NetworkSystem {
     // Load resource nodes
     if (msg.resourceNodes) {
       this.game.entities.resourceNodes = msg.resourceNodes;
+    }
+
+    // If the server placed us on a different map, load it
+    if (msg.mapId && msg.mapId !== this.game.world.mapId) {
+      this.game.world.loadMap(msg.mapId).then(() => {
+        this.game.entities.npcs = this.game.entities.createNpcs();
+        this.game.entities.statues = this.game.entities.createStatues();
+        this.game.minimap.invalidate();
+        this.game._syncMapParticles();
+        this.game.centerCameraOnPlayer();
+      });
     }
 
     this.game.ui.addMessage("Connected to server.");
@@ -1360,6 +1384,40 @@ export class NetworkSystem {
     this.game.ui.addMessage(`You gathered ${msg.itemName}. (+${msg.xpGained} ${msg.skillId} XP)`);
     if (msg.leveledUp) {
       this.game.ui.addMessage(`${msg.skillId.charAt(0).toUpperCase() + msg.skillId.slice(1)} leveled up to ${msg.newLevel}!`, "gold");
+    }
+    // Re-show gather bar for next cycle if still gathering
+    if (this.game.gathering.active) {
+      this.game.ui.showGatherBar(this.game.gathering.cooldown, "Gathering...");
+    }
+  }
+
+  onCraftResult(msg) {
+    if (!msg.success) {
+      this.game.ui.addMessage(msg.reason || "Cannot craft that.");
+      this.game.stopCrafting();
+      return;
+    }
+    const player = this.game.entities.player;
+    if (msg.inventory) {
+      for (let i = 0; i < player.inventorySlots.length; i++) {
+        player.inventorySlots[i] = msg.inventory[i] || null;
+      }
+    }
+    if (msg.gatheringSkills) {
+      player.gatheringSkills = msg.gatheringSkills;
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
+    this.game.audio.play("pickup");
+    this.game.ui.addMessage(`You crafted ${msg.itemName}. (+${msg.xpGained} ${msg.skillId} XP)`);
+    if (msg.leveledUp) {
+      this.game.ui.addMessage(`${msg.skillId.charAt(0).toUpperCase() + msg.skillId.slice(1)} leveled up to ${msg.newLevel}!`, "gold");
+    }
+    // Refresh crafting panel if open
+    if (this.game.ui.craftingOpen) {
+      this.game.ui.renderCraftingPanel();
+      // Trigger continuous crafting if enabled
+      this.game.ui.onCraftSuccess(msg.recipeId);
     }
   }
 

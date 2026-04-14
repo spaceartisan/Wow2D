@@ -191,7 +191,7 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 | `id` | string | Must match the object key |
 | `name` | string | Display name shown above head |
 | `color` | string | Hex color fallback |
-| `type` | string | `"quest_giver"`, `"vendor"`, `"banker"`, or `"gathering"` |
+| `type` | string | `"quest_giver"`, `"vendor"`, `"banker"`, `"gathering"`, or `"crafting_station"` |
 | `defaultDialog` | string | Greeting text when no quest/shop action |
 | `questIds` | string[] | Quest IDs this NPC offers (quest_giver only) |
 | `shop` | string[] | Item IDs this NPC sells (vendor only) |
@@ -199,6 +199,8 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 **Banker NPCs** use `type: "banker"` and only need `id`, `name`, `color`, `type`, and `defaultDialog`. When the player interacts with a banker, a 48-slot bank panel opens for storage.
 
 **Gathering NPCs** use `type: "gathering"` and include a `shop` array of gathering tool item IDs. They sell tools for mining, logging, and fishing.
+
+**Crafting Station NPCs** use `type: "crafting_station"` and include a `craftingSkill` field indicating which processing profession they serve. When the player interacts, a crafting panel opens showing recipes for that skill. Requires `craftingSkill` field (one of `"smelting"`, `"milling"`, or `"cooking"`).
 
 **Examples:**
 ```json
@@ -228,6 +230,17 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
   "color": "#C8A820",
   "type": "banker",
   "defaultDialog": "Need to store something? I'll keep it safe."
+}
+```
+```json
+"smelter_hilda": {
+  "id": "smelter_hilda",
+  "name": "Smelter Hilda",
+  "color": "#e07030",
+  "type": "crafting_station",
+  "craftingSkill": "smelting",
+  "defaultDialog": "The forge burns hot. Bring me your ores and I'll smelt them down.",
+  "questIds": []
 }
 ```
 
@@ -667,7 +680,7 @@ Used by the `tileModifiers` system in map JSON files (see MAP_GUIDE.md):
 
 ## gatheringSkills.json
 
-Top-level object keyed by skill ID. Defines the three gathering professions. The client loads this at startup for the Professions panel (G key).
+Top-level object keyed by skill ID. Defines gathering and processing professions. The client loads this at startup for the Professions panel (G key). Skills with `category: "processing"` are processing professions used for crafting at crafting stations, not for gathering resource nodes.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -675,9 +688,10 @@ Top-level object keyed by skill ID. Defines the three gathering professions. The
 | `name` | string | Display name in the professions panel |
 | `description` | string | Tooltip/description text |
 | `icon` | string | Icon identifier (currently unused by sprites — text-based display) |
-| `toolType` | string | The `toolType` value required in items.json tools for this profession |
+| `toolType` | string | *(gathering only)* The `toolType` value required in items.json tools for this profession |
+| `category` | string | *(optional)* `"processing"` for crafting professions. Omit for gathering professions. |
 
-**Current skills:**
+### Gathering professions
 
 | ID | Name | Tool Type |
 |----|------|-----------|
@@ -685,7 +699,15 @@ Top-level object keyed by skill ID. Defines the three gathering professions. The
 | `logging` | Logging | `hatchet` |
 | `fishing` | Fishing | `fishing_rod` |
 
-**Example:**
+### Processing professions
+
+| ID | Name | Category |
+|----|------|----------|
+| `smelting` | Smelting | processing |
+| `milling` | Milling | processing |
+| `cooking` | Cooking | processing |
+
+**Examples:**
 ```json
 "mining": {
   "id": "mining",
@@ -695,6 +717,66 @@ Top-level object keyed by skill ID. Defines the three gathering professions. The
   "toolType": "pickaxe"
 }
 ```
+```json
+"smelting": {
+  "id": "smelting",
+  "name": "Smelting",
+  "description": "Smelt raw ores into refined metal bars.",
+  "icon": "smelting",
+  "category": "processing"
+}
+```
+
+---
+
+## recipes.json
+
+Top-level object keyed by recipe ID. Defines crafting recipes for processing professions. Players craft at crafting station NPCs that match the recipe's skill. The server loads this at startup.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Must match the object key |
+| `name` | string | Display name of the crafted item |
+| `skill` | string | Processing skill required (`"smelting"`, `"milling"`, or `"cooking"`) |
+| `requiredLevel` | number | Minimum skill level required |
+| `xp` | number | Skill XP awarded on successful craft |
+| `input` | object | Map of `itemId → quantity` for required materials |
+| `output` | object | `{ id: string, qty: number }` — the item produced |
+| `craftTime` | number | Seconds to complete the craft |
+
+### Current recipes
+
+| Recipe ID | Name | Skill | Level | Input | Output | Time |
+|-----------|------|-------|-------|-------|--------|------|
+| `smelt_copper` | Copper Bar | Smelting | 1 | 2× Copper Ore | 1× Copper Bar | 2.0s |
+| `smelt_tin` | Tin Bar | Smelting | 10 | 2× Tin Ore | 1× Tin Bar | 2.5s |
+| `smelt_iron` | Iron Bar | Smelting | 20 | 3× Iron Ore | 1× Iron Bar | 3.0s |
+| `mill_oak` | Oak Plank | Milling | 1 | 2× Oak Log | 1× Oak Plank | 2.0s |
+| `mill_maple` | Maple Plank | Milling | 10 | 2× Maple Log | 1× Maple Plank | 2.5s |
+| `mill_yew` | Yew Plank | Milling | 20 | 3× Yew Log | 1× Yew Plank | 3.0s |
+| `cook_trout` | Grilled Trout | Cooking | 1 | 1× Raw Trout | 1× Grilled Trout | 1.5s |
+| `cook_salmon` | Baked Salmon | Cooking | 10 | 1× Raw Salmon | 1× Baked Salmon | 2.0s |
+| `cook_lobster` | Roasted Lobster | Cooking | 20 | 1× Raw Lobster | 1× Roasted Lobster | 2.5s |
+
+**Example:**
+```json
+"smelt_copper": {
+  "id": "smelt_copper",
+  "name": "Copper Bar",
+  "skill": "smelting",
+  "requiredLevel": 1,
+  "xp": 12,
+  "input": { "copperOre": 2 },
+  "output": { "id": "copperBar", "qty": 1 },
+  "craftTime": 2.0
+}
+```
+
+**To add a recipe:**
+1. Add the entry to `recipes.json` with a unique key
+2. Ensure the `skill` matches a processing profession in `gatheringSkills.json`
+3. Ensure all `input` item IDs and the `output.id` exist in `items.json`
+4. Place the player near a crafting station NPC with matching `craftingSkill` to craft
 
 ---
 

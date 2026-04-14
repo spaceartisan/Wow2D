@@ -41,6 +41,7 @@ export class Game {
 
     // Auto-gathering state
     this.gathering = { active: false, nodeId: null, timer: 0, cooldown: 2.5 };
+    this.crafting = { active: false, recipeId: null, timer: 0, duration: 0, continuous: false };
 
     // Label visibility toggles (all off by default)
     this.labelToggles = {
@@ -61,7 +62,7 @@ export class Game {
     window.addEventListener("resize", this._resizeBound);
 
     // Load all data-driven JSON files in parallel
-    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs] = await Promise.all([
+    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes] = await Promise.all([
       fetch("/data/items.json").then(r => r.json()),
       fetch("/data/enemies.json").then(r => r.json()),
       fetch("/data/npcs.json").then(r => r.json()),
@@ -69,9 +70,10 @@ export class Game {
       fetch("/data/skills.json").then(r => r.json()),
       fetch("/data/statusEffects.json").then(r => r.json()),
       fetch("/data/gatheringSkills.json").then(r => r.json()),
-      fetch("/data/resourceNodes.json").then(r => r.json())
+      fetch("/data/resourceNodes.json").then(r => r.json()),
+      fetch("/data/recipes.json").then(r => r.json())
     ]);
-    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs };
+    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes };
 
     // Load the starting map
     await this.world.loadMap("eldengrove");
@@ -201,6 +203,7 @@ export class Game {
     }
 
     this.updateGathering(dt);
+    this.updateCrafting(dt);
     this.entities.update(dt);
     this.combat.update(dt);
     this.projectiles.update(dt);
@@ -509,11 +512,32 @@ export class Game {
   /* ── Auto-gathering ────────────────────────────────── */
 
   startGathering(nodeId) {
+    // Pre-check: does the player have the required tool?
+    const node = this.entities.resourceNodes.find(n => n.id === nodeId);
+    if (!node) return;
+    const def = this.data.resourceNodeDefs?.[node.type];
+    if (def) {
+      const reqType = def.requiredToolType;
+      const reqTier = def.requiredToolTier;
+      const slots = this.entities.player.inventorySlots;
+      const items = this.data.items;
+      let hasTool = false;
+      for (const slot of slots) {
+        if (!slot || slot.type !== "tool") continue;
+        const tpl = items[slot.id];
+        if (tpl && tpl.toolType === reqType && tpl.toolTier >= reqTier) { hasTool = true; break; }
+      }
+      if (!hasTool) {
+        const toolName = reqType.replace(/_/g, " ");
+        this.ui.addMessage(`You need a ${toolName} (tier ${reqTier}+) to gather this.`);
+        return;
+      }
+    }
+
     this.gathering.active = true;
     this.gathering.nodeId = nodeId;
-    this.gathering.timer = 0; // fire first gather immediately
-    this.network.sendGather(nodeId);
-    this.gathering.timer = this.gathering.cooldown;
+    this.gathering.timer = 0;
+    this.ui.showGatherBar(this.gathering.cooldown, "Gathering...");
   }
 
   stopGathering() {
@@ -521,6 +545,7 @@ export class Game {
       this.gathering.active = false;
       this.gathering.nodeId = null;
       this.gathering.timer = 0;
+      this.ui.hideGatherBar();
     }
   }
 
@@ -544,11 +569,57 @@ export class Game {
     const dx = player.x - node.x, dy = player.y - node.y;
     if (Math.sqrt(dx * dx + dy * dy) > 60) { this.stopGathering(); return; }
 
-    // Cooldown timer
-    this.gathering.timer -= dt;
-    if (this.gathering.timer <= 0) {
+    // Progress timer — send gather when bar fills
+    this.gathering.timer += dt;
+    if (this.gathering.timer >= this.gathering.cooldown) {
       this.network.sendGather(this.gathering.nodeId);
-      this.gathering.timer = this.gathering.cooldown;
+      this.gathering.timer = 0; // reset for next cycle
+    }
+  }
+
+  /* ── Crafting with progress ─────────────────────────── */
+
+  startCrafting(recipeId) {
+    const recipe = this.data.recipes?.[recipeId];
+    if (!recipe) return;
+    this.crafting.active = true;
+    this.crafting.recipeId = recipeId;
+    this.crafting.duration = recipe.craftTime;
+    this.crafting.timer = 0;
+    this.ui.showCraftingBar(recipe.craftTime, `Crafting ${recipe.name}...`);
+  }
+
+  stopCrafting() {
+    if (this.crafting.active) {
+      this.crafting.active = false;
+      this.crafting.recipeId = null;
+      this.crafting.timer = 0;
+      this.crafting.duration = 0;
+      this.ui.hideCraftingBar();
+    }
+  }
+
+  updateCrafting(dt) {
+    if (!this.crafting.active) return;
+
+    const player = this.entities.player;
+    if (player.dead) { this.stopCrafting(); return; }
+
+    // Cancel if player moves
+    const inp = this.input;
+    if (inp.isDown("w","arrowup") || inp.isDown("a","arrowleft") ||
+        inp.isDown("s","arrowdown") || inp.isDown("d","arrowright")) {
+      this.stopCrafting();
+      return;
+    }
+
+    this.crafting.timer += dt;
+    if (this.crafting.timer >= this.crafting.duration) {
+      // Timer done — send craft to server
+      this.network.sendCraft(this.crafting.recipeId);
+      this.crafting.active = false;
+      this.crafting.timer = 0;
+      this.ui.hideCraftingBar();
     }
   }
 

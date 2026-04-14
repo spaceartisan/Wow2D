@@ -183,7 +183,8 @@ NPC placements reference definitions in `public/data/npcs.json`.
 ```json
 "npcs": [
   { "npcId": "elder_rowan", "tx": 26, "ty": 24, "floor": 0 },
-  { "npcId": "blacksmith_kael", "tx": 30, "ty": 34, "floor": 0 }
+  { "npcId": "blacksmith_kael", "tx": 30, "ty": 34, "floor": 0 },
+  { "npcId": "smelter_hilda", "tx": 32, "ty": 28, "floor": 0 }
 ]
 ```
 
@@ -191,7 +192,7 @@ NPC placements reference definitions in `public/data/npcs.json`.
 - `tx`, `ty` — Tile position
 - `floor` — Which floor the NPC is on (`0` = ground, `1` = 2nd floor, etc.). NPCs are only visible and interactable when the player is on the same floor. Defaults to `0` if omitted.
 
-The NPC's dialogue, quest assignments, shop inventory, and appearance are all defined in `npcs.json`, not in the map file.
+NPC types include `quest_giver`, `vendor`, and `crafting_station`. Crafting station NPCs (e.g. `smelter_hilda`, `sawyer_brom`, `cook_marta`) have a `craftingSkill` field in `npcs.json` that determines which recipes the player can craft at that station. The NPC's dialogue, quest assignments, shop inventory, crafting skill, and appearance are all defined in `npcs.json`, not in the map file.
 
 ## Statues (Waystones)
 

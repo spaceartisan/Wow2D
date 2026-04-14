@@ -19,6 +19,7 @@ const GLOBAL_PALETTE = JSON.parse(fs.readFileSync(path.join(dataDir, "tilePalett
 const PROP_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "props.json"), "utf8"));
 const RESOURCE_NODE_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "resourceNodes.json"), "utf8"));
 const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatheringSkills.json"), "utf8"));
+const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
 const PLAYER_BASE = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
@@ -269,7 +270,24 @@ class ServerWorld {
 
   addPlayer(ws, charData) {
     const id = `p${nextPlayerId++}`;
-    const mapId = this.defaultMapId;
+
+    // Restore saved map/position, or fall back to default spawn
+    let mapId = this.defaultMapId;
+    let spawnX, spawnY, spawnFloor = 0;
+
+    if (charData.mapId && this.maps.has(charData.mapId) &&
+        typeof charData.posX === "number" && charData.posX >= 0 &&
+        typeof charData.posY === "number" && charData.posY >= 0) {
+      mapId = charData.mapId;
+      spawnX = charData.posX;
+      spawnY = charData.posY;
+      spawnFloor = charData.floor || 0;
+    } else {
+      const mapEntry = this.maps.get(mapId);
+      spawnX = mapEntry.collision.spawnPoint.x;
+      spawnY = mapEntry.collision.spawnPoint.y;
+    }
+
     const mapEntry = this.maps.get(mapId);
 
     const level = Math.max(1, Math.min(100, Number(charData.level) || 1));
@@ -291,9 +309,9 @@ class ServerWorld {
       level,
       xp,
       gold,
-      x: mapEntry.collision.spawnPoint.x,
-      y: mapEntry.collision.spawnPoint.y,
-      floor: 0,
+      x: spawnX,
+      y: spawnY,
+      floor: spawnFloor,
       hp: clamp(Number(charData.hp) || maxHp, 1, maxHp),
       maxHp,
       mana: clamp(Number(charData.mana) || maxMana, 0, maxMana),
@@ -402,6 +420,7 @@ class ServerWorld {
     this.send(ws, {
       type: "welcome",
       playerId: id,
+      mapId,
       tick: this.tickCount,
       tickRate: this.tickRate,
       enemies: this.enemySnapshot(mapId),
@@ -422,7 +441,10 @@ class ServerWorld {
       mana: state.mana,
       maxMana: state.maxMana,
       gatheringSkills: state.gatheringSkills,
-      resourceNodes: this.resourceNodeSnapshot(mapId)
+      resourceNodes: this.resourceNodeSnapshot(mapId),
+      x: state.x,
+      y: state.y,
+      floor: state.floor || 0
     });
 
     // tell everyone else on the same map a player joined
@@ -439,27 +461,9 @@ class ServerWorld {
     const p = this.players.get(id);
     const mapId = p?.mapId;
 
-    // H3: Save character progression to DB
+    // Save character progression to DB
     if (p && p.charId) {
-      try {
-        const database = require("./database");
-        database.saveCharacterProgress(p.charId, {
-          level: p.level,
-          xp: p.xp || 0,
-          gold: p.gold || 0,
-          hp: p.hp,
-          mana: p.mana,
-          inventory: p.inventory || [],
-          equipment: p.equipment || {},
-          quests: p.quests || {},
-          hearthstone: p.hearthstone || null,
-          bank: p.bank || [],
-          hotbar: p.hotbar || [],
-          gatheringSkills: p.gatheringSkills || {}
-        });
-      } catch (err) {
-        console.error(`[ServerWorld] Failed to save progress for ${p.name}:`, err.message);
-      }
+      this._savePlayer(p);
     }
 
     this.players.delete(id);
@@ -551,6 +555,9 @@ class ServerWorld {
         break;
       case "gather":
         this.handleGather(player, msg);
+        break;
+      case "craft":
+        this.handleCraft(player, msg);
         break;
       case "respawn":
         // client signals it's ready to respawn
@@ -1545,6 +1552,8 @@ class ServerWorld {
       mana: player.mana,
       maxMana: player.maxMana
     });
+
+    this._savePlayer(player);
   }
 
   /* ── Hearthstone ────────────────────────────────────── */
@@ -2025,6 +2034,9 @@ class ServerWorld {
       player.mana = player.maxMana;
       xpToLevel = this._xpToLevelForLevel(player.level);
     }
+
+    // Save after any XP grant (covers level-ups, enemy kills, etc)
+    this._savePlayer(player);
   }
 
   /* ── enemy management ───────────────────────────────── */
@@ -2292,27 +2304,35 @@ class ServerWorld {
   }
 
   _autoSaveAll() {
-    const database = require("./database");
     for (const [, p] of this.players) {
-      if (!p.charId) continue;
-      try {
-        database.saveCharacterProgress(p.charId, {
-          level: p.level,
-          xp: p.xp || 0,
-          gold: p.gold || 0,
-          hp: p.hp,
-          mana: p.mana,
-          inventory: p.inventory || [],
-          equipment: p.equipment || {},
-          quests: p.quests || {},
-          hearthstone: p.hearthstone || null,
-          bank: p.bank || [],
-          hotbar: p.hotbar || [],
-          gatheringSkills: p.gatheringSkills || {}
-        });
-      } catch (err) {
-        console.error(`[ServerWorld] Auto-save failed for ${p.name}:`, err.message);
-      }
+      this._savePlayer(p);
+    }
+  }
+
+  _savePlayer(p) {
+    if (!p || !p.charId) return;
+    try {
+      const database = require("./database");
+      database.saveCharacterProgress(p.charId, {
+        level: p.level,
+        xp: p.xp || 0,
+        gold: p.gold || 0,
+        hp: p.hp,
+        mana: p.mana,
+        inventory: p.inventory || [],
+        equipment: p.equipment || {},
+        quests: p.quests || {},
+        hearthstone: p.hearthstone || null,
+        bank: p.bank || [],
+        hotbar: p.hotbar || [],
+        gatheringSkills: p.gatheringSkills || {},
+        mapId: p.mapId,
+        posX: p.x,
+        posY: p.y,
+        floor: p.floor || 0
+      });
+    } catch (err) {
+      console.error(`[ServerWorld] Save failed for ${p.name}:`, err.message);
     }
   }
 
@@ -3164,6 +3184,119 @@ class ServerWorld {
       leveledUp,
       newLevel: playerSkill.level
     });
+
+    this._savePlayer(player);
+  }
+
+  handleCraft(player, msg) {
+    if (player.dead) return;
+
+    const recipeId = String(msg.recipeId || "");
+    const recipe = RECIPES[recipeId];
+    if (!recipe) {
+      this.send(player.ws, { type: "craft_result", success: false, reason: "Unknown recipe." });
+      return;
+    }
+
+    // Must be near a crafting_station NPC with matching craftingSkill
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const npcsOnMap = mapEntry.data.npcs || [];
+    const nearStation = npcsOnMap.some(npcPlacement => {
+      const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
+      if (!npcDef || npcDef.type !== "crafting_station") return false;
+      if (npcDef.craftingSkill !== recipe.skill) return false;
+      const npcX = npcPlacement.tx * tileSize;
+      const npcY = npcPlacement.ty * tileSize;
+      return dist(player.x, player.y, npcX, npcY) < tileSize * 2;
+    });
+    if (!nearStation) {
+      this.send(player.ws, { type: "craft_result", success: false, reason: "You need to be near a crafting station." });
+      return;
+    }
+
+    // Check skill level
+    const skillId = recipe.skill;
+    const playerSkill = player.gatheringSkills[skillId];
+    if (!playerSkill) return;
+    if (playerSkill.level < recipe.requiredLevel) {
+      this.send(player.ws, { type: "craft_result", success: false, reason: `Requires ${GATHERING_SKILLS[skillId]?.name || skillId} level ${recipe.requiredLevel}.` });
+      return;
+    }
+
+    // Check player has required inputs
+    const inputEntries = Object.entries(recipe.input);
+    for (const [itemId, qtyNeeded] of inputEntries) {
+      let have = 0;
+      for (const slot of player.inventory) {
+        if (slot && slot.id === itemId) have += (slot.qty || 1);
+      }
+      if (have < qtyNeeded) {
+        const tpl = ITEMS[itemId];
+        this.send(player.ws, { type: "craft_result", success: false, reason: `Not enough ${tpl?.name || itemId}. Need ${qtyNeeded}, have ${have}.` });
+        return;
+      }
+    }
+
+    // Consume inputs
+    for (const [itemId, qtyNeeded] of inputEntries) {
+      let remaining = qtyNeeded;
+      for (let i = 0; i < player.inventory.length && remaining > 0; i++) {
+        const slot = player.inventory[i];
+        if (!slot || slot.id !== itemId) continue;
+        const slotQty = slot.qty || 1;
+        if (slotQty <= remaining) {
+          remaining -= slotQty;
+          player.inventory[i] = null;
+        } else {
+          slot.qty = slotQty - remaining;
+          remaining = 0;
+        }
+      }
+    }
+
+    // Grant output
+    const outTemplate = ITEMS[recipe.output.id];
+    if (!outTemplate) return;
+    const newItem = { id: outTemplate.id, name: outTemplate.name, type: outTemplate.type, icon: outTemplate.icon, qty: recipe.output.qty };
+    const addIndex = this._addItemToSlots(player.inventory, newItem);
+    if (addIndex < 0) {
+      // Rollback: can't fit output — refund inputs
+      for (const [itemId, qtyNeeded] of inputEntries) {
+        const refundTpl = ITEMS[itemId];
+        if (!refundTpl) continue;
+        this._addItemToSlots(player.inventory, { id: refundTpl.id, name: refundTpl.name, type: refundTpl.type, icon: refundTpl.icon, qty: qtyNeeded });
+      }
+      this.send(player.ws, { type: "craft_result", success: false, reason: "Inventory is full." });
+      return;
+    }
+
+    // Grant XP
+    const xpGained = recipe.xp;
+    playerSkill.xp += xpGained;
+    let leveledUp = false;
+    while (playerSkill.xp >= this._gatheringXpToLevel(playerSkill.level)) {
+      playerSkill.xp -= this._gatheringXpToLevel(playerSkill.level);
+      playerSkill.level++;
+      leveledUp = true;
+    }
+
+    this.send(player.ws, {
+      type: "craft_result",
+      success: true,
+      recipeId,
+      itemId: outTemplate.id,
+      itemName: outTemplate.name,
+      inventory: player.inventory,
+      gatheringSkills: player.gatheringSkills,
+      skillId,
+      xpGained,
+      leveledUp,
+      newLevel: playerSkill.level
+    });
+
+    this._savePlayer(player);
   }
 }
 

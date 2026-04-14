@@ -22605,6 +22605,24 @@
       "tx": 36,
       "ty": 31,
       "floor": 0
+    },
+    {
+      "npcId": "smelter_hilda",
+      "tx": 32,
+      "ty": 33,
+      "floor": 0
+    },
+    {
+      "npcId": "sawyer_brom",
+      "tx": 34,
+      "ty": 33,
+      "floor": 0
+    },
+    {
+      "npcId": "cook_marta",
+      "tx": 36,
+      "ty": 33,
+      "floor": 0
     }
   ],
   "resourceNodes": [

@@ -19,5 +19,26 @@
     "description": "Catch fish from rivers, lakes, and the sea.",
     "icon": "fishing",
     "toolType": "fishing_rod"
+  },
+  "smelting": {
+    "id": "smelting",
+    "name": "Smelting",
+    "description": "Smelt raw ores into refined metal bars.",
+    "icon": "smelting",
+    "category": "processing"
+  },
+  "milling": {
+    "id": "milling",
+    "name": "Milling",
+    "description": "Mill raw logs into usable planks.",
+    "icon": "milling",
+    "category": "processing"
+  },
+  "cooking": {
+    "id": "cooking",
+    "name": "Cooking",
+    "description": "Cook raw fish into nourishing meals.",
+    "icon": "cooking",
+    "category": "processing"
   }
 }

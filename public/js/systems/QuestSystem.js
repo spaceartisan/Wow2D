@@ -146,6 +146,18 @@ export class QuestSystem {
         closesDialog: false
       });
     }
+    if (npc.type === "crafting_station" && npc.craftingSkill) {
+      const skillDef = this.game.data.gatheringSkills?.[npc.craftingSkill];
+      const stationLabel = skillDef ? skillDef.name : npc.craftingSkill;
+      actions.push({
+        label: `Open ${stationLabel}`,
+        callback: () => {
+          this.game.ui.closeNpcDialog();
+          this.game.ui.openCraftingStation(npc.craftingSkill);
+        },
+        closesDialog: false
+      });
+    }
     this.game.ui.showNpcDialog(npc.name, npc.dialog || "...", actions);
   }
 
