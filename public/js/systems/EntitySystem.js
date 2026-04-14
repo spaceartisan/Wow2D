@@ -10,6 +10,7 @@ export class EntitySystem {
     this.enemies = [];
     this.remotePlayers = [];
     this.drops = [];
+    this.resourceNodes = [];
   }
 
   createPlayer() {
@@ -56,7 +57,8 @@ export class EntitySystem {
         ring1: null,
         ring2: null,
         amulet: null
-      }
+      },
+      gatheringSkills: {}
     };
   }
 
@@ -244,6 +246,23 @@ export class EntitySystem {
     return closest;
   }
 
+  getClosestResourceNodeInRange(range = 60) {
+    const player = this.player;
+    let closest = null;
+    let bestDist = Infinity;
+
+    for (const node of this.resourceNodes) {
+      if (node.floor !== this.game.world.currentFloor) continue;
+      const d = distance(player.x, player.y, node.x, node.y);
+      if (d < range && d < bestDist) {
+        closest = node;
+        bestDist = d;
+      }
+    }
+
+    return closest;
+  }
+
   // Drop creation + enemy kills are now handled by the server via NetworkSystem.
   // killEnemy, createLootForEnemy, damagePlayer, onPlayerDeath removed.
 
@@ -396,6 +415,42 @@ export class EntitySystem {
       }
     }
 
+    // Draw resource nodes
+    const currentFloor = this.game.world.currentFloor;
+    for (const node of this.resourceNodes) {
+      if (node.floor !== currentFloor) continue;
+      const x = node.x - camera.x;
+      const y = node.y - camera.y;
+
+      const img = sprites && sprites.get(`gathering/${node.type}`);
+      if (img) {
+        ctx.globalAlpha = node.active ? 1.0 : 0.3;
+        ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
+        ctx.globalAlpha = 1.0;
+      } else {
+        // Fallback: colored circle with outline
+        const [r, g, b] = node.color || [128, 128, 128];
+        ctx.globalAlpha = node.active ? 1.0 : 0.3;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = node.active ? "#fff" : "#666";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 1.0;
+      }
+
+      // Name label
+      if (this.game.labelToggles.resourceNodes) {
+        ctx.fillStyle = node.active ? "#f0e6d0" : "#777";
+        ctx.font = "10px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText(node.name, x, y - 16);
+      }
+    }
+
     for (const npc of this.npcs) {
       if (npc.floor !== this.game.world.currentFloor) continue;
       const x = npc.x - camera.x;
@@ -411,22 +466,23 @@ export class EntitySystem {
         ctx.fill();
       }
 
-      ctx.fillStyle = "#1a1006";
-      ctx.font = "12px Trebuchet MS";
-      ctx.textAlign = "center";
-      ctx.fillText(npc.name, x, y - 20);
+      if (this.game.labelToggles.npcs) {
+        ctx.fillStyle = "#1a1006";
+        ctx.font = "12px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText(npc.name, x, y - 20);
 
-      // Quest marker: show "?" for turn-in, "!" for available quests
-      const marker = this.game.quests.getNpcQuestMarker(npc);
-      if (marker) {
-        ctx.fillStyle = marker === "?" ? "#5ec9f5" : "#ffdf84";
-        ctx.font = "bold 16px Trebuchet MS";
-        ctx.fillText(marker, x, y - 34);
+        // Quest marker: show "?" for turn-in, "!" for available quests
+        const marker = this.game.quests.getNpcQuestMarker(npc);
+        if (marker) {
+          ctx.fillStyle = marker === "?" ? "#5ec9f5" : "#ffdf84";
+          ctx.font = "bold 16px Trebuchet MS";
+          ctx.fillText(marker, x, y - 34);
+        }
       }
     }
 
     // Draw statues (waystone pillars)
-    const currentFloor = this.game.world.currentFloor;
     for (const statue of this.statues) {
       if ((statue.floor || 0) !== currentFloor) continue;
       const x = statue.x - camera.x;
@@ -449,17 +505,19 @@ export class EntitySystem {
       }
 
       // Name tag
-      ctx.fillStyle = "#a0d4f0";
-      ctx.font = "11px Trebuchet MS";
-      ctx.textAlign = "center";
-      ctx.fillText(statue.name, x, y - 26);
+      if (this.game.labelToggles.waystones) {
+        ctx.fillStyle = "#a0d4f0";
+        ctx.font = "11px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText(statue.name, x, y - 26);
 
-      // Show attunement indicator if this is the player's bound stone
-      const hs = this.player.hearthstone;
-      if (hs && hs.statueId === statue.id) {
-        ctx.fillStyle = "#5ee87a";
-        ctx.font = "bold 10px Trebuchet MS";
-        ctx.fillText("✦ Bound", x, y - 38);
+        // Show attunement indicator if this is the player's bound stone
+        const hs = this.player.hearthstone;
+        if (hs && hs.statueId === statue.id) {
+          ctx.fillStyle = "#5ee87a";
+          ctx.font = "bold 10px Trebuchet MS";
+          ctx.fillText("✦ Bound", x, y - 38);
+        }
       }
     }
 
@@ -480,12 +538,6 @@ export class EntitySystem {
         ctx.arc(x, y, enemy.radius || 15, 0, Math.PI * 2);
         ctx.fill();
       }
-
-      const hpRatio = enemy.hp / enemy.maxHp;
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
-      ctx.fillRect(x - 18, y - 23, 36, 5);
-      ctx.fillStyle = "#9f2524";
-      ctx.fillRect(x - 18, y - 23, 36 * hpRatio, 5);
 
       if (this.game.combat.targetEnemyId === enemy.id) {
         ctx.strokeStyle = "#f5df8e";
@@ -518,10 +570,12 @@ export class EntitySystem {
       }
 
       // name tag
-      ctx.fillStyle = "#e0dcc8";
-      ctx.font = "11px Trebuchet MS";
-      ctx.textAlign = "center";
-      ctx.fillText(rp.name, x, y - 22);
+      if (this.game.labelToggles.players) {
+        ctx.fillStyle = "#e0dcc8";
+        ctx.font = "11px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText(rp.name, x, y - 22);
+      }
 
       // selection ring if targeted
       if (this.game.combat.targetPlayerId === rp.id) {
@@ -550,11 +604,69 @@ export class EntitySystem {
     }
 
     // player name tag
-    if (!player.dead) {
+    if (!player.dead && this.game.labelToggles.players) {
       ctx.fillStyle = "#e8e8f8";
       ctx.font = "11px Trebuchet MS";
       ctx.textAlign = "center";
       ctx.fillText(player.name, player.x - camera.x, player.y - camera.y - 22);
+    }
+
+    // Hover-to-reveal names
+    if (this.game.labelToggles.hoverNames) {
+      this._drawHoverName(ctx, camera);
+    }
+  }
+
+  _drawHoverName(ctx, camera) {
+    const mx = this.game.input.mouse.x;
+    const my = this.game.input.mouse.y;
+    const currentFloor = this.game.world.currentFloor;
+
+    // Check NPCs
+    if (!this.game.labelToggles.npcs) {
+      for (const npc of this.npcs) {
+        if (npc.floor !== currentFloor) continue;
+        const x = npc.x - camera.x;
+        const y = npc.y - camera.y;
+        if (Math.abs(mx - x) < 16 && Math.abs(my - y) < 16) {
+          ctx.fillStyle = "#1a1006";
+          ctx.font = "12px Trebuchet MS";
+          ctx.textAlign = "center";
+          ctx.fillText(npc.name, x, y - 20);
+          return;
+        }
+      }
+    }
+
+    // Check enemies
+    for (const enemy of this.enemies) {
+      if (enemy.dead || (enemy.floor || 0) !== currentFloor) continue;
+      const x = Math.round(enemy.x - camera.x);
+      const y = Math.round(enemy.y - camera.y);
+      const r = enemy.radius || 15;
+      if (Math.abs(mx - x) < r + 4 && Math.abs(my - y) < r + 4) {
+        ctx.fillStyle = "#e8c8c8";
+        ctx.font = "11px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText(enemy.name, x, y - r - 8);
+        return;
+      }
+    }
+
+    // Check remote players
+    if (!this.game.labelToggles.players) {
+      for (const rp of this.remotePlayers) {
+        if (rp.dead || (rp.floor || 0) !== currentFloor) continue;
+        const x = Math.round(rp.x - camera.x);
+        const y = Math.round(rp.y - camera.y);
+        if (Math.abs(mx - x) < 18 && Math.abs(my - y) < 18) {
+          ctx.fillStyle = "#e0dcc8";
+          ctx.font = "11px Trebuchet MS";
+          ctx.textAlign = "center";
+          ctx.fillText(rp.name, x, y - 22);
+          return;
+        }
+      }
     }
   }
 }

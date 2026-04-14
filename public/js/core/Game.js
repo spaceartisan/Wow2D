@@ -38,6 +38,21 @@ export class Game {
     this.minimap = null;
     this.audio = new AudioManager();
     this.projectiles = new ProjectileSystem(this);
+
+    // Auto-gathering state
+    this.gathering = { active: false, nodeId: null, timer: 0, cooldown: 2.5 };
+
+    // Label visibility toggles (all off by default)
+    this.labelToggles = {
+      players: false,
+      npcs: false,
+      resourceNodes: false,
+      waystones: false,
+      portals: false,
+      buildings: false,
+      floorIndicator: false,
+      hoverNames: true
+    };
   }
 
   async init() {
@@ -46,15 +61,17 @@ export class Game {
     window.addEventListener("resize", this._resizeBound);
 
     // Load all data-driven JSON files in parallel
-    const [items, enemies, npcs, quests, skills, statusEffects] = await Promise.all([
+    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs] = await Promise.all([
       fetch("/data/items.json").then(r => r.json()),
       fetch("/data/enemies.json").then(r => r.json()),
       fetch("/data/npcs.json").then(r => r.json()),
       fetch("/data/quests.json").then(r => r.json()),
       fetch("/data/skills.json").then(r => r.json()),
-      fetch("/data/statusEffects.json").then(r => r.json())
+      fetch("/data/statusEffects.json").then(r => r.json()),
+      fetch("/data/gatheringSkills.json").then(r => r.json()),
+      fetch("/data/resourceNodes.json").then(r => r.json())
     ]);
-    this.data = { items, enemies, npcs, quests, skills, statusEffects };
+    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs };
 
     // Load the starting map
     await this.world.loadMap("eldengrove");
@@ -66,7 +83,8 @@ export class Game {
       Object.keys(npcs),
       Object.keys(items),
       this.world.propDefs,
-      skills
+      skills,
+      resourceNodeDefs
     );
 
     this.quests = new QuestSystem(this);
@@ -100,7 +118,7 @@ export class Game {
 
     this.ui.addMessage("Welcome to Azerfall, a frontier of old roads and deep woods.");
     this.ui.addMessage("WASD to move. Click an enemy to target. E to interact.");
-    this.ui.addMessage("I inventory, C equipment, L quest log, P character, K skills.");
+    this.ui.addMessage("I inventory, C equipment, L quest log, P character, K skills, G professions.");
     this.ui.addMessage("1 attack, 2 heal, 3-0 hotbar. Drag items to hotbar/bank. Enter to chat.");
 
     // Start map-placed particle emitters for the starting floor
@@ -182,6 +200,7 @@ export class Game {
       this.network.interpolate(dt);
     }
 
+    this.updateGathering(dt);
     this.entities.update(dt);
     this.combat.update(dt);
     this.projectiles.update(dt);
@@ -214,6 +233,10 @@ export class Game {
 
     if (this.input.wasPressed("k")) {
       this.ui.toggleSkills();
+    }
+
+    if (this.input.wasPressed("g")) {
+      this.ui.toggleProfessions();
     }
 
     if (this.input.wasPressed("m")) {
@@ -261,13 +284,23 @@ export class Game {
     }
 
     if (this.input.wasPressed("e")) {
-      const npc = this.entities.getClosestNpcInRange();
-      if (npc) {
-        this.quests.interactWithNPC(npc);
+      // If already gathering, cancel
+      if (this.gathering.active) {
+        this.stopGathering();
       } else {
-        const statue = this.entities.getClosestStatueInRange();
-        if (statue) {
-          this.interactWithStatue(statue);
+        const npc = this.entities.getClosestNpcInRange();
+        if (npc) {
+          this.quests.interactWithNPC(npc);
+        } else {
+          const statue = this.entities.getClosestStatueInRange();
+          if (statue) {
+            this.interactWithStatue(statue);
+          } else {
+            const node = this.entities.getClosestResourceNodeInRange();
+            if (node && node.active && this.network) {
+              this.startGathering(node.id);
+            }
+          }
         }
       }
     }
@@ -277,8 +310,11 @@ export class Game {
     }
 
     if (this.input.wasPressed("escape")) {
+      // Cancel gathering first if active
+      if (this.gathering.active) {
+        this.stopGathering();
       // Close any open panels first, otherwise toggle game menu
-      if (this.ui.bankOpen) {
+      } else if (this.ui.bankOpen) {
         this.ui.closeBank();
       } else if (this.ui.shopOpen) {
         this.ui.closeShop();
@@ -294,6 +330,8 @@ export class Game {
         this.ui.toggleCharSheet();
       } else if (this.ui.skillsOpen) {
         this.ui.toggleSkills();
+      } else if (this.ui.professionsOpen) {
+        this.ui.toggleProfessions();
       } else {
         this.ui.el.gameMenuPanel.classList.toggle("hidden");
       }
@@ -316,6 +354,9 @@ export class Game {
     const prevFloor = this.world.currentFloor;
     const result = this.world.checkStairs(player.x, player.y, dt);
     if (result && this.world.currentFloor !== prevFloor) {
+      // Snap player to the center of the stair tile on the new floor
+      player.x = result.snapX;
+      player.y = result.snapY;
       this._syncMapParticles();
       this.minimap.invalidate();
     }
@@ -438,12 +479,20 @@ export class Game {
   drawInteractionPrompt() {
     const npc = this.entities.getClosestNpcInRange();
     const statue = !npc ? this.entities.getClosestStatueInRange() : null;
-    const target = npc || statue;
+    const node = (!npc && !statue) ? this.entities.getClosestResourceNodeInRange() : null;
+    const target = npc || statue || node;
     if (!target || this.entities.player.dead) {
       return;
     }
 
-    const label = npc ? "Press E to interact" : "Press E to attune";
+    let label;
+    if (npc) label = "Press E to interact";
+    else if (statue) label = "Press E to attune";
+    else if (node && node.active && this.gathering.active && this.gathering.nodeId === node.id) label = "Gathering... (E to stop)";
+    else if (node && node.active) label = "Press E to gather";
+    else if (node && !node.active) label = "Depleted";
+    else return;
+
     const x = target.x - this.camera.x;
     const y = target.y - this.camera.y - 42;
 
@@ -451,10 +500,56 @@ export class Game {
     this.ctx.fillRect(x - 62, y - 16, 124, 22);
     this.ctx.strokeStyle = "rgba(226, 194, 133, 0.9)";
     this.ctx.strokeRect(x - 62, y - 16, 124, 22);
-    this.ctx.fillStyle = "#f0d8a6";
+    this.ctx.fillStyle = (node && !node.active) ? "#888" : "#f0d8a6";
     this.ctx.font = "12px Trebuchet MS";
     this.ctx.textAlign = "center";
     this.ctx.fillText(label, x, y);
+  }
+
+  /* ── Auto-gathering ────────────────────────────────── */
+
+  startGathering(nodeId) {
+    this.gathering.active = true;
+    this.gathering.nodeId = nodeId;
+    this.gathering.timer = 0; // fire first gather immediately
+    this.network.sendGather(nodeId);
+    this.gathering.timer = this.gathering.cooldown;
+  }
+
+  stopGathering() {
+    if (this.gathering.active) {
+      this.gathering.active = false;
+      this.gathering.nodeId = null;
+      this.gathering.timer = 0;
+    }
+  }
+
+  updateGathering(dt) {
+    if (!this.gathering.active) return;
+
+    const player = this.entities.player;
+    if (player.dead) { this.stopGathering(); return; }
+
+    // Cancel if player is moving (WASD)
+    const inp = this.input;
+    if (inp.isDown("w","arrowup") || inp.isDown("a","arrowleft") ||
+        inp.isDown("s","arrowdown") || inp.isDown("d","arrowright")) {
+      this.stopGathering();
+      return;
+    }
+
+    // Check node still exists, is active, and in range
+    const node = this.entities.resourceNodes.find(n => n.id === this.gathering.nodeId);
+    if (!node || !node.active) { this.stopGathering(); return; }
+    const dx = player.x - node.x, dy = player.y - node.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 60) { this.stopGathering(); return; }
+
+    // Cooldown timer
+    this.gathering.timer -= dt;
+    if (this.gathering.timer <= 0) {
+      this.network.sendGather(this.gathering.nodeId);
+      this.gathering.timer = this.gathering.cooldown;
+    }
   }
 
   interactWithStatue(statue) {

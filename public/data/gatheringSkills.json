@@ -1,0 +1,23 @@
+{
+  "mining": {
+    "id": "mining",
+    "name": "Mining",
+    "description": "Extract ores and minerals from rock veins.",
+    "icon": "mining",
+    "toolType": "pickaxe"
+  },
+  "logging": {
+    "id": "logging",
+    "name": "Logging",
+    "description": "Fell trees and collect valuable lumber.",
+    "icon": "logging",
+    "toolType": "hatchet"
+  },
+  "fishing": {
+    "id": "fishing",
+    "name": "Fishing",
+    "description": "Catch fish from rivers, lakes, and the sea.",
+    "icon": "fishing",
+    "toolType": "fishing_rod"
+  }
+}

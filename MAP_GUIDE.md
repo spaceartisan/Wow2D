@@ -33,7 +33,8 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
   "npcs": [ ... ],
   "statues": [ ... ],
   "portals": [ ... ],
-  "tileModifiers": [ ... ]
+  "tileModifiers": [ ... ],
+  "resourceNodes": [ ... ]
 }
 ```
 
@@ -65,6 +66,7 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
 | `statues` | `array` | Waystone placements for hearthstone attunement. |
 | `portals` | `array` | Transitions to other maps. |
 | `tileModifiers` | `array` | Invisible tile zones that apply buffs, debuffs, DoTs, or HoTs to players standing on them. |
+| `resourceNodes` | `array` | Gatherable resource node placements (references `resourceNodes.json`). |
 
 ## Tile Palette
 
@@ -438,6 +440,31 @@ To add a new zone effect, add a new entry to `statusEffects.json` with a matchin
 - Combine with particle emitters for visual cues (e.g., a `poison_cloud` emitter on the same tiles as a `zonePoison` DoT).
 - Effects auto-expire ~2 seconds after the player steps off the tile.
 
+## Resource Nodes
+
+Gatherable resource nodes (ore veins, trees, fish spots) that players can harvest using the gathering system. Node types are defined in `public/data/resourceNodes.json`.
+
+```json
+"resourceNodes": [
+  { "type": "copper_vein", "tx": 45, "ty": 22, "floor": 0 },
+  { "type": "oak_tree", "tx": 60, "ty": 35, "floor": 0 },
+  { "type": "trout_spot", "tx": 12, "ty": 50, "floor": 0 }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `string` | Must match a key in `resourceNodes.json`. |
+| `tx`, `ty` | `number` | Tile position. |
+| `floor` | `number` | Floor level. `0` = ground (default). Nodes are only visible and interactable on the same floor. |
+
+Each node renders using a sprite from `public/assets/sprites/gathering/{type}.png`. When depleted (all harvests consumed), the node becomes inactive and respawns after `respawnTicks` server ticks.
+
+Players interact by pressing `E` near a node. The server validates:
+- Player has the required gathering skill level
+- Player has the correct tool type and tier in inventory
+- Node is active (not depleted) and within range
+
 ## Registering the Map on the Server
 
 Open `game/ServerWorld.js` and add your map ID to the constructor's map list:
@@ -453,11 +480,10 @@ constructor() {
   }
 }
 ```
-
-That's it. The server will:
 - Load the JSON file from `public/data/maps/swamplands.json`
 - Build a collision map from the terrain palette, `props.json` definitions, trees, props, and `extraBlocked`
 - Spawn enemies from `enemySpawns`
+- Spawn resource nodes from `resourceNodes`
 - Accept portal transitions to/from this map
 
 ## Checklist for a New Map
@@ -473,7 +499,8 @@ That's it. The server will:
 9. **Add new prop types** — if your map uses new props, add them to `props.json` and place matching sprites (sprite loading is automatic)
 10. **Add particle emitters** — place ambient effects (campfires, torches) in the `particles` array using presets from `particles.json`
 11. **Add tile modifier zones** *(optional)* — place hazards, healing zones, or stat-altering areas in the `tileModifiers` array. Reference status effect IDs from `statusEffects.json`
-12. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
+12. **Add resource nodes** *(optional)* — place gatherable nodes (ores, trees, fish spots) in the `resourceNodes` array. Reference node types from `resourceNodes.json`
+13. **Test** — walk through the portal from an existing map, verify collision, enemies spawn, and you can return
 
 ## Example: Minimal Map
 

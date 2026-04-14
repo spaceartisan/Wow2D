@@ -31,6 +31,17 @@ All values are sourced directly from the codebase. If something below disagrees 
 22. [Client Update Order](#22-client-update-order)
 23. [Authority Model](#23-authority-model)
 24. [Message Catalog](#24-message-catalog)
+25. [Gathering System](#25-gathering-system)
+26. [Label Toggles & Hover Names](#26-label-toggles--hover-names)
+27. [End-to-End Flow Examples](#27-end-to-end-flow-examples)
+17. [Client Projectile System](#17-client-projectile-system)
+18. [Particle System](#18-particle-system)
+19. [Audio System](#19-audio-system)
+20. [Camera](#20-camera)
+21. [Render Order](#21-render-order)
+22. [Client Update Order](#22-client-update-order)
+23. [Authority Model](#23-authority-model)
+24. [Message Catalog](#24-message-catalog)
 25. [End-to-End Flow Examples](#25-end-to-end-flow-examples)
 26. [Glossary](#26-glossary)
 
@@ -1049,12 +1060,14 @@ The raw float values are kept for smooth lerp accumulation.
 4. entities.draw()           — player, remote players, enemies, NPCs, statues (all filtered by current floor)
 5. projectiles.draw()        — arrows, skill projectiles (with trails)
 6. particles.draw()          — all live particles (additive blending)
-7. drawInteractionPrompt()   — "Press E" tooltip near NPCs/statues
+7. drawInteractionPrompt()   — "Press E" tooltip near NPCs/statues/resource nodes
 8. minimap.drawMinimap()     — corner minimap
 9. minimap.drawFullMap()     — full-screen map overlay (when toggled)
 ```
 
 All positions are drawn relative to the integer-snapped camera.
+
+Entity labels (player names, NPC names, resource node names, waystone labels, portal labels, building names, floor indicator) are conditionally rendered based on `game.labelToggles` — an object of 8 booleans toggled via the game menu (Escape). All are off by default except `hoverNames`. When `hoverNames` is enabled, mousing over NPCs, enemies, or remote players shows their name (via `_drawHoverName()` in EntitySystem).
 
 ---
 
@@ -1072,7 +1085,7 @@ All positions are drawn relative to the integer-snapped camera.
 7. projectiles.update(dt)    — advance visual projectiles, hit callbacks
 8. particles.update(dt)      — advance particles, continuous emitter ticks
 9. checkPortals()            — map transition detection
-10. checkStairs(dt)          — floor change detection
+10. checkStairs(dt)          — floor change detection (snaps player to stair tile center)
 11. updateCamera()           — lerp camera toward player
 12. ui.update()              — HUD refresh
 13. input.endFrame()         — clear per-frame input state
@@ -1135,7 +1148,7 @@ A clear breakdown of what runs where and who has the final say.
 
 Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
 
-### Client → Server (23 types)
+### Client → Server (24 types)
 
 | `type` | Payload | Handler |
 |--------|---------|---------|
@@ -1161,9 +1174,10 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `hotbar_update` | `hotbar` (array of 10) | `handleHotbarUpdate()` |
 | `swap_items` | `from`, `to`, `fromContainer`, `toContainer` | `handleSwapItems()` |
 | `drop_item` | `index` | `handleDropItem()` |
+| `gather` | `nodeId` | `handleGather()` |
 | `respawn` | *(none)* | *(no-op — death timer auto-respawns)* |
 
-### Server → Client — Unicast (30 types)
+### Server → Client — Unicast (31 types)
 
 | `type` | Key payload fields | Sent by |
 |--------|--------------------|---------|
@@ -1194,6 +1208,7 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `hotbar_result` | `ok`, `hotbar[]` | `handleHotbarUpdate()` |
 | `swap_result` | `ok`, `inventory[]`, `bank[]` | `handleSwapItems()` |
 | `drop_item_result` | `ok`, `inventory[]`, `message` | `handleDropItem()` |
+| `gather_result` | `success`, `reason?`, `itemId?`, `itemName?`, `inventory?`, `gatheringSkills?`, `skillId?`, `xpGained?`, `leveledUp?`, `newLevel?` | `handleGather()` |
 | `auth_error` | `error` | `server.js` auth |
 | `kicked` | `reason` | `server.js` duplicate-login / admin |
 | `chat` | `channel`, `from`, `text`, `playerId?`, `to?` | `handleChat()` / admin |
@@ -1242,13 +1257,13 @@ The client's `onCombatVisual()` handler branches on `projectileHit`, `selfTarget
 
 ---
 
-## 25. End-to-End Flow Examples
+## 27. End-to-End Flow Examples
 
 Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 25a. Melee Attack
+### 27a. Melee Attack
 
 ```
 1. Player clicks enemy                      [client — CombatSystem.handleWorldClick]
@@ -1283,7 +1298,7 @@ Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 25b. Ranged Attack (Bow)
+### 27b. Ranged Attack (Bow)
 
 ```
 1. Player clicks enemy                      [client]
@@ -1326,7 +1341,7 @@ Key difference from melee: **damage is deferred**. The server's invisible projec
 
 ---
 
-### 25c. Player Death and Respawn
+### 27c. Player Death and Respawn
 
 ```
 1. Enemy attacks player in updateEnemyAi()  [server]
@@ -1366,7 +1381,7 @@ The `respawn` client→server message is a no-op. Respawn is entirely timer-driv
 
 ---
 
-### 25d. Equipping an Item
+### 27d. Equipping an Item
 
 ```
 1. Player clicks weapon in inventory        [client — UISystem]
@@ -1406,7 +1421,7 @@ The client's optimistic swap gives instant UI feedback. The server response over
 
 ---
 
-### 25e. Map Change via Portal
+### 27e. Map Change via Portal
 
 ```
 1. checkPortals() detects overlap           [client — Game.update, every frame]
@@ -1443,7 +1458,7 @@ The client loads map data *first*, then tells the server. If the server rejects 
 
 ---
 
-### 25f. Buying from a Shop
+### 27f. Buying from a Shop
 
 ```
 1. Player clicks "Buy" in shop UI           [client — UISystem]
@@ -1467,6 +1482,115 @@ The client loads map data *first*, then tells the server. If the server rejects 
 ```
 
 No optimistic update — client waits for the server to confirm the purchase.
+
+---
+
+## 25. Gathering System
+
+**Files:** `game/ServerWorld.js` (`handleGather()`), `public/js/core/Game.js` (`startGathering()`, `stopGathering()`, `updateGathering()`), `public/js/systems/EntitySystem.js` (node rendering), `public/js/systems/UISystem.js` (`renderProfessions()`), `public/js/systems/NetworkSystem.js` (`sendGather()`, `onGatherResult()`)
+
+### Overview
+
+Players harvest resource nodes (ore veins, trees, fish spots) placed on maps. Three gathering professions — Mining, Logging, Fishing — have independent XP and levels. Requires the correct tool type and minimum tier in inventory.
+
+### Data files
+
+| File | Purpose |
+|------|---------|
+| `gatheringSkills.json` | Defines the 3 professions (mining, logging, fishing) |
+| `resourceNodes.json` | Defines 9 node types (3 per skill) with requirements and rewards |
+| `items.json` | Contains tool items (`type: "tool"`) and material items (`type: "material"`) |
+
+### Gather flow
+
+1. **Client:** Player presses `E` near a resource node → `startGathering(nodeId)`.
+2. **Client:** `updateGathering(dt)` runs each frame — on 2.5s cooldown, sends `{ type: "gather", nodeId }`.
+3. **Server:** `handleGather(player, msg)` validates:
+   - Player is alive, not on cooldown (150 ticks = 2.5s at 60 Hz)
+   - Node exists, is active, on same floor, and within 60px range
+   - Player has the required gathering skill level
+   - Player has the correct tool type and tier in inventory
+   - Player has inventory space
+4. **Server:** Grants item, awards XP, decrements node harvests. If harvests reach 0, node becomes inactive and starts respawn timer.
+5. **Server:** Sends `gather_result` with updated inventory and skill state.
+6. **Client:** `onGatherResult(msg)` syncs inventory and gathering skills, shows status message.
+
+### Auto-gather cancellation
+
+Gathering stops automatically when:
+- Player moves (any WASD/arrow key)
+- Player dies
+- Node is depleted or disappears
+- Player moves out of 60px range
+
+### XP formula
+
+$$
+\text{xpToLevel}(n) = \lfloor 50 \times 1.5^{(n-1)} \rfloor
+$$
+
+| Level | XP Required |
+|-------|-------------|
+| 1 → 2 | 50 |
+| 2 → 3 | 75 |
+| 3 → 4 | 112 |
+| 5 → 6 | 253 |
+| 10 → 11 | 1,923 |
+
+### Server cooldown
+
+150 ticks (2.5 seconds at 60 Hz). Tracked per-player via `player.lastGatherTick`. Client also tracks a 2.5s cooldown to prevent spamming.
+
+### Node respawn
+
+Each node type has a `respawnTicks` value. When all harvests are consumed, node becomes inactive. Server checks `node.respawnAt` against `this.tickCount` during the tick loop and reactivates the node with full harvests when the timer expires.
+
+### Professions panel
+
+Opened with `G` key. Shows each profession's name, description, current level, and an XP progress bar. XP bar shows `currentXP / xpToLevel`.
+
+---
+
+## 26. Label Toggles & Hover Names
+
+**Files:** `public/js/core/Game.js` (`labelToggles`), `public/js/systems/EntitySystem.js` (conditional label rendering, `_drawHoverName()`), `public/js/systems/WorldSystem.js` (portal/building label guards), `public/js/systems/UISystem.js` (toggle button binding, floor indicator guard)
+
+### Label toggles
+
+The game menu (Escape) includes a "Labels" section with 8 toggle buttons. Each controls visibility of floating text labels in the game world.
+
+```js
+this.labelToggles = {
+  players: false,       // Player names above heads
+  npcs: false,          // NPC names and quest markers
+  resourceNodes: false, // Resource node names
+  waystones: false,     // Waystone names and "✦ Bound" text
+  portals: false,       // Portal labels on the world map
+  buildings: false,     // Building names and floor badges
+  floorIndicator: false,// "Floor N" indicator inside buildings
+  hoverNames: true      // Mouse-hover name reveal
+};
+```
+
+All toggles default to **off** except `hoverNames` which defaults to **on**.
+
+Toggle buttons use CSS classes `.label-toggle-on` (green) and `.label-toggle-off` (red).
+
+### Hover names
+
+When `hoverNames` is enabled, moving the mouse near an entity reveals its name:
+
+| Entity type | Detection radius | Text color | Condition |
+|-------------|-----------------|------------|-----------|
+| NPC | 16px | `#1a1006` | Only when `labelToggles.npcs` is off |
+| Enemy | `radius + 4` px | `#e8c8c8` | Always (enemies have no always-on label) |
+| Remote player | 18px | `#e0dcc8` | Only when `labelToggles.players` is off |
+
+Hover names are drawn by `EntitySystem._drawHoverName()` at the end of the entity draw pass. Only the first match is drawn (priority: NPCs → enemies → players).
+
+### Stair snap
+
+When a player changes floors via stairs, their position is snapped to the center of the destination stair tile. `WorldSystem.checkStairs()` returns `snapX`/`snapY` values, and `Game.checkStairs()` applies them to the player position.
 
 ---
 

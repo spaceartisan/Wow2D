@@ -1,0 +1,110 @@
+{
+  "copper_vein": {
+    "name": "Copper Vein",
+    "skill": "mining",
+    "requiredLevel": 1,
+    "requiredToolType": "pickaxe",
+    "requiredToolTier": 1,
+    "xpPerGather": 10,
+    "gatherItem": "copperOre",
+    "maxHarvests": 3,
+    "respawnTicks": 1800,
+    "color": [184, 115, 51]
+  },
+  "tin_vein": {
+    "name": "Tin Vein",
+    "skill": "mining",
+    "requiredLevel": 10,
+    "requiredToolType": "pickaxe",
+    "requiredToolTier": 2,
+    "xpPerGather": 25,
+    "gatherItem": "tinOre",
+    "maxHarvests": 3,
+    "respawnTicks": 3600,
+    "color": [211, 212, 213]
+  },
+  "iron_deposit": {
+    "name": "Iron Deposit",
+    "skill": "mining",
+    "requiredLevel": 20,
+    "requiredToolType": "pickaxe",
+    "requiredToolTier": 3,
+    "xpPerGather": 50,
+    "gatherItem": "ironOre",
+    "maxHarvests": 3,
+    "respawnTicks": 5400,
+    "color": [101, 67, 33]
+  },
+  "oak_tree": {
+    "name": "Oak Tree",
+    "skill": "logging",
+    "requiredLevel": 1,
+    "requiredToolType": "hatchet",
+    "requiredToolTier": 1,
+    "xpPerGather": 10,
+    "gatherItem": "oakLog",
+    "maxHarvests": 3,
+    "respawnTicks": 1800,
+    "color": [101, 80, 33]
+  },
+  "maple_tree": {
+    "name": "Maple Tree",
+    "skill": "logging",
+    "requiredLevel": 10,
+    "requiredToolType": "hatchet",
+    "requiredToolTier": 2,
+    "xpPerGather": 25,
+    "gatherItem": "mapleLog",
+    "maxHarvests": 3,
+    "respawnTicks": 3600,
+    "color": [139, 90, 43]
+  },
+  "yew_tree": {
+    "name": "Yew Tree",
+    "skill": "logging",
+    "requiredLevel": 20,
+    "requiredToolType": "hatchet",
+    "requiredToolTier": 3,
+    "xpPerGather": 50,
+    "gatherItem": "yewLog",
+    "maxHarvests": 3,
+    "respawnTicks": 5400,
+    "color": [85, 107, 47]
+  },
+  "trout_spot": {
+    "name": "Trout School",
+    "skill": "fishing",
+    "requiredLevel": 1,
+    "requiredToolType": "fishing_rod",
+    "requiredToolTier": 1,
+    "xpPerGather": 10,
+    "gatherItem": "rawTrout",
+    "maxHarvests": 5,
+    "respawnTicks": 1500,
+    "color": [64, 164, 223]
+  },
+  "salmon_spot": {
+    "name": "Salmon Run",
+    "skill": "fishing",
+    "requiredLevel": 10,
+    "requiredToolType": "fishing_rod",
+    "requiredToolTier": 2,
+    "xpPerGather": 25,
+    "gatherItem": "rawSalmon",
+    "maxHarvests": 5,
+    "respawnTicks": 3000,
+    "color": [255, 114, 86]
+  },
+  "lobster_spot": {
+    "name": "Lobster Trap",
+    "skill": "fishing",
+    "requiredLevel": 20,
+    "requiredToolType": "fishing_rod",
+    "requiredToolTier": 3,
+    "xpPerGather": 50,
+    "gatherItem": "rawLobster",
+    "maxHarvests": 4,
+    "respawnTicks": 5400,
+    "color": [178, 34, 34]
+  }
+}

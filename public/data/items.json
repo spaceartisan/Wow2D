@@ -478,5 +478,188 @@
     "cooldown": 180,
     "concentration": true,
     "description": "A warm stone that can return you to an attuned statue. Attune at any waystone statue."
+  },
+
+  "rustedPickaxe": {
+    "id": "rustedPickaxe",
+    "name": "Rusted Pickaxe",
+    "type": "tool",
+    "icon": "rustedPickaxe",
+    "toolType": "pickaxe",
+    "toolTier": 1,
+    "value": 15,
+    "description": "A worn pickaxe. Good enough for soft ores."
+  },
+  "copperPickaxe": {
+    "id": "copperPickaxe",
+    "name": "Copper Pickaxe",
+    "type": "tool",
+    "icon": "copperPickaxe",
+    "toolType": "pickaxe",
+    "toolTier": 2,
+    "gatheringLevelReq": 10,
+    "value": 45,
+    "description": "A sturdy copper-headed pickaxe for harder veins."
+  },
+  "ironPickaxe": {
+    "id": "ironPickaxe",
+    "name": "Iron Pickaxe",
+    "type": "tool",
+    "icon": "ironPickaxe",
+    "toolType": "pickaxe",
+    "toolTier": 3,
+    "gatheringLevelReq": 20,
+    "value": 120,
+    "description": "A heavy iron pickaxe that can crack the toughest deposits."
+  },
+
+  "wornHatchet": {
+    "id": "wornHatchet",
+    "name": "Worn Hatchet",
+    "type": "tool",
+    "icon": "wornHatchet",
+    "toolType": "hatchet",
+    "toolTier": 1,
+    "value": 15,
+    "description": "A dull hatchet. Enough to fell young trees."
+  },
+  "sturdyHatchet": {
+    "id": "sturdyHatchet",
+    "name": "Sturdy Hatchet",
+    "type": "tool",
+    "icon": "sturdyHatchet",
+    "toolType": "hatchet",
+    "toolTier": 2,
+    "gatheringLevelReq": 10,
+    "value": 45,
+    "description": "A well-balanced hatchet for felling mature timber."
+  },
+  "steelHatchet": {
+    "id": "steelHatchet",
+    "name": "Steel Hatchet",
+    "type": "tool",
+    "icon": "steelHatchet",
+    "toolType": "hatchet",
+    "toolTier": 3,
+    "gatheringLevelReq": 20,
+    "value": 120,
+    "description": "A keen steel hatchet that bites deep into hardwood."
+  },
+
+  "basicFishingRod": {
+    "id": "basicFishingRod",
+    "name": "Basic Fishing Rod",
+    "type": "tool",
+    "icon": "basicFishingRod",
+    "toolType": "fishing_rod",
+    "toolTier": 1,
+    "value": 15,
+    "description": "A simple rod and line. Good for calm waters."
+  },
+  "improvedFishingRod": {
+    "id": "improvedFishingRod",
+    "name": "Improved Fishing Rod",
+    "type": "tool",
+    "icon": "improvedFishingRod",
+    "toolType": "fishing_rod",
+    "toolTier": 2,
+    "gatheringLevelReq": 10,
+    "value": 45,
+    "description": "A reinforced rod with a stronger line for larger fish."
+  },
+  "fineFishingRod": {
+    "id": "fineFishingRod",
+    "name": "Fine Fishing Rod",
+    "type": "tool",
+    "icon": "fineFishingRod",
+    "toolType": "fishing_rod",
+    "toolTier": 3,
+    "gatheringLevelReq": 20,
+    "value": 120,
+    "description": "A masterwork rod crafted for the most prized catches."
+  },
+
+  "copperOre": {
+    "id": "copperOre",
+    "name": "Copper Ore",
+    "type": "material",
+    "icon": "copperOre",
+    "value": 3,
+    "stackSize": 99,
+    "description": "A chunk of raw copper. Can be smelted into bars."
+  },
+  "tinOre": {
+    "id": "tinOre",
+    "name": "Tin Ore",
+    "type": "material",
+    "icon": "tinOre",
+    "value": 8,
+    "stackSize": 99,
+    "description": "A lump of tin ore. Useful in alloys."
+  },
+  "ironOre": {
+    "id": "ironOre",
+    "name": "Iron Ore",
+    "type": "material",
+    "icon": "ironOre",
+    "value": 15,
+    "stackSize": 99,
+    "description": "Dense iron ore. The backbone of smithing."
+  },
+
+  "oakLog": {
+    "id": "oakLog",
+    "name": "Oak Log",
+    "type": "material",
+    "icon": "oakLog",
+    "value": 3,
+    "stackSize": 99,
+    "description": "A sturdy oak log. Can be processed into planks."
+  },
+  "mapleLog": {
+    "id": "mapleLog",
+    "name": "Maple Log",
+    "type": "material",
+    "icon": "mapleLog",
+    "value": 8,
+    "stackSize": 99,
+    "description": "Hard maple wood prized by carpenters."
+  },
+  "yewLog": {
+    "id": "yewLog",
+    "name": "Yew Log",
+    "type": "material",
+    "icon": "yewLog",
+    "value": 15,
+    "stackSize": 99,
+    "description": "Flexible yew wood. Excellent for bows and staves."
+  },
+
+  "rawTrout": {
+    "id": "rawTrout",
+    "name": "Raw Trout",
+    "type": "material",
+    "icon": "rawTrout",
+    "value": 3,
+    "stackSize": 99,
+    "description": "A fresh trout. Can be cooked into a meal."
+  },
+  "rawSalmon": {
+    "id": "rawSalmon",
+    "name": "Raw Salmon",
+    "type": "material",
+    "icon": "rawSalmon",
+    "value": 8,
+    "stackSize": 99,
+    "description": "A plump salmon. Prized for its rich flavor."
+  },
+  "rawLobster": {
+    "id": "rawLobster",
+    "name": "Raw Lobster",
+    "type": "material",
+    "icon": "rawLobster",
+    "value": 15,
+    "stackSize": 99,
+    "description": "A large lobster. A delicacy when cooked."
   }
 }

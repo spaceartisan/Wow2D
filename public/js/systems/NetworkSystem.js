@@ -244,6 +244,10 @@ export class NetworkSystem {
     this.send({ type: "drop_item", index });
   }
 
+  sendGather(nodeId) {
+    this.send({ type: "gather", nodeId });
+  }
+
   sendBuyItem(itemId, npcId) {
     this.send({ type: "buy_item", itemId, npcId });
   }
@@ -401,6 +405,9 @@ export class NetworkSystem {
       case "projectile_hit":
         this.onProjectileHit(msg);
         break;
+      case "gather_result":
+        this.onGatherResult(msg);
+        break;
       case "auth_error":
         this._intentionalClose = true;
         this.game.ui.addMessage(`[System] ${msg.error}`);
@@ -536,6 +543,16 @@ export class NetworkSystem {
       if (this.game.ui) this.game.ui._hotbarDirty = true;
     }
 
+    // Load gathering skills
+    if (msg.gatheringSkills) {
+      this.game.entities.player.gatheringSkills = msg.gatheringSkills;
+    }
+
+    // Load resource nodes
+    if (msg.resourceNodes) {
+      this.game.entities.resourceNodes = msg.resourceNodes;
+    }
+
     this.game.ui.addMessage("Connected to server.");
   }
 
@@ -590,6 +607,11 @@ export class NetworkSystem {
 
     // Clear immediate overrides – the new state is authoritative
     this.enemyOverrides.clear();
+
+    // Update resource nodes (static positions; just sync active state)
+    if (msg.resourceNodes) {
+      this.game.entities.resourceNodes = msg.resourceNodes;
+    }
 
     // Apply authoritative player stats immediately (not smoothed)
     if (msg.you) {
@@ -1284,6 +1306,31 @@ export class NetworkSystem {
     this.game.ui._inventoryDirty = true;
     this.game.ui._hotbarDirty = true;
     this.game.ui.addMessage("Item dropped.");
+  }
+
+  onGatherResult(msg) {
+    if (!msg.success) {
+      this.game.ui.addMessage(msg.reason || "Cannot gather that.");
+      this.game.stopGathering();
+      return;
+    }
+    const player = this.game.entities.player;
+    // Update inventory from server
+    if (msg.inventory) {
+      for (let i = 0; i < player.inventorySlots.length; i++) {
+        player.inventorySlots[i] = msg.inventory[i] || null;
+      }
+    }
+    // Update gathering skills
+    if (msg.gatheringSkills) {
+      player.gatheringSkills = msg.gatheringSkills;
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
+    this.game.ui.addMessage(`You gathered ${msg.itemName}. (+${msg.xpGained} ${msg.skillId} XP)`);
+    if (msg.leveledUp) {
+      this.game.ui.addMessage(`${msg.skillId.charAt(0).toUpperCase() + msg.skillId.slice(1)} leveled up to ${msg.newLevel}!`, "gold");
+    }
   }
 
   /* ═══════════════════════════════════════════════════════

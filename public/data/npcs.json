@@ -40,5 +40,32 @@
     "type": "banker",
     "defaultDialog": "Your valuables are safe with me. Need to make a deposit?",
     "questIds": []
+  },
+  "miner_gruff": {
+    "id": "miner_gruff",
+    "name": "Miner Gruff",
+    "color": "#b08040",
+    "type": "vendor",
+    "defaultDialog": "The earth holds riches for those bold enough to dig. Need a pickaxe?",
+    "questIds": [],
+    "shop": ["rustedPickaxe", "copperPickaxe", "ironPickaxe"]
+  },
+  "logger_thorne": {
+    "id": "logger_thorne",
+    "name": "Logger Thorne",
+    "color": "#6b8e23",
+    "type": "vendor",
+    "defaultDialog": "Good timber doesn't fell itself. I've got the tools you need.",
+    "questIds": [],
+    "shop": ["wornHatchet", "sturdyHatchet", "steelHatchet"]
+  },
+  "fisherman_wade": {
+    "id": "fisherman_wade",
+    "name": "Fisherman Wade",
+    "color": "#4682b4",
+    "type": "vendor",
+    "defaultDialog": "Nothing beats a day by the water. Looking for a rod?",
+    "questIds": [],
+    "shop": ["basicFishingRod", "improvedFishingRod", "fineFishingRod"]
   }
 }

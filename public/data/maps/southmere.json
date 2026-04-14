@@ -17912,6 +17912,17 @@
     }
   ],
   "npcs": [],
+  "resourceNodes": [
+    { "tx": 30, "ty": 30, "type": "copper_vein", "floor": 0 },
+    { "tx": 45, "ty": 35, "type": "copper_vein", "floor": 0 },
+    { "tx": 60, "ty": 40, "type": "tin_vein", "floor": 0 },
+    { "tx": 35, "ty": 50, "type": "oak_tree", "floor": 0 },
+    { "tx": 50, "ty": 45, "type": "oak_tree", "floor": 0 },
+    { "tx": 70, "ty": 35, "type": "maple_tree", "floor": 0 },
+    { "tx": 40, "ty": 60, "type": "trout_spot", "floor": 0 },
+    { "tx": 55, "ty": 55, "type": "trout_spot", "floor": 0 },
+    { "tx": 75, "ty": 50, "type": "salmon_spot", "floor": 0 }
+  ],
   "statues": [],
   "portals": [
     {

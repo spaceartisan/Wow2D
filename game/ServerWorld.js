@@ -17,6 +17,8 @@ const QUEST_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "quests.json"),
 const SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "skills.json"), "utf8"));
 const GLOBAL_PALETTE = JSON.parse(fs.readFileSync(path.join(dataDir, "tilePalette.json"), "utf8"));
 const PROP_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "props.json"), "utf8"));
+const RESOURCE_NODE_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "resourceNodes.json"), "utf8"));
+const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatheringSkills.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
 const PLAYER_BASE = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
@@ -215,6 +217,7 @@ class CollisionMap {
 let nextPlayerId = 1;
 let enemyIdCounter = 1;
 let dropIdCounter = 1;
+let resourceNodeIdCounter = 1;
 
 class ServerWorld {
   constructor() {
@@ -224,7 +227,8 @@ class ServerWorld {
       const data = loadMap(mapId);
       const collision = new CollisionMap(data);
       const enemies = this._createEnemiesForMap(data, collision);
-      this.maps.set(mapId, { _mapId: mapId, data, collision, enemies, drops: [], projectiles: [] });
+      const resourceNodes = this._createResourceNodesForMap(data, collision);
+      this.maps.set(mapId, { _mapId: mapId, data, collision, enemies, drops: [], projectiles: [], resourceNodes });
     }
 
     this.defaultMapId = "eldengrove";
@@ -368,7 +372,16 @@ class ServerWorld {
         for (let i = 0; i < 10; i++) slots[i] = raw[i] || defaults[i] || null;
         return slots;
       })(),
-      casting: null    // { type, startedAt, duration, data }
+      casting: null,    // { type, startedAt, duration, data }
+      gatheringSkills: (() => {
+        const raw = (charData.gatheringSkills && typeof charData.gatheringSkills === "object") ? charData.gatheringSkills : {};
+        // Ensure all gathering skills exist with defaults
+        const skills = {};
+        for (const skillId of Object.keys(GATHERING_SKILLS)) {
+          skills[skillId] = { level: 1, xp: 0, ...(raw[skillId] || {}) };
+        }
+        return skills;
+      })()
     };
 
     this.players.set(id, state);
@@ -407,7 +420,9 @@ class ServerWorld {
       hp: state.hp,
       maxHp: state.maxHp,
       mana: state.mana,
-      maxMana: state.maxMana
+      maxMana: state.maxMana,
+      gatheringSkills: state.gatheringSkills,
+      resourceNodes: this.resourceNodeSnapshot(mapId)
     });
 
     // tell everyone else on the same map a player joined
@@ -439,7 +454,8 @@ class ServerWorld {
           quests: p.quests || {},
           hearthstone: p.hearthstone || null,
           bank: p.bank || [],
-          hotbar: p.hotbar || []
+          hotbar: p.hotbar || [],
+          gatheringSkills: p.gatheringSkills || {}
         });
       } catch (err) {
         console.error(`[ServerWorld] Failed to save progress for ${p.name}:`, err.message);
@@ -529,6 +545,9 @@ class ServerWorld {
         break;
       case "use_skill":
         this.handleUseSkill(player, msg);
+        break;
+      case "gather":
+        this.handleGather(player, msg);
         break;
       case "respawn":
         // client signals it's ready to respawn
@@ -2189,6 +2208,7 @@ class ServerWorld {
       this.updateEnemyAi(mapEntry, dt, now);
       this.updateEnemyRespawns(mapEntry, now);
       this.updateDropPickups(mapEntry, mapId, now);
+      this.updateResourceNodeRespawns(mapEntry);
     }
     this.updatePlayerDeaths(now);
     this.updatePlayerRegen(dt);
@@ -2221,7 +2241,8 @@ class ServerWorld {
           quests: p.quests || {},
           hearthstone: p.hearthstone || null,
           bank: p.bank || [],
-          hotbar: p.hotbar || []
+          hotbar: p.hotbar || [],
+          gatheringSkills: p.gatheringSkills || {}
         });
       } catch (err) {
         console.error(`[ServerWorld] Auto-save failed for ${p.name}:`, err.message);
@@ -2751,6 +2772,7 @@ class ServerWorld {
     const enemyCache = new Map();   // mapId → enemy snapshot
     const playerCache = new Map();  // mapId → player snapshot
     const dropCache = new Map();    // mapId → drop snapshot
+    const nodeCache = new Map();    // mapId → resource node snapshot
 
     for (const [, player] of this.players) {
       const mapId = player.mapId;
@@ -2759,6 +2781,7 @@ class ServerWorld {
         enemyCache.set(mapId, this.enemySnapshot(mapId));
         playerCache.set(mapId, this.playersOnMap(mapId));
         dropCache.set(mapId, this.dropsSnapshot(mapId));
+        nodeCache.set(mapId, this.resourceNodeSnapshot(mapId));
       }
 
       this.send(player.ws, {
@@ -2767,6 +2790,7 @@ class ServerWorld {
         enemies: enemyCache.get(mapId),
         players: playerCache.get(mapId),
         drops: dropCache.get(mapId),
+        resourceNodes: nodeCache.get(mapId),
         you: {
           id: player.id,
           hp: player.hp,
@@ -2890,6 +2914,190 @@ class ServerWorld {
         }
       } catch (_) { /* ignore */ }
     }
+  }
+
+  /* ── gathering system ───────────────────────────────── */
+
+  _createResourceNodesForMap(mapData, collision) {
+    const nodes = [];
+    const tileSize = collision.tileSize;
+    const spawns = mapData.resourceNodes || [];
+
+    for (const spawn of spawns) {
+      const def = RESOURCE_NODE_DEFS[spawn.type];
+      if (!def) {
+        console.warn(`[ServerWorld] Unknown resource node type: ${spawn.type}`);
+        continue;
+      }
+      nodes.push({
+        id: `rn${resourceNodeIdCounter++}`,
+        type: spawn.type,
+        name: def.name,
+        x: spawn.tx * tileSize + tileSize * 0.5,
+        y: spawn.ty * tileSize + tileSize * 0.5,
+        floor: spawn.floor || 0,
+        active: true,
+        harvestsLeft: def.maxHarvests,
+        respawnAt: 0,   // tick count when it should respawn
+        color: def.color
+      });
+    }
+
+    return nodes;
+  }
+
+  resourceNodeSnapshot(mapId) {
+    const mapEntry = this.maps.get(mapId);
+    if (!mapEntry) return [];
+    return mapEntry.resourceNodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      name: n.name,
+      x: n.x,
+      y: n.y,
+      floor: n.floor,
+      active: n.active,
+      color: n.color
+    }));
+  }
+
+  updateResourceNodeRespawns(mapEntry) {
+    for (const node of mapEntry.resourceNodes) {
+      if (node.active) continue;
+      if (this.tickCount >= node.respawnAt) {
+        const def = RESOURCE_NODE_DEFS[node.type];
+        node.active = true;
+        node.harvestsLeft = def ? def.maxHarvests : 3;
+      }
+    }
+  }
+
+  /** XP required to advance from `level` to `level+1` for a gathering skill. */
+  _gatheringXpToLevel(level) {
+    return Math.floor(50 * Math.pow(1.5, level - 1));
+  }
+
+  handleGather(player, msg) {
+    if (player.dead) return;
+
+    // Server-side gather cooldown (2.5s = 150 ticks at 60Hz)
+    const GATHER_COOLDOWN_TICKS = 150;
+    if (player.lastGatherTick && (this.tickCount - player.lastGatherTick) < GATHER_COOLDOWN_TICKS) {
+      return; // silently ignore — client timer should prevent this
+    }
+
+    const nodeId = String(msg.nodeId || "");
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+
+    // Find the resource node
+    const node = mapEntry.resourceNodes.find(n => n.id === nodeId);
+    if (!node) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: "Node not found." });
+      return;
+    }
+
+    // Check floor
+    if ((node.floor || 0) !== (player.floor || 0)) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: "Too far away." });
+      return;
+    }
+
+    // Check range
+    if (dist(player.x, player.y, node.x, node.y) > 60) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: "Too far away." });
+      return;
+    }
+
+    // Check active
+    if (!node.active) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: "This resource is depleted." });
+      return;
+    }
+
+    const def = RESOURCE_NODE_DEFS[node.type];
+    if (!def) return;
+
+    // Check gathering skill level
+    const skillId = def.skill;
+    const playerSkill = player.gatheringSkills[skillId];
+    if (!playerSkill) return;
+
+    if (playerSkill.level < def.requiredLevel) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: `Requires ${GATHERING_SKILLS[skillId]?.name || skillId} level ${def.requiredLevel}.` });
+      return;
+    }
+
+    // Check tool in inventory
+    const requiredToolType = def.requiredToolType;
+    const requiredToolTier = def.requiredToolTier;
+    let bestTool = null;
+
+    for (const slot of player.inventory) {
+      if (!slot || slot.type !== "tool") continue;
+      const tpl = ITEMS[slot.id];
+      if (!tpl || tpl.toolType !== requiredToolType) continue;
+      if (tpl.toolTier >= requiredToolTier) {
+        if (!bestTool || tpl.toolTier > bestTool.toolTier) bestTool = tpl;
+      }
+    }
+
+    if (!bestTool) {
+      const toolName = requiredToolType.replace(/_/g, " ");
+      this.send(player.ws, { type: "gather_result", success: false, reason: `You need a ${toolName} (tier ${requiredToolTier}+) in your inventory.` });
+      return;
+    }
+
+    // Check tool's gathering level requirement
+    if (bestTool.gatheringLevelReq && playerSkill.level < bestTool.gatheringLevelReq) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: `You need ${GATHERING_SKILLS[skillId]?.name || skillId} level ${bestTool.gatheringLevelReq} to use that tool.` });
+      return;
+    }
+
+    // Check inventory space
+    const gatherItemTemplate = ITEMS[def.gatherItem];
+    if (!gatherItemTemplate) return;
+
+    const newItem = { id: gatherItemTemplate.id, name: gatherItemTemplate.name, type: gatherItemTemplate.type, icon: gatherItemTemplate.icon };
+    const addIndex = this._addItemToSlots(player.inventory, newItem);
+    if (addIndex < 0) {
+      this.send(player.ws, { type: "gather_result", success: false, reason: "Inventory is full." });
+      return;
+    }
+
+    // Grant gathering XP
+    const xpGained = def.xpPerGather;
+    playerSkill.xp += xpGained;
+    let leveledUp = false;
+    while (playerSkill.xp >= this._gatheringXpToLevel(playerSkill.level)) {
+      playerSkill.xp -= this._gatheringXpToLevel(playerSkill.level);
+      playerSkill.level++;
+      leveledUp = true;
+    }
+
+    // Decrement node harvests
+    node.harvestsLeft--;
+    if (node.harvestsLeft <= 0) {
+      node.active = false;
+      node.respawnAt = this.tickCount + (def.respawnTicks || 1800);
+    }
+
+    // Record gather timestamp for cooldown
+    player.lastGatherTick = this.tickCount;
+
+    // Send result
+    this.send(player.ws, {
+      type: "gather_result",
+      success: true,
+      itemId: gatherItemTemplate.id,
+      itemName: gatherItemTemplate.name,
+      inventory: player.inventory,
+      gatheringSkills: player.gatheringSkills,
+      skillId,
+      xpGained,
+      leveledUp,
+      newLevel: playerSkill.level
+    });
   }
 }
 

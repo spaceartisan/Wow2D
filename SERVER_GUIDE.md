@@ -62,6 +62,7 @@ DB file: `data/azerfall.db` (SQLite, WAL mode, foreign keys ON)
 | `hearthstone` | TEXT | `'null'` | JSON: attunement object or null |
 | `bank` | TEXT | `'[]'` | JSON: 48-slot array |
 | `hotbar` | TEXT | `'[]'` | JSON: 10-slot array |
+| `gathering_skills` | TEXT | `'{"mining":{"level":1,"xp":0},"logging":{"level":1,"xp":0},"fishing":{"level":1,"xp":0}}'` | JSON: gathering skill levels and XP |
 | `created_at` | INTEGER | epoch ms | |
 
 ### `sessions`
@@ -176,6 +177,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `bank_withdraw` | `bankIndex` | Withdraw item from bank (must be near banker) |
 | `hotbar_update` | `hotbar` (10-slot array) | Save hotbar layout |
 | `swap_items` | `from, to, fromIndex, toIndex` | Swap/stack between `"inventory"` and/or `"bank"` |
+| `gather` | `nodeId` | Harvest a resource node (range, tool, skill level, cooldown validated) |
 | `respawn` | — | Signal ready to respawn (actual respawn is tick-driven) |
 
 ### Server → Client Messages
@@ -209,6 +211,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `bank_result` | Bank action | `ok, reason?, action, invIndex, bankIndex, inventory, bank` |
 | `hotbar_result` | Hotbar saved | `ok, hotbar` |
 | `swap_result` | Item swap | `ok, reason?, inventory, bank` |
+| `gather_result` | Gather attempt | `success, reason?, itemId?, itemName?, inventory?, gatheringSkills?, skillId?, xpGained?, leveledUp?, newLevel?` |
 | `enemy_killed` | Kill confirmed | `enemyId, enemyType, xpReward` |
 | `drop_spawned` | Loot appears | `drop: { id, x, y }` |
 | `drop_removed` | Loot taken | `dropId` |
@@ -289,7 +292,13 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   ],
   _tileDoTs: {                  // Internal: per-zone DoT/HoT tick tracking
     "zonePoison": { lastTickAt: 1712345690000 }
-  }
+  },
+  gatheringSkills: {             // Gathering profession levels
+    mining: { level: 1, xp: 0 },
+    logging: { level: 1, xp: 0 },
+    fishing: { level: 1, xp: 0 }
+  },
+  lastGatherTick: 0              // Tick of last successful gather (cooldown)
 }
 ```
 
@@ -396,7 +405,8 @@ Every ~16.67ms the server runs:
 ```
 level, xp, gold, hp, mana,
 inventory (JSON), equipment (JSON), quests (JSON),
-hearthstone (JSON), bank (JSON), hotbar (JSON)
+hearthstone (JSON), bank (JSON), hotbar (JSON),
+gathering_skills (JSON)
 ```
 
 ### What Does NOT Persist

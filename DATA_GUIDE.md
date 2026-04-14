@@ -77,7 +77,7 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 |-------|------|-------------|
 | `id` | string | Must match the object key |
 | `name` | string | Display name |
-| `type` | string | One of: `weapon`, `shield`, `quiver`, `armor`, `helmet`, `pants`, `boots`, `ring`, `amulet`, `consumable`, `junk`, `hearthstone` |
+| `type` | string | One of: `weapon`, `shield`, `quiver`, `armor`, `helmet`, `pants`, `boots`, `ring`, `amulet`, `consumable`, `tool`, `material`, `junk`, `hearthstone` |
 | `icon` | string | Icon filename without `.png` (usually same as `id`) |
 | `value` | number | Sell price in gold |
 | `description` | string | Tooltip text |
@@ -132,6 +132,16 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 | `castTime` | number | Seconds to channel |
 | `cooldown` | number | Cooldown in seconds |
 
+**tool:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `toolType` | string | `"pickaxe"`, `"hatchet"`, or `"fishing_rod"` |
+| `toolTier` | number | Tier level (1, 2, or 3). Must meet or exceed the node’s `requiredToolTier`. |
+| `gatheringLevelReq` | number | *(optional)* Minimum gathering skill level required to use this tool |
+
+**material:**
+Materials are gathered resources (ores, logs, fish). They have no type-specific fields beyond the common fields. Typically stackable (`stackSize: 99`).
+
 **Examples:**
 ```json
 "noviceBlade": {
@@ -181,12 +191,14 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 | `id` | string | Must match the object key |
 | `name` | string | Display name shown above head |
 | `color` | string | Hex color fallback |
-| `type` | string | `"quest_giver"`, `"vendor"`, or `"banker"` |
+| `type` | string | `"quest_giver"`, `"vendor"`, `"banker"`, or `"gathering"` |
 | `defaultDialog` | string | Greeting text when no quest/shop action |
 | `questIds` | string[] | Quest IDs this NPC offers (quest_giver only) |
 | `shop` | string[] | Item IDs this NPC sells (vendor only) |
 
 **Banker NPCs** use `type: "banker"` and only need `id`, `name`, `color`, `type`, and `defaultDialog`. When the player interacts with a banker, a 48-slot bank panel opens for storage.
+
+**Gathering NPCs** use `type: "gathering"` and include a `shop` array of gathering tool item IDs. They sell tools for mining, logging, and fishing.
 
 **Examples:**
 ```json
@@ -653,6 +665,95 @@ Used by the `tileModifiers` system in map JSON files (see MAP_GUIDE.md):
 
 ---
 
+## gatheringSkills.json
+
+Top-level object keyed by skill ID. Defines the three gathering professions. The client loads this at startup for the Professions panel (G key).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Must match the object key |
+| `name` | string | Display name in the professions panel |
+| `description` | string | Tooltip/description text |
+| `icon` | string | Icon identifier (currently unused by sprites — text-based display) |
+| `toolType` | string | The `toolType` value required in items.json tools for this profession |
+
+**Current skills:**
+
+| ID | Name | Tool Type |
+|----|------|-----------|
+| `mining` | Mining | `pickaxe` |
+| `logging` | Logging | `hatchet` |
+| `fishing` | Fishing | `fishing_rod` |
+
+**Example:**
+```json
+"mining": {
+  "id": "mining",
+  "name": "Mining",
+  "description": "Extract ores and minerals from rock veins.",
+  "icon": "mining",
+  "toolType": "pickaxe"
+}
+```
+
+---
+
+## resourceNodes.json
+
+Top-level object keyed by node type ID. Defines harvestable resource nodes placed on maps. Each node type needs a sprite at `public/assets/sprites/gathering/{nodeType}.png` (48×48).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name shown when hovering/interacting |
+| `skill` | string | Gathering skill required (`mining`, `logging`, or `fishing`) |
+| `requiredLevel` | number | Minimum gathering skill level to harvest |
+| `requiredToolType` | string | Tool type needed in inventory (`pickaxe`, `hatchet`, `fishing_rod`) |
+| `requiredToolTier` | number | Minimum tool tier required (1, 2, or 3) |
+| `xpPerGather` | number | Gathering XP awarded per successful harvest |
+| `gatherItem` | string | Item ID given on harvest (must exist in `items.json`) |
+| `maxHarvests` | number | Times the node can be harvested before depletion |
+| `respawnTicks` | number | Server ticks until respawn after depletion (60 ticks/sec) |
+| `color` | [r,g,b] | RGB fallback color if no sprite exists |
+
+**Current resource nodes:**
+
+| ID | Name | Skill | Level | Tier | XP | Item | Harvests |
+|----|------|-------|-------|------|----|------|----------|
+| `copper_vein` | Copper Vein | mining | 1 | 1 | 10 | copperOre | 3 |
+| `tin_vein` | Tin Vein | mining | 10 | 2 | 25 | tinOre | 3 |
+| `iron_deposit` | Iron Deposit | mining | 20 | 3 | 50 | ironOre | 3 |
+| `oak_tree` | Oak Tree | logging | 1 | 1 | 10 | oakLog | 3 |
+| `maple_tree` | Maple Tree | logging | 10 | 2 | 25 | mapleLog | 3 |
+| `yew_tree` | Yew Tree | logging | 20 | 3 | 50 | yewLog | 3 |
+| `trout_spot` | Trout School | fishing | 1 | 1 | 10 | rawTrout | 5 |
+| `salmon_spot` | Salmon Run | fishing | 10 | 2 | 25 | rawSalmon | 5 |
+| `lobster_spot` | Lobster Trap | fishing | 20 | 3 | 50 | rawLobster | 4 |
+
+**Example:**
+```json
+"copper_vein": {
+  "name": "Copper Vein",
+  "skill": "mining",
+  "requiredLevel": 1,
+  "requiredToolType": "pickaxe",
+  "requiredToolTier": 1,
+  "xpPerGather": 10,
+  "gatherItem": "copperOre",
+  "maxHarvests": 3,
+  "respawnTicks": 1800,
+  "color": [184, 115, 51]
+}
+```
+
+**To add a resource node:**
+1. Add the entry to `resourceNodes.json` with a unique key
+2. Place a 48×48 sprite at `public/assets/sprites/gathering/{nodeType}.png`
+3. Ensure the `gatherItem` exists in `items.json` (type `material`)
+4. Ensure a tool with the matching `toolType` and sufficient `toolTier` exists in `items.json`
+5. Place the node on maps in the map JSON's `resourceNodes` array (see MAP_GUIDE.md)
+
+---
+
 ## Asset Checklist
 
 When adding new content, ensure the matching sprite/icon exists:
@@ -664,6 +765,7 @@ When adding new content, ensure the matching sprite/icon exists:
 | items.json | `public/assets/sprites/icons/{itemId}.png` | 32×32 |
 | skills.json | `public/assets/sprites/skills/{icon}.png` | 32×32 |
 | statusEffects.json | `public/assets/sprites/status/{name}.png` | 32×32 |
+| resourceNodes.json | `public/assets/sprites/gathering/{nodeType}.png` | 48×48 |
 | tilePalette.json | `public/assets/sprites/tiles/{tileName}.png` | 48×48 |
 | props.json | `public/assets/sprites/props/{propType}.png` | varies |
 | particles.json | *(no sprites — drawn procedurally)* | — |

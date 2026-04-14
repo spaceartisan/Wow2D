@@ -281,18 +281,21 @@ export class WorldSystem {
       }
 
       if (onStairsUp && this.currentFloor < bld.upperFloors.length) {
-        // Go up one floor — player stays at same position
         this.currentFloor++;
         this.insideBuilding = bld;
         this._onStairs = true;
-        return { action: "up", floor: this.currentFloor, building: bld.name };
+        // Snap player to center of the stair tile
+        const snapX = (tile.x + 0.5) * this.tileSize;
+        const snapY = (tile.y + 0.5) * this.tileSize;
+        return { action: "up", floor: this.currentFloor, building: bld.name, snapX, snapY };
       } else if (onStairsDown && this.currentFloor > 0) {
-        // Go down one floor — player stays at same position
         this.currentFloor--;
         if (this.currentFloor === 0) this.insideBuilding = null;
         else this.insideBuilding = bld;
         this._onStairs = true;
-        return { action: "down", floor: this.currentFloor, building: bld.name };
+        const snapX = (tile.x + 0.5) * this.tileSize;
+        const snapY = (tile.y + 0.5) * this.tileSize;
+        return { action: "down", floor: this.currentFloor, building: bld.name, snapX, snapY };
       }
     }
     return null;
@@ -366,7 +369,7 @@ export class WorldSystem {
         ctx.setLineDash([]);
       }
 
-      if (portal.label) {
+      if (portal.label && this.game.labelToggles.portals) {
         ctx.fillStyle = "rgba(200, 230, 255, 0.8)";
         ctx.font = "11px Trebuchet MS";
         ctx.textAlign = "center";
@@ -442,7 +445,7 @@ export class WorldSystem {
       const drawY = building.y - camera.y;
 
       // Building name label (above building)
-      if (building.name) {
+      if (building.name && this.game.labelToggles.buildings) {
         ctx.font = "bold 11px sans-serif";
         ctx.textAlign = "center";
         const labelX = drawX + building.w / 2;
@@ -455,7 +458,7 @@ export class WorldSystem {
       }
 
       // Floor badge (for multi-story)
-      if (building.floors > 1) {
+      if (building.floors > 1 && this.game.labelToggles.buildings) {
         const badgeText = building.floors + "F";
         const badgeX = drawX + building.w - 18;
         const badgeY = drawY + 14;

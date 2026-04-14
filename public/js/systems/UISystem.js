@@ -37,6 +37,8 @@ export class UISystem {
       charSheetBody: document.getElementById("char-sheet-body"),
       skillsPanel: document.getElementById("skills-panel"),
       skillsBody: document.getElementById("skills-body"),
+      professionsPanel: document.getElementById("professions-panel"),
+      professionsBody: document.getElementById("professions-body"),
       bankPanel: document.getElementById("bank-panel"),
       bankGrid: document.getElementById("bank-grid"),
       actionBar: document.getElementById("action-bar"),
@@ -50,6 +52,7 @@ export class UISystem {
     this.questLogOpen = false;
     this.charSheetOpen = false;
     this.skillsOpen = false;
+    this.professionsOpen = false;
     this.shopOpen = false;
     this.bankOpen = false;
     this._shopNpcId = null;
@@ -121,6 +124,7 @@ export class UISystem {
     if (this.questLogOpen) this.toggleQuestLog();
     if (this.charSheetOpen) this.toggleCharSheet();
     if (this.skillsOpen) this.toggleSkills();
+    if (this.professionsOpen) this.toggleProfessions();
     this.el.gameMenuPanel.classList.add("hidden");
     this.el.targetPanel.classList.add("hidden");
   }
@@ -136,6 +140,7 @@ export class UISystem {
       "quest-log-panel",
       "char-sheet-panel",
       "skills-panel",
+      "professions-panel",
       "npc-dialog-panel",
       "bank-panel"
     ];
@@ -214,6 +219,8 @@ export class UISystem {
           this.toggleCharSheet();
         } else if (action === "skills") {
           this.toggleSkills();
+        } else if (action === "professions") {
+          this.toggleProfessions();
         }
       });
     });
@@ -229,6 +236,7 @@ export class UISystem {
         if (target === "quest-log") this.toggleQuestLog();
         if (target === "char-sheet") this.toggleCharSheet();
         if (target === "skills") this.toggleSkills();
+        if (target === "professions") this.toggleProfessions();
         if (target === "bank") this.closeBank();
       });
     });
@@ -431,6 +439,21 @@ export class UISystem {
       }
       this.game.audio.play("ui_click");
     });
+
+    // Label visibility toggles
+    const labelKeys = ["players", "npcs", "resourceNodes", "waystones", "portals", "buildings", "floorIndicator", "hoverNames"];
+    for (const key of labelKeys) {
+      const btn = document.getElementById(`btn-label-${key}`);
+      if (!btn) continue;
+      this._on(btn, "click", () => {
+        const toggles = this.game.labelToggles;
+        toggles[key] = !toggles[key];
+        btn.textContent = toggles[key] ? "On" : "Off";
+        btn.classList.toggle("label-toggle-on", toggles[key]);
+        btn.classList.toggle("label-toggle-off", !toggles[key]);
+        this.game.audio.play("ui_click");
+      });
+    }
   }
 
   /* ── Panels ─────────────────────────────────────────── */
@@ -481,7 +504,7 @@ export class UISystem {
     const floorEl = document.getElementById("floor-indicator");
     if (floorEl) {
       const world = this.game.world;
-      if (world.currentFloor > 0 && world.insideBuilding) {
+      if (this.game.labelToggles.floorIndicator && world.currentFloor > 0 && world.insideBuilding) {
         floorEl.textContent = `${world.insideBuilding.name} — Floor ${world.currentFloor + 1}`;
         floorEl.classList.remove("hidden");
       } else {
@@ -1748,6 +1771,65 @@ export class UISystem {
       meta.textContent = parts.join(" · ");
 
       card.append(header, desc, meta);
+      body.append(card);
+    }
+  }
+
+  /* ── Professions panel ─────────────────────────────── */
+
+  toggleProfessions() {
+    this.professionsOpen = !this.professionsOpen;
+    this.el.professionsPanel.classList.toggle("hidden", !this.professionsOpen);
+    if (this.professionsOpen) this.renderProfessions();
+  }
+
+  renderProfessions() {
+    const body = this.el.professionsBody;
+    const p = this.game.entities.player;
+    body.textContent = "";
+
+    const skillDefs = this.game.data.gatheringSkills || {};
+    const playerSkills = p.gatheringSkills || {};
+
+    for (const [id, def] of Object.entries(skillDefs)) {
+      const ps = playerSkills[id] || { level: 1, xp: 0 };
+      const xpNeeded = Math.floor(50 * Math.pow(1.5, ps.level - 1));
+      const pct = Math.min(100, (ps.xp / xpNeeded) * 100);
+
+      const card = document.createElement("div");
+      card.className = "profession-card";
+
+      const header = document.createElement("div");
+      header.className = "profession-header";
+
+      const name = document.createElement("span");
+      name.className = "profession-name";
+      name.textContent = def.name;
+
+      const level = document.createElement("span");
+      level.className = "profession-level";
+      level.textContent = `Level ${ps.level}`;
+
+      header.append(name, level);
+
+      const desc = document.createElement("div");
+      desc.className = "profession-desc";
+      desc.textContent = def.description;
+
+      const barWrap = document.createElement("div");
+      barWrap.className = "profession-xp-bar";
+
+      const fill = document.createElement("div");
+      fill.className = "profession-xp-fill";
+      fill.style.width = `${pct}%`;
+
+      barWrap.append(fill);
+
+      const label = document.createElement("div");
+      label.className = "profession-xp-label";
+      label.textContent = `${ps.xp} / ${xpNeeded} XP`;
+
+      card.append(header, desc, barWrap, label);
       body.append(card);
     }
   }

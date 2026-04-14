@@ -10829,6 +10829,19 @@
     }
   ],
   "npcs": [],
+  "resourceNodes": [
+    { "tx": 20, "ty": 15, "type": "tin_vein", "floor": 0 },
+    { "tx": 30, "ty": 20, "type": "tin_vein", "floor": 0 },
+    { "tx": 40, "ty": 25, "type": "tin_vein", "floor": 0 },
+    { "tx": 50, "ty": 18, "type": "tin_vein", "floor": 0 },
+    { "tx": 25, "ty": 30, "type": "maple_tree", "floor": 0 },
+    { "tx": 35, "ty": 35, "type": "maple_tree", "floor": 0 },
+    { "tx": 45, "ty": 28, "type": "maple_tree", "floor": 0 },
+    { "tx": 55, "ty": 33, "type": "maple_tree", "floor": 0 },
+    { "tx": 22, "ty": 40, "type": "salmon_spot", "floor": 0 },
+    { "tx": 38, "ty": 45, "type": "salmon_spot", "floor": 0 },
+    { "tx": 52, "ty": 42, "type": "salmon_spot", "floor": 0 }
+  ],
   "statues": [
     {
       "id": "darkwood_waystone",

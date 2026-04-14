@@ -22587,7 +22587,40 @@
       "tx": 24,
       "ty": 31,
       "floor": 0
+    },
+    {
+      "npcId": "miner_gruff",
+      "tx": 32,
+      "ty": 31,
+      "floor": 0
+    },
+    {
+      "npcId": "logger_thorne",
+      "tx": 34,
+      "ty": 31,
+      "floor": 0
+    },
+    {
+      "npcId": "fisherman_wade",
+      "tx": 36,
+      "ty": 31,
+      "floor": 0
     }
+  ],
+  "resourceNodes": [
+    { "tx": 45, "ty": 40, "type": "copper_vein", "floor": 0 },
+    { "tx": 52, "ty": 45, "type": "copper_vein", "floor": 0 },
+    { "tx": 60, "ty": 35, "type": "copper_vein", "floor": 0 },
+    { "tx": 70, "ty": 50, "type": "copper_vein", "floor": 0 },
+    { "tx": 55, "ty": 55, "type": "copper_vein", "floor": 0 },
+    { "tx": 40, "ty": 50, "type": "oak_tree", "floor": 0 },
+    { "tx": 48, "ty": 38, "type": "oak_tree", "floor": 0 },
+    { "tx": 57, "ty": 42, "type": "oak_tree", "floor": 0 },
+    { "tx": 65, "ty": 55, "type": "oak_tree", "floor": 0 },
+    { "tx": 75, "ty": 45, "type": "oak_tree", "floor": 0 },
+    { "tx": 35, "ty": 60, "type": "trout_spot", "floor": 0 },
+    { "tx": 50, "ty": 65, "type": "trout_spot", "floor": 0 },
+    { "tx": 68, "ty": 60, "type": "trout_spot", "floor": 0 }
   ],
   "statues": [
     {

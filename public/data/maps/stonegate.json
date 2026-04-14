@@ -16983,6 +16983,16 @@
       "floor": 0
     }
   ],
+  "resourceNodes": [
+    { "tx": 20, "ty": 30, "type": "iron_deposit", "floor": 0 },
+    { "tx": 40, "ty": 25, "type": "iron_deposit", "floor": 0 },
+    { "tx": 55, "ty": 35, "type": "iron_deposit", "floor": 0 },
+    { "tx": 25, "ty": 45, "type": "yew_tree", "floor": 0 },
+    { "tx": 45, "ty": 50, "type": "yew_tree", "floor": 0 },
+    { "tx": 60, "ty": 45, "type": "yew_tree", "floor": 0 },
+    { "tx": 30, "ty": 55, "type": "lobster_spot", "floor": 0 },
+    { "tx": 50, "ty": 60, "type": "lobster_spot", "floor": 0 }
+  ],
   "statues": [],
   "portals": [
     {

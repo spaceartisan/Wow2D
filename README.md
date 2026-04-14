@@ -45,7 +45,8 @@ http://localhost:3000
 | Right-click inventory item | Context menu: Equip, Use, or Drop |
 | Click equipment slot | Unequip item back to inventory |
 | `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
-| `E` | Interact with nearby NPC or waystone |
+| `E` | Interact with nearby NPC or waystone; auto-gather from resource nodes |
+| `G` | Toggle professions panel |
 | `I` | Toggle inventory |
 | `C` | Toggle equipment panel |
 | `L` | Toggle quest log |
@@ -69,6 +70,12 @@ http://localhost:3000
 - Props (trees, rocks, flowers, etc.) with data-driven blocking via `props.json`
 - Safe zones
 - Waystone system — attune your hearthstone to teleport back to town (floor-aware placement)
+- Gathering system — mine ore, chop trees, and catch fish from resource nodes placed on maps
+  - Three professions: Mining, Logging, Fishing — each with independent XP and levels
+  - Nine resource node types across three tiers (e.g., Copper Vein → Tin Vein → Iron Deposit)
+  - Requires the correct tool type and tier in inventory (pickaxe, hatchet, or fishing rod)
+  - Auto-gather with `E` key (2.5s cooldown between attempts)
+  - Professions panel (`G`) shows skill levels and XP progress
 - Procedural map generation via `generate-maps.js`
 
 ### Minimap & World Map
@@ -123,6 +130,9 @@ http://localhost:3000
 - Quest tracker, quest log, character sheet, and skills panel
 - NPC dialog system with quest accept/turn-in flow
 - Floor indicator when inside multi-story buildings
+- Label visibility toggles in the game menu (Escape): show/hide floating names for players, NPCs, resource nodes, waystones, portals, buildings, and the floor indicator (all off by default)
+- Hover names: mouse over NPCs, enemies, or other players to reveal their name (on by default, toggleable)
+- Professions panel (G key) with per-skill XP bars and level display
 - Skill icons in skills panel and hotbar (data-driven from skills.json `icon` field)
 
 ## Project Structure
@@ -147,6 +157,8 @@ public/
     particles.json             Particle effect presets (burst + continuous emitters)
     skills.json                Skill/ability definitions (attacks, heals, buffs, debuffs, support) with icon references
     statusEffects.json         Buff/debuff and zone-effect display metadata and icon paths
+    gatheringSkills.json       Gathering profession definitions (mining, logging, fishing)
+    resourceNodes.json         Resource node type definitions (ores, trees, fish spots)
     enemies.json               Enemy type definitions
     items.json                 Item definitions (weapons, armor, shields, helmets, pants, boots, rings, amulets, quivers, consumables, junk)
     npcs.json                  NPC definitions
@@ -180,6 +192,8 @@ public/
     sfx/                       Sound effect files
     sprites/
       entities/                Entity sprites (player, NPC, enemy, arrow)
+      gathering/               Resource node sprites (48×48)
+      icons/                   Item icons (32×32 pixel-art PNGs) — includes gathering tools & materials
       skills/                  Skill ability icons (32×32 pixel-art PNGs)
       status/                  Buff/debuff status effect icons (32×32 pixel-art PNGs)
 ```

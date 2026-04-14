@@ -64,6 +64,7 @@ db.exec(`
   alter("hearthstone", "TEXT NOT NULL DEFAULT 'null'");
   alter("bank", "TEXT NOT NULL DEFAULT '[]'");
   alter("hotbar", "TEXT NOT NULL DEFAULT '[]'");
+  alter("gathering_skills", "TEXT NOT NULL DEFAULT '{}'");
 }
 
 /* ── add expires_at to sessions if missing ──── */
@@ -86,9 +87,9 @@ const stmts = {
   countCharacters: db.prepare("SELECT COUNT(*) AS cnt FROM characters WHERE username = ?"),
   insertCharacter: db.prepare("INSERT INTO characters (username, name, char_class) VALUES (?, ?, ?)"),
   deleteCharacter: db.prepare("DELETE FROM characters WHERE id = ? AND username = ?"),
-  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
+  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
 
-  saveCharacter: db.prepare("UPDATE characters SET level = ?, xp = ?, gold = ?, hp = ?, mana = ?, inventory = ?, equipment = ?, quests = ?, hearthstone = ?, bank = ?, hotbar = ? WHERE id = ?"),
+  saveCharacter: db.prepare("UPDATE characters SET level = ?, xp = ?, gold = ?, hp = ?, mana = ?, inventory = ?, equipment = ?, quests = ?, hearthstone = ?, bank = ?, hotbar = ?, gathering_skills = ? WHERE id = ?"),
 
   insertSession:  db.prepare("INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)"),
   getSession:     db.prepare("SELECT * FROM sessions WHERE token = ? AND expires_at > ?"),
@@ -225,6 +226,7 @@ function loadCharacter(charId, username) {
   try { char.hearthstone = JSON.parse(char.hearthstone || "null"); } catch (_) { char.hearthstone = null; }
   try { char.bank = JSON.parse(char.bank || "[]"); } catch (_) { char.bank = []; }
   try { char.hotbar = JSON.parse(char.hotbar || "[]"); } catch (_) { char.hotbar = []; }
+  try { char.gatheringSkills = JSON.parse(char.gatheringSkills || "{}"); } catch (_) { char.gatheringSkills = {}; }
   return char;
 }
 
@@ -235,6 +237,7 @@ function saveCharacterProgress(charId, data) {
   const hearthstone = JSON.stringify(data.hearthstone ?? null);
   const bank = JSON.stringify(data.bank || []);
   const hotbar = JSON.stringify(data.hotbar || []);
+  const gatheringSkills = JSON.stringify(data.gatheringSkills || {});
   stmts.saveCharacter.run(
     data.level || 1,
     data.xp || 0,
@@ -247,6 +250,7 @@ function saveCharacterProgress(charId, data) {
     hearthstone,
     bank,
     hotbar,
+    gatheringSkills,
     charId
   );
 }
