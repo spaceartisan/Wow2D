@@ -540,6 +540,9 @@ class ServerWorld {
       case "swap_items":
         this.handleSwapItems(player, msg);
         break;
+      case "split_stack":
+        this.handleSplitStack(player, msg);
+        break;
       case "drop_item":
         this.handleDropItem(player, msg);
         break;
@@ -1229,13 +1232,16 @@ class ServerWorld {
       return;
     }
 
-    // sell for half value (floor) — sells one from stack
-    const sellPrice = Math.max(1, Math.floor(template.value / 2));
+    // sell for half value (floor)
+    const unitPrice = Math.max(1, Math.floor(template.value / 2));
+    const qty = item.qty || 1;
+    const sellAll = !!msg.all;
+    const sellQty = sellAll ? qty : 1;
+    const sellPrice = unitPrice * sellQty;
     player.gold += sellPrice;
     const soldName = item.name;
-    const qty = item.qty || 1;
-    if (qty > 1) {
-      item.qty = qty - 1;
+    if (qty > sellQty) {
+      item.qty = qty - sellQty;
     } else {
       inventory[index] = null;
     }
@@ -1247,7 +1253,8 @@ class ServerWorld {
       remainingItem: inventory[index],
       gold: player.gold,
       soldName,
-      sellPrice
+      sellPrice,
+      sellQty
     });
   }
 
@@ -1751,6 +1758,65 @@ class ServerWorld {
   }
 
   /* ── inventory swap/move ────────────────────────────── */
+
+  handleSplitStack(player, msg) {
+    if (player.dead) return;
+    const container = String(msg.container || "inventory").slice(0, 20);
+    const index = Number(msg.index);
+    const splitQty = Number(msg.qty);
+
+    let slots;
+    if (container === "inventory") {
+      slots = player.inventory;
+    } else if (container === "bank") {
+      if (!this._isNearBanker(player)) {
+        this.send(player.ws, { type: "split_stack_result", ok: false, reason: "too_far" });
+        return;
+      }
+      slots = player.bank;
+    } else {
+      this.send(player.ws, { type: "split_stack_result", ok: false, reason: "invalid" });
+      return;
+    }
+
+    if (!Number.isInteger(index) || index < 0 || index >= slots.length) {
+      this.send(player.ws, { type: "split_stack_result", ok: false, reason: "invalid" });
+      return;
+    }
+    if (!Number.isInteger(splitQty) || splitQty < 1) {
+      this.send(player.ws, { type: "split_stack_result", ok: false, reason: "invalid" });
+      return;
+    }
+
+    const item = slots[index];
+    if (!item) return;
+    const currentQty = item.qty || 1;
+    if (splitQty >= currentQty) {
+      this.send(player.ws, { type: "split_stack_result", ok: false, reason: "invalid" });
+      return;
+    }
+
+    // Find an empty slot in the same container
+    let emptyIdx = -1;
+    for (let i = 0; i < slots.length; i++) {
+      if (!slots[i]) { emptyIdx = i; break; }
+    }
+    if (emptyIdx < 0) {
+      this.send(player.ws, { type: "split_stack_result", ok: false, reason: "full" });
+      return;
+    }
+
+    // Perform the split
+    item.qty = currentQty - splitQty;
+    slots[emptyIdx] = { ...item, qty: splitQty };
+
+    this.send(player.ws, {
+      type: "split_stack_result",
+      ok: true,
+      inventory: player.inventory,
+      bank: player.bank
+    });
+  }
 
   handleSwapItems(player, msg) {
     if (player.dead) return;

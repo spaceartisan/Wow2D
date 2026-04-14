@@ -1355,13 +1355,25 @@ export class UISystem {
       const index = parseInt(slotEl.dataset.index, 10);
       const item = this.game.entities.player.inventorySlots[index];
       if (!item) return;
-      this._showItemContextMenu(e.clientX, e.clientY, index, item);
+      this._showItemContextMenu(e.clientX, e.clientY, index, item, "inventory");
+    });
+
+    // Right-click on bank grid
+    this._on(this.el.bankGrid, "contextmenu", (e) => {
+      e.preventDefault();
+      const slotEl = e.target.closest("[data-container='bank'][data-index]");
+      if (!slotEl) return;
+      const index = parseInt(slotEl.dataset.index, 10);
+      const item = this.game.entities.player.bank[index];
+      if (!item) return;
+      this._showItemContextMenu(e.clientX, e.clientY, index, item, "bank");
     });
   }
 
-  _showItemContextMenu(x, y, index, item) {
+  _showItemContextMenu(x, y, index, item, container = "inventory") {
     this._closeContextMenu();
 
+    const isInventory = container === "inventory";
     const EQUIPPABLE = new Set(["weapon","shield","quiver","armor","helmet","pants","boots","ring","amulet"]);
     const itemDef = this.game.data?.items?.[item.id];
     const isPermanent = itemDef?.permanent;
@@ -1381,19 +1393,19 @@ export class UISystem {
       menu.append(opt);
     };
 
-    // Use option — consumables and hearthstone
-    if (item.type === "consumable") {
+    // Use option — consumables and hearthstone (inventory only)
+    if (isInventory && item.type === "consumable") {
       addOption("Use", () => {
         if (this.game.network) this.game.network.sendUseItem(index);
       });
-    } else if (item.type === "hearthstone") {
+    } else if (isInventory && item.type === "hearthstone") {
       addOption("Use", () => {
         if (this.game.network) this.game.network.sendUseHearthstone();
       });
     }
 
-    // Equip option — equippable gear
-    if (EQUIPPABLE.has(item.type)) {
+    // Equip option — equippable gear (inventory only)
+    if (isInventory && EQUIPPABLE.has(item.type)) {
       addOption("Equip", () => {
         this.game.entities.equipItemAtIndex(index);
         if (this.game.network) this.game.network.sendEquipItem(index);
@@ -1402,8 +1414,25 @@ export class UISystem {
       });
     }
 
-    // Drop option — everything except permanent items
-    if (!isPermanent) {
+    // Split stack option — only for stacked items with qty > 1
+    const qty = item.qty || 1;
+    if (qty > 1) {
+      addOption("Split Stack", () => {
+        this._showSplitPopup(container, index, item);
+      });
+    }
+
+    // Sell All option — when shop is open and item is stacked & sellable (inventory only)
+    if (isInventory && this.shopOpen && !isPermanent && qty > 1) {
+      const unitPrice = Math.max(1, Math.floor((item.value || 0) / 2));
+      const totalPrice = unitPrice * qty;
+      addOption(`Sell All (${totalPrice}g)`, () => {
+        if (this.game.network) this.game.network.sendSellItem(index, true);
+      }, "ctx-sell");
+    }
+
+    // Drop option — everything except permanent items (inventory only)
+    if (isInventory && !isPermanent) {
       addOption("Drop", () => {
         if (this.game.network) this.game.network.sendDropItem(index);
       }, "ctx-danger");
@@ -1426,6 +1455,90 @@ export class UISystem {
     if (this._ctxMenu) {
       this._ctxMenu.remove();
       this._ctxMenu = null;
+    }
+  }
+
+  _showSplitPopup(container, index, item) {
+    this._closeSplitPopup();
+    const maxQty = (item.qty || 1) - 1; // can split off 1..qty-1
+    if (maxQty < 1) return;
+
+    const popup = document.createElement("div");
+    popup.className = "split-popup";
+
+    const title = document.createElement("div");
+    title.className = "split-popup-title";
+    title.textContent = `Split ${item.name}`;
+    popup.append(title);
+
+    const row = document.createElement("div");
+    row.className = "split-popup-row";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = 1;
+    slider.max = maxQty;
+    slider.value = Math.floor(maxQty / 2) || 1;
+    slider.className = "split-slider";
+
+    const numInput = document.createElement("input");
+    numInput.type = "number";
+    numInput.min = 1;
+    numInput.max = maxQty;
+    numInput.value = slider.value;
+    numInput.className = "split-num";
+
+    slider.addEventListener("input", () => { numInput.value = slider.value; });
+    numInput.addEventListener("input", () => {
+      let v = parseInt(numInput.value, 10);
+      if (isNaN(v) || v < 1) v = 1;
+      if (v > maxQty) v = maxQty;
+      slider.value = v;
+    });
+
+    row.append(slider, numInput);
+    popup.append(row);
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "split-popup-btns";
+
+    const okBtn = document.createElement("button");
+    okBtn.textContent = "Split";
+    okBtn.className = "split-btn-ok";
+    okBtn.addEventListener("click", () => {
+      let v = parseInt(numInput.value, 10);
+      if (isNaN(v) || v < 1) v = 1;
+      if (v > maxQty) v = maxQty;
+      if (this.game.network) this.game.network.sendSplitStack(container, index, v);
+      this._closeSplitPopup();
+    });
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.className = "split-btn-cancel";
+    cancelBtn.addEventListener("click", () => this._closeSplitPopup());
+
+    btnRow.append(okBtn, cancelBtn);
+    popup.append(btnRow);
+
+    document.body.append(popup);
+    this._splitPopup = popup;
+
+    // Close on Escape
+    this._splitEscHandler = (e) => {
+      if (e.key === "Escape") this._closeSplitPopup();
+    };
+    document.addEventListener("keydown", this._splitEscHandler);
+  }
+
+  _closeSplitPopup() {
+    if (this._splitPopup) {
+      this._splitPopup.remove();
+      this._splitPopup = null;
+    }
+    if (this._splitEscHandler) {
+      document.removeEventListener("keydown", this._splitEscHandler);
+      this._splitEscHandler = null;
     }
   }
 

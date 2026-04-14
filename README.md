@@ -1,6 +1,18 @@
+> **AI Disclaimer:** This project was completely built by AI. My main driving question was, can I create an entire MMORPG development eco-system in AI. Apparently yes. I made sure that the vast majority of features were extensible through the use of jsons. Using jsons made it easy for me to get AI to make tools assisting in world development.
+
+For clarity, background loops for music was not AI generated. Loops were found at the following link:
+- https://pixabay.com/users/darren_hirst-47836735/
+
+(I tried to get Suno to make songs for me, but I was unable to get it to make a good ambient soundscape.)
+
+---
+
 # Azerfall (WoW2D Prototype)
 
 A browser-based top-down 2D fantasy RPG prototype inspired by early MMORPG starter-zone design. Features real-time multiplayer, persistent characters, data-driven world maps, and a classic quest/combat loop.
+
+![Login Screen](images/login_screen.png)
+*The Azerfall login screen — create an account or log in to an existing one to enter the world.*
 
 ## Tech Stack
 
@@ -59,6 +71,11 @@ http://localhost:3000
 ### Chat Commands
 
 - `/w PlayerName message` — whisper to a player
+
+## Gameplay
+
+![In-Game Screenshot](images/in_game.png)
+*In-game view showing the character sheet, professions panel, inventory with equipped gear, quest log, skills panel, equipment slots, hotbar, and chat — all overlaid on the tile-based world with enemies and resource nodes.*
 
 ## Features
 
@@ -197,6 +214,21 @@ public/
       skills/                  Skill ability icons (32×32 pixel-art PNGs)
       status/                  Buff/debuff status effect icons (32×32 pixel-art PNGs)
 ```
+
+## Map Editor
+
+![Map Editor](images/map_editor.png)
+*The built-in map editor for Eldengrove Village. Paint terrain with the tile palette, place objects (portals, enemies, NPCs, props, buildings, waystones, safe zones, tile modifiers, resource nodes), and manage all map properties from one interface. Maps are saved as JSON and loaded by both the server and client.*
+
+## Data Editor (Azerfall Tools)
+
+![Azerfall Tools](images/tools.png)
+*The Azerfall Tools data editor — a browser-based GUI for editing all game data JSON files. Tabs for Tile Palette, Items, Enemies, Quests, NPCs, Player Base, Props, Particles, Skills, Status Effects, Gathering, and Resources. Shown here: the Particles editor with full control over spawn counts, lifetime, speed, gravity, friction, size, blend mode, and color palettes. Changes are validated and saved directly to the data files on disk.*
+
+## Admin Panel
+
+![Admin Panel](images/admin_gui.png)
+*The admin dashboard provides a live overview of the server: online players, total accounts, total characters, active sessions, and total gold in the economy. Includes class distribution charts and per-map population tracking. Sidebar navigation gives access to player management, account lookup, character inspection, and map administration.*
 
 ## Particle System
 

@@ -236,8 +236,10 @@ export class NetworkSystem {
     this.send({ type: "use_item", index });
   }
 
-  sendSellItem(index) {
-    this.send({ type: "sell_item", index });
+  sendSellItem(index, all) {
+    const msg = { type: "sell_item", index };
+    if (all) msg.all = true;
+    this.send(msg);
   }
 
   sendDropItem(index) {
@@ -294,6 +296,10 @@ export class NetworkSystem {
 
   sendSwapItems(from, to, fromContainer, toContainer) {
     this.send({ type: "swap_items", from, to, fromContainer, toContainer });
+  }
+
+  sendSplitStack(container, index, qty) {
+    this.send({ type: "split_stack", container, index, qty });
   }
 
   /* ── message dispatcher ────────────────────────────── */
@@ -389,6 +395,9 @@ export class NetworkSystem {
         break;
       case "swap_result":
         this.onSwapResult(msg);
+        break;
+      case "split_stack_result":
+        this.onSplitStackResult(msg);
         break;
       case "drop_item_result":
         this.onDropItemResult(msg);
@@ -1039,7 +1048,7 @@ export class NetworkSystem {
     player.gold = msg.gold;
     this.game.ui._inventoryDirty = true;
     this.game.ui._hotbarDirty = true;
-    this.game.ui.addMessage(`Sold ${msg.soldName} for ${msg.sellPrice} gold.`);
+    this.game.ui.addMessage(`Sold ${msg.sellQty > 1 ? msg.sellQty + "x " : ""}${msg.soldName} for ${msg.sellPrice} gold.`);
     this.game.audio.play("pickup");
   }
 
@@ -1276,6 +1285,24 @@ export class NetworkSystem {
   onSwapResult(msg) {
     if (!msg.ok) {
       this.game.ui.addMessage("Cannot move that item.");
+      return;
+    }
+    const player = this.game.entities.player;
+    if (msg.inventory) {
+      for (let i = 0; i < 20; i++) player.inventorySlots[i] = msg.inventory[i] || null;
+    }
+    if (msg.bank) {
+      for (let i = 0; i < 48; i++) player.bank[i] = msg.bank[i] || null;
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._bankDirty = true;
+    this.game.ui._hotbarDirty = true;
+  }
+
+  onSplitStackResult(msg) {
+    if (!msg.ok) {
+      const reasons = { full: "No empty slot to split into.", too_far: "Too far from the banker." };
+      this.game.ui.addMessage(reasons[msg.reason] || "Cannot split that stack.");
       return;
     }
     const player = this.game.entities.player;

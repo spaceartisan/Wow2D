@@ -979,6 +979,96 @@ input, textarea {
   color: #ff6b6b;
 }
 
+.item-ctx-option.ctx-sell {
+  color: var(--accent-gold);
+}
+
+.item-ctx-option.ctx-sell:hover {
+  background: rgba(212, 169, 67, 0.22);
+  color: var(--accent-gold-bright);
+}
+
+/* ── split stack popup ────────────────────────────────── */
+
+.split-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  background: var(--panel-bg-solid);
+  border: 2px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 16px;
+  min-width: 200px;
+  text-align: center;
+}
+
+.split-popup-title {
+  font-size: 13px;
+  color: var(--accent-gold-bright);
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.split-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.split-slider {
+  flex: 1;
+  accent-color: var(--accent-gold);
+}
+
+.split-num {
+  width: 48px;
+  padding: 3px 4px;
+  font-size: 12px;
+  text-align: center;
+  background: #0d0b07;
+  color: var(--text-main);
+  border: 1px solid var(--panel-border-dim);
+  border-radius: var(--radius);
+}
+
+.split-popup-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.split-btn-ok,
+.split-btn-cancel {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid var(--panel-border-dim);
+}
+
+.split-btn-ok {
+  background: rgba(212, 169, 67, 0.2);
+  color: var(--accent-gold-bright);
+}
+
+.split-btn-ok:hover {
+  background: rgba(212, 169, 67, 0.35);
+}
+
+.split-btn-cancel {
+  background: rgba(80, 70, 50, 0.3);
+  color: var(--text-dim);
+}
+
+.split-btn-cancel:hover {
+  background: rgba(80, 70, 50, 0.5);
+}
+
 /* ── shop panel ───────────────────────────────────────── */
 
 #shop-panel {
