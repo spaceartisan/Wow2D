@@ -1,4 +1,4 @@
-import { PLAYER_BASE } from "../config.js";
+import { PLAYER_BASE, classStats, CLASSES } from "../config.js";
 import { clamp, distance, normalize } from "../utils.js";
 
 export class EntitySystem {
@@ -16,6 +16,7 @@ export class EntitySystem {
   createPlayer() {
     const spawn = this.game.world.spawnPoint;
     const charData = this.game.charData;
+    const cs = classStats(charData.charClass);
     return {
       name: charData.name || "Adventurer",
       charClass: charData.charClass || "warrior",
@@ -25,17 +26,17 @@ export class EntitySystem {
       level: 1,
       xp: 0,
       xpToLevel: 160,
-      hp: PLAYER_BASE.maxHp,
-      maxHp: PLAYER_BASE.maxHp,
-      mana: PLAYER_BASE.maxMana,
-      maxMana: PLAYER_BASE.maxMana,
-      moveSpeed: PLAYER_BASE.moveSpeed,
-      baseDamage: PLAYER_BASE.damage,
-      attackRange: PLAYER_BASE.attackRange,
-      attackCooldown: PLAYER_BASE.attackCooldown,
-      _baseHitParticle: PLAYER_BASE.hitParticle || "hit_spark",
-      _baseHitSfx: PLAYER_BASE.hitSfx || "sword_hit",
-      _baseSwingSfx: PLAYER_BASE.swingSfx || "sword_swing",
+      hp: cs.maxHp,
+      maxHp: cs.maxHp,
+      mana: cs.maxMana,
+      maxMana: cs.maxMana,
+      moveSpeed: cs.moveSpeed,
+      baseDamage: cs.damage,
+      attackRange: cs.attackRange,
+      attackCooldown: cs.attackCooldown,
+      _baseHitParticle: cs.hitParticle || "hit_spark",
+      _baseHitSfx: cs.hitSfx || "sword_hit",
+      _baseSwingSfx: cs.swingSfx || "sword_swing",
       gold: 12,
       dead: false,
       deathUntil: 0,
@@ -75,12 +76,12 @@ export class EntitySystem {
       result.push({
         id: def.id,
         name: def.name,
-        x: placement.tx * tileSize,
-        y: placement.ty * tileSize,
+        x: placement.tx * tileSize + tileSize / 2,
+        y: placement.ty * tileSize + tileSize / 2,
         color: def.color,
         dialog: def.defaultDialog,
         questIds: def.questIds || [],
-        type: def.type || "generic",
+        type: def.type || "npc",
         shop: def.shop || null,
         craftingSkill: def.craftingSkill || null,
         floor: placement.floor ?? 0
@@ -99,8 +100,8 @@ export class EntitySystem {
       result.push({
         id: s.id,
         name: s.name,
-        x: s.tx * tileSize,
-        y: s.ty * tileSize,
+        x: s.tx * tileSize + tileSize / 2,
+        y: s.ty * tileSize + tileSize / 2,
         floor: s.floor || 0
       });
     }
@@ -269,22 +270,9 @@ export class EntitySystem {
 
   grantXp(amount) {
     const player = this.player;
+    // Only add XP for immediate visual feedback; the server is authoritative
+    // for level-ups and will correct xp/level/xpToLevel on the next tick.
     player.xp += amount;
-
-    while (player.xp >= player.xpToLevel) {
-      player.xp -= player.xpToLevel;
-      player.level += 1;
-      player.xpToLevel = Math.round(player.xpToLevel * 1.28);
-      player.maxHp += 24;
-      player.maxMana += 16;
-      player.baseDamage += 4;
-      player.hp = player.maxHp;
-      player.mana = player.maxMana;
-      this.game.ui.addMessage(`Level up! You reached level ${player.level}.`);
-      this.game.audio.play("level_up");
-      this.game.particles.emit("levelup", player.x, player.y);
-      this.recalculateDerivedStats();
-    }
   }
 
   addItemToInventory(item) {
@@ -368,28 +356,41 @@ export class EntitySystem {
   recalculateDerivedStats() {
     const player = this.player;
     const eq = player.equipment;
+    const allSlots = ["mainHand", "offHand", "armor", "helmet", "pants", "boots", "ring1", "ring2", "amulet"];
+    const cs = classStats(player.charClass);
 
-    const weapon = eq.mainHand;
-    player.damage = player.baseDamage + (weapon?.attackBonus || 0);
+    // Sum all stat bonuses from every equipped item (any slot can boost any stat)
+    let hpBonus = 0;
+    let manaBonus = 0;
+    let attackBonus = 0;
+    let defenseBonus = 0;
+
+    for (const slot of allSlots) {
+      const item = eq[slot];
+      if (!item) continue;
+      if (item.stats) {
+        hpBonus += item.stats.maxHp || 0;
+        manaBonus += item.stats.maxMana || 0;
+        attackBonus += item.stats.attack || 0;
+        defenseBonus += item.stats.defense || 0;
+      } else {
+        // Backward compat for old item format in existing saves
+        hpBonus += item.hpBonus || 0;
+        manaBonus += item.manaBonus || 0;
+        attackBonus += item.attackBonus || 0;
+      }
+    }
+
+    player.damage = player.baseDamage + attackBonus;
+    player.defense = defenseBonus;
 
     // Use weapon range if present (ranged weapons), otherwise default melee range
+    const weapon = eq.mainHand;
     const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
-    player.attackRange = weaponDef?.range || PLAYER_BASE.attackRange;
+    player.attackRange = weaponDef?.range || cs.attackRange;
 
-    // Sum HP bonuses from armour-like slots
-    let hpBonus = 0;
-    for (const s of ["armor", "offHand", "helmet", "pants", "boots"]) {
-      hpBonus += eq[s]?.hpBonus || 0;
-    }
-
-    // Sum mana bonuses from rings + amulet
-    let manaBonus = 0;
-    for (const s of ["ring1", "ring2", "amulet"]) {
-      manaBonus += eq[s]?.manaBonus || 0;
-    }
-
-    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + hpBonus;
-    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + manaBonus;
+    const maxHp = cs.maxHp + (player.level - 1) * cs.hpPerLevel + hpBonus;
+    const maxMana = cs.maxMana + (player.level - 1) * cs.manaPerLevel + manaBonus;
 
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
     const manaRatio = player.maxMana > 0 ? player.mana / player.maxMana : 1;
@@ -472,14 +473,15 @@ export class EntitySystem {
         ctx.font = "12px Trebuchet MS";
         ctx.textAlign = "center";
         ctx.fillText(npc.name, x, y - 20);
+      }
 
-        // Quest marker: show "?" for turn-in, "!" for available quests
-        const marker = this.game.quests.getNpcQuestMarker(npc);
-        if (marker) {
-          ctx.fillStyle = marker === "?" ? "#5ec9f5" : "#ffdf84";
-          ctx.font = "bold 16px Trebuchet MS";
-          ctx.fillText(marker, x, y - 34);
-        }
+      // Quest marker: show "?" for turn-in, "!" for available quests
+      const marker = this.game.quests.getNpcQuestMarker(npc);
+      if (marker) {
+        ctx.fillStyle = marker === "?" ? "#5ec9f5" : "#ffdf84";
+        ctx.font = "bold 16px Trebuchet MS";
+        ctx.textAlign = "center";
+        ctx.fillText(marker, x, y - 34);
       }
     }
 
@@ -560,8 +562,7 @@ export class EntitySystem {
       if (img) {
         ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
       } else {
-        const classColors = { warrior: "#d48a5e", mage: "#8a7dc9", rogue: "#7cc97d" };
-        ctx.fillStyle = classColors[rp.charClass] || "#b0b0b0";
+        ctx.fillStyle = (CLASSES[rp.charClass] && CLASSES[rp.charClass].color) || "#b0b0b0";
         ctx.beginPath();
         ctx.arc(x, y, 16, 0, Math.PI * 2);
         ctx.fill();

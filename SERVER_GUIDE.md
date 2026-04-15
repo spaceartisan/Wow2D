@@ -183,6 +183,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `swap_items` | `from, to, fromIndex, toIndex` | Swap/stack between `"inventory"` and/or `"bank"` |
 | `gather` | `nodeId` | Harvest a resource node (range, tool, skill level, cooldown validated) |
 | `craft` | `recipeId` | Craft an item at a crafting station (proximity, skill level, materials validated) |
+| `dismantle_item` | `index` | Dismantle an equipment item into materials (must be near vendor NPC) |
 | `respawn` | — | Signal ready to respawn (actual respawn is tick-driven) |
 
 ### Server → Client Messages
@@ -192,7 +193,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `auth_error` | Bad token | `error` |
 | `kicked` | Duplicate login | `reason` |
 | `welcome` | Join success | `playerId, mapId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana, gatheringSkills, resourceNodes, x, y, floor` |
-| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, damage }` — enemies and players include `floor` field |
+| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, xpToLevel, damage }` — enemies and players include `floor` field |
 | `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead, floor }` |
 | `player_left` | Player leaves map | `playerId` |
 | `map_changed` | Portal transition | `mapId, enemies, players, drops` |
@@ -218,6 +219,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `swap_result` | Item swap | `ok, reason?, inventory, bank` |
 | `gather_result` | Gather attempt | `success, reason?, itemId?, itemName?, inventory?, gatheringSkills?, skillId?, xpGained?, leveledUp?, newLevel?` |
 | `craft_result` | Craft attempt | `success, reason?, recipeId?, outputItem?, inventory?, gatheringSkills?, xpGained?, leveledUp?, newLevel?` |
+| `dismantle_item_result` | Dismantle attempt | `ok, reason?, inventory?, dismantledName?, gained?` |
 | `enemy_killed` | Kill confirmed | `enemyId, enemyType, xpReward` |
 | `drop_spawned` | Loot appears | `drop: { id, x, y }` |
 | `drop_removed` | Loot taken | `dropId` |
@@ -242,17 +244,17 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   ws: WebSocket,               // Live connection handle
   charId: 42,                  // Database character ID (for saving)
   name: "Elara",
-  charClass: "warrior",        // "warrior" | "mage" | "rogue"
+  charClass: "warrior",        // class ID from playerBase.json ("warrior" | "mage" | "rogue" | …)
   mapId: "eldengrove",         // Current map ID
   x: 1200, y: 1500,           // World pixel position
   floor: 0,                    // 0 = ground, 1+ = upper floors
   level: 5,
   xp: 320,
   gold: 87,
-  hp: 200, maxHp: 216,         // maxHp = base(120) + (level-1)*24 + sum(armor/offHand/helmet/pants/boots hpBonus)
-  mana: 120, maxMana: 144,     // maxMana = base(80) + (level-1)*16 + sum(ring1/ring2/amulet manaBonus)
-  baseDamage: 32,              // base(16) + (level-1)*4
-  damage: 37,                  // baseDamage + mainHand.attackBonus
+  hp: 200, maxHp: 262,         // maxHp = class.maxHp + (level-1)*class.hpPerLevel + sum(equipped stats.maxHp)
+  mana: 80, maxMana: 108,      // maxMana = class.maxMana + (level-1)*class.manaPerLevel + sum(equipped stats.maxMana)
+  baseDamage: 38,              // class.damage + (level-1)*class.damagePerLevel
+  damage: 43,                  // baseDamage + sum(all equipped stats.attack)
   attackRange: 52,
   attackCooldown: 0.82,        // seconds
   lastAttackAt: 0,             // timestamp
@@ -479,8 +481,8 @@ function unstickPlayer(playerId, targetMapId, tileX, tileY) {
 
   const ts = mapEntry.collision.tileSize || 48;
   const oldMap = player.mapId;
-  player.x = tileX * ts;
-  player.y = tileY * ts;
+  player.x = tileX * ts + ts / 2;
+  player.y = tileY * ts + ts / 2;
   player.floor = 0;
 
   if (oldMap !== targetMapId) {
@@ -715,10 +717,10 @@ const activeSessions = db.prepare(
 
 | Stat | Formula |
 |------|---------|
-| Max HP | `120 + (level - 1) × 24 + sum(armor, offHand, helmet, pants, boots hpBonus)` |
-| Max Mana | `80 + (level - 1) × 16 + sum(ring1, ring2, amulet manaBonus)` |
+| Max HP | `120 + (level - 1) × 24 + sum(all equipped stats.maxHp)` |
+| Max Mana | `80 + (level - 1) × 16 + sum(all equipped stats.maxMana)` |
 | Base Damage | `16 + (level - 1) × 4` |
-| Total Damage | `baseDamage + mainHand.attackBonus` |
+| Total Damage | `baseDamage + sum(all equipped stats.attack)` |
 | XP to Level | `160 × 1.28^(level - 1)` |
 | Heal Amount | `34 + level × 6` (22 mana, 5.3s cooldown) |
 | HP Regen | `1.8 / sec` |
@@ -795,11 +797,11 @@ The admin GUI (`admin/`) is fully implemented. All routes are behind `adminAuth`
 | GET | `/admin/api/accounts` | All registered accounts |
 | GET | `/admin/api/accounts/:username/characters` | Characters belonging to an account |
 | GET | `/admin/api/characters` | All characters across all accounts |
-| GET | `/admin/api/characters/:id` | Full character detail (stats, inventory, equipment, bank, quests, hearthstone) |
+| GET | `/admin/api/characters/:id` | Full character detail (stats, inventory, equipment, bank, quests, hearthstone). Returns live in-memory state for online players. |
 | POST | `/admin/api/characters/:id/edit` | Edit character stats (level, xp, hp, gold, mapId, tileX, tileY) |
 | POST | `/admin/api/characters/:id/hearthstone` | Set attuned hearthstone waystone |
-| POST | `/admin/api/characters/:id/inventory` | Replace inventory (20-slot array) |
-| POST | `/admin/api/characters/:id/bank` | Replace bank (48-slot array) |
+| POST | `/admin/api/characters/:id/inventory` | Replace inventory (20-slot array). If online, updates RAM and sends `swap_result` to client. |
+| POST | `/admin/api/characters/:id/bank` | Replace bank (48-slot array). If online, updates RAM and sends `swap_result` to client. |
 | GET | `/admin/api/items` | Full item catalog from items.json |
 | GET | `/admin/api/waystones` | All waystones across all maps |
 | POST | `/admin/api/players/:id/kick` | Kick an online player |

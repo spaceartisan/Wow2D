@@ -81,7 +81,7 @@ export class WorldSystem {
 
     // Spawn point (stored as tile coords)
     const sp = data.spawnPoint || [0, 0];
-    this.spawnPoint = { x: sp[0] * this.tileSize, y: sp[1] * this.tileSize };
+    this.spawnPoint = { x: sp[0] * this.tileSize + this.tileSize / 2, y: sp[1] * this.tileSize + this.tileSize / 2 };
 
     // Build blocked set from palette + extraBlocked
     this.blocked = new Set();

@@ -22,7 +22,14 @@ const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatherin
 const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
-const PLAYER_BASE = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
+const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
+const PLAYER_BASE = PLAYER_BASE_DATA.defaults;
+const CLASSES = PLAYER_BASE_DATA.classes || {};
+
+function classStats(classId) {
+  const cls = CLASSES[classId] || {};
+  return { ...PLAYER_BASE, ...cls };
+}
 
 function loadMap(mapId) {
   const data = JSON.parse(fs.readFileSync(path.join(dataDir, "maps", `${mapId}.json`), "utf8"));
@@ -82,7 +89,7 @@ class CollisionMap {
 
     // Spawn point (tile coords → world coords)
     const sp = mapData.spawnPoint || [0, 0];
-    this.spawnPoint = { x: sp[0] * this.tileSize, y: sp[1] * this.tileSize };
+    this.spawnPoint = { x: sp[0] * this.tileSize + this.tileSize / 2, y: sp[1] * this.tileSize + this.tileSize / 2 };
 
     // Safe zones from map data
     this.safeZones = (mapData.safeZones || []).map(sz => ({
@@ -294,10 +301,13 @@ class ServerWorld {
     const xp = Math.max(0, Number(charData.xp) || 0);
     const gold = Math.max(0, Number(charData.gold) || 12);
 
-    // Scale stats by level
-    const maxHp = PLAYER_BASE.maxHp + (level - 1) * 24;
-    const maxMana = PLAYER_BASE.maxMana + (level - 1) * 16;
-    const baseDamage = PLAYER_BASE.damage + (level - 1) * 4;
+    const charClass = CLASSES[charData.charClass] ? charData.charClass : "warrior";
+    const cs = classStats(charClass);
+
+    // Scale stats by level using class-specific scaling
+    const maxHp = cs.maxHp + (level - 1) * cs.hpPerLevel;
+    const maxMana = cs.maxMana + (level - 1) * cs.manaPerLevel;
+    const baseDamage = cs.damage + (level - 1) * cs.damagePerLevel;
 
     const state = {
       id,
@@ -305,7 +315,7 @@ class ServerWorld {
       mapId,
       charId: charData.id || null,
       name: String(charData.name || "Unknown").slice(0, 16),
-      charClass: ["warrior", "mage", "rogue"].includes(charData.charClass) ? charData.charClass : "warrior",
+      charClass,
       level,
       xp,
       gold,
@@ -318,8 +328,8 @@ class ServerWorld {
       maxMana,
       baseDamage,
       damage: baseDamage,
-      attackRange: PLAYER_BASE.attackRange,
-      attackCooldown: PLAYER_BASE.attackCooldown,
+      attackRange: cs.attackRange,
+      attackCooldown: cs.attackCooldown,
       lastAttackAt: 0,
       lastHealAt: 0,
       dead: false,
@@ -558,6 +568,9 @@ class ServerWorld {
         break;
       case "craft":
         this.handleCraft(player, msg);
+        break;
+      case "dismantle_item":
+        this.handleDismantleItem(player, msg);
         break;
       case "respawn":
         // client signals it's ready to respawn
@@ -944,18 +957,50 @@ class ServerWorld {
       }
     } else if (skillDef.type === "heal") {
       const healAmount = (skillDef.healAmount || 0) + (skillDef.healPerLevel || 0) * (player.level - 1);
-      player.hp = Math.min(player.maxHp, player.hp + healAmount);
 
-      this.send(player.ws, {
-        type: "skill_result",
-        ok: true,
-        skillId,
-        healAmount,
-        hp: player.hp,
-        maxHp: player.maxHp,
-        mana: player.mana,
-        maxMana: player.maxMana
-      });
+      // HoT (heal over time) — apply as a buff with ticking heals
+      if (skillDef.healTicks && skillDef.healInterval) {
+        if (!player.activeBuffs) player.activeBuffs = [];
+        const hotId = "hot_" + skillId;
+        player.activeBuffs = player.activeBuffs.filter(b => b.id !== hotId);
+        const duration = skillDef.healTicks * skillDef.healInterval;
+        player.activeBuffs.push({
+          id: hotId,
+          stat: "hot",
+          tickHeal: healAmount,
+          tickInterval: skillDef.healInterval,
+          ticksRemaining: skillDef.healTicks,
+          duration,
+          appliedAt: now,
+          expiresAt: now + duration * 1000,
+          _lastTickAt: now
+        });
+        this.send(player.ws, {
+          type: "skill_result",
+          ok: true,
+          skillId,
+          healAmount: 0,
+          hp: player.hp,
+          maxHp: player.maxHp,
+          mana: player.mana,
+          maxMana: player.maxMana,
+          hot: { id: hotId, tickHeal: healAmount, ticks: skillDef.healTicks, interval: skillDef.healInterval }
+        });
+      } else {
+        // Instant heal
+        player.hp = Math.min(player.maxHp, player.hp + healAmount);
+
+        this.send(player.ws, {
+          type: "skill_result",
+          ok: true,
+          skillId,
+          healAmount,
+          hp: player.hp,
+          maxHp: player.maxHp,
+          mana: player.mana,
+          maxMana: player.maxMana
+        });
+      }
 
       // Broadcast heal visual to other players
       if (skillDef.particle) {
@@ -1131,6 +1176,22 @@ class ServerWorld {
     const template = ITEMS[item.id];
     if (!template) return;
 
+    // Build the effects list: new "effects" array or legacy "effect"/"power" fallback
+    const effects = template.effects || (template.effect ? [{ type: template.effect, power: template.power }] : []);
+    if (effects.length === 0) {
+      this.send(player.ws, { type: "use_item_result", ok: false, reason: "unknown_effect" });
+      return;
+    }
+
+    // Pre-check: if any effect requires a quiver, verify it exists before consuming
+    if (effects.some(e => e.type === "refillQuiver")) {
+      const quiver = player.equipment.offHand;
+      if (!quiver || quiver.type !== "quiver") {
+        this.send(player.ws, { type: "use_item_result", ok: false, reason: "No quiver equipped." });
+        return;
+      }
+    }
+
     // Decrement stack or remove
     const qty = item.qty || 1;
     if (qty > 1) {
@@ -1139,68 +1200,111 @@ class ServerWorld {
       inventory[index] = null;
     }
 
-    if (template.effect === "healHp") {
-      const before = player.hp;
-      player.hp = Math.min(player.maxHp, player.hp + template.power);
-      const healed = player.hp - before;
-      this.send(player.ws, {
-        type: "use_item_result",
-        ok: true,
-        index,
-        itemId: item.id,
-        remainingItem: inventory[index],
-        effect: "healHp",
-        amount: healed,
-        hp: player.hp,
-        maxHp: player.maxHp,
-        mana: player.mana,
-        maxMana: player.maxMana
-      });
-    } else if (template.effect === "healMana") {
-      const before = player.mana;
-      player.mana = Math.min(player.maxMana, player.mana + template.power);
-      const restored = player.mana - before;
-      this.send(player.ws, {
-        type: "use_item_result",
-        ok: true,
-        index,
-        itemId: item.id,
-        remainingItem: inventory[index],
-        effect: "healMana",
-        amount: restored,
-        hp: player.hp,
-        maxHp: player.maxHp,
-        mana: player.mana,
-        maxMana: player.maxMana
-      });
-    } else if (template.effect === "refillQuiver") {
-      const quiver = player.equipment.offHand;
-      if (!quiver || quiver.type !== "quiver") {
-        // put the item back
-        if (qty > 1) { item.qty = qty; } else { inventory[index] = item; }
-        this.send(player.ws, { type: "use_item_result", ok: false, reason: "No quiver equipped." });
-        return;
+    const now = Date.now();
+    const appliedEffects = [];
+    let quiverUpdated = false;
+
+    for (const fx of effects) {
+      switch (fx.type) {
+        case "healHp": {
+          const before = player.hp;
+          player.hp = Math.min(player.maxHp, player.hp + fx.power);
+          appliedEffects.push({ type: "healHp", amount: player.hp - before });
+          break;
+        }
+        case "healMana": {
+          const before = player.mana;
+          player.mana = Math.min(player.maxMana, player.mana + fx.power);
+          appliedEffects.push({ type: "healMana", amount: player.mana - before });
+          break;
+        }
+        case "refillQuiver": {
+          const quiver = player.equipment.offHand;
+          const maxArr = ITEMS[quiver.id]?.maxArrows || quiver.maxArrows || 50;
+          const before = quiver.arrows || 0;
+          quiver.arrows = Math.min(maxArr, before + fx.power);
+          appliedEffects.push({ type: "refillQuiver", amount: quiver.arrows - before });
+          quiverUpdated = true;
+          break;
+        }
+        case "buff":
+        case "debuff":
+        case "hot":
+        case "dot": {
+          if (!player.activeBuffs) player.activeBuffs = [];
+          // Remove existing buff/debuff of same id
+          player.activeBuffs = player.activeBuffs.filter(b => b.id !== fx.id);
+          const entry = {
+            id: fx.id,
+            stat: fx.stat || (fx.type === "hot" ? "hot" : fx.type === "dot" ? "dot" : fx.stat),
+            modifier: fx.modifier || 0,
+            duration: fx.duration || 0,
+            appliedAt: now,
+            expiresAt: now + (fx.duration || 0) * 1000
+          };
+          if (fx.type === "hot") {
+            entry.stat = "hot";
+            entry.tickHeal = fx.tickHeal || 0;
+            entry.tickInterval = fx.tickInterval || 2;
+            entry.lastTick = now;
+          }
+          if (fx.type === "dot") {
+            entry.stat = "dot";
+            entry.tickDamage = fx.tickDamage || 0;
+            entry.tickInterval = fx.tickInterval || 2;
+            entry.lastTick = now;
+          }
+          player.activeBuffs.push(entry);
+          appliedEffects.push({
+            type: fx.type,
+            id: fx.id,
+            stat: entry.stat,
+            modifier: entry.modifier,
+            duration: fx.duration
+          });
+          break;
+        }
+        case "cleanse": {
+          if (player.activeBuffs) {
+            const before = player.activeBuffs.length;
+            player.activeBuffs = player.activeBuffs.filter(b => {
+              // Remove debuffs and dots (negative effects)
+              const isDot = b.stat === "dot";
+              const isDebuff = (b.modifier !== undefined && b.modifier < 0) || b.stat === "stunned" || isDot;
+              return !isDebuff;
+            });
+            appliedEffects.push({ type: "cleanse", removed: before - player.activeBuffs.length });
+          } else {
+            appliedEffects.push({ type: "cleanse", removed: 0 });
+          }
+          break;
+        }
+        default:
+          appliedEffects.push({ type: fx.type });
+          break;
       }
+    }
+
+    this.send(player.ws, {
+      type: "use_item_result",
+      ok: true,
+      index,
+      itemId: item.id,
+      remainingItem: inventory[index],
+      effects: appliedEffects,
+      // Legacy fields for backward compat with client
+      effect: appliedEffects[0]?.type,
+      amount: appliedEffects[0]?.amount,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      mana: player.mana,
+      maxMana: player.maxMana
+    });
+
+    if (quiverUpdated) {
+      const quiver = player.equipment.offHand;
       const maxArr = ITEMS[quiver.id]?.maxArrows || quiver.maxArrows || 50;
-      const before = quiver.arrows || 0;
-      quiver.arrows = Math.min(maxArr, before + template.power);
-      const added = quiver.arrows - before;
-      this.send(player.ws, {
-        type: "use_item_result",
-        ok: true,
-        index,
-        itemId: item.id,
-        remainingItem: inventory[index],
-        effect: "refillQuiver",
-        amount: added,
-        hp: player.hp,
-        maxHp: player.maxHp,
-        mana: player.mana,
-        maxMana: player.maxMana
-      });
       this.send(player.ws, { type: "quiver_update", arrows: quiver.arrows, maxArrows: maxArr });
-    } else {
-      this.send(player.ws, { type: "use_item_result", ok: false, reason: "unknown_effect" });
     }
   }
 
@@ -1217,8 +1321,8 @@ class ServerWorld {
     const nearVendor = npcsOnMap.some(npcPlacement => {
       const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
       if (!npcDef || !npcDef.shop || npcDef.shop.length === 0) return false;
-      const npcX = npcPlacement.tx * tileSize;
-      const npcY = npcPlacement.ty * tileSize;
+      const npcX = npcPlacement.tx * tileSize + tileSize / 2;
+      const npcY = npcPlacement.ty * tileSize + tileSize / 2;
       return dist(player.x, player.y, npcX, npcY) < tileSize * 1.5;
     });
     if (!nearVendor) {
@@ -1280,8 +1384,8 @@ class ServerWorld {
     const tileSize = mapEntry.collision.tileSize || 48;
     const npcPlacement = (mapEntry.data.npcs || []).find(n => n.npcId === npcId);
     if (!npcPlacement) return;
-    const npcX = npcPlacement.tx * tileSize;
-    const npcY = npcPlacement.ty * tileSize;
+    const npcX = npcPlacement.tx * tileSize + tileSize / 2;
+    const npcY = npcPlacement.ty * tileSize + tileSize / 2;
     if (dist(player.x, player.y, npcX, npcY) >= tileSize * 1.5) {
       this.send(player.ws, { type: "buy_item_result", ok: false, reason: "too_far" });
       return;
@@ -1571,8 +1675,8 @@ class ServerWorld {
 
     // Verify proximity to statue
     const tileSize = mapEntry.collision.tileSize || 48;
-    const sx = statue.tx * tileSize;
-    const sy = statue.ty * tileSize;
+    const sx = statue.tx * tileSize + tileSize / 2;
+    const sy = statue.ty * tileSize + tileSize / 2;
     if (dist(player.x, player.y, sx, sy) > tileSize * 4) {
       this.send(player.ws, { type: "attune_result", ok: false, reason: "too_far" });
       return;
@@ -1666,8 +1770,8 @@ class ServerWorld {
     return npcsOnMap.some(npcPlacement => {
       const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
       if (!npcDef || npcDef.type !== "banker") return false;
-      const npcX = npcPlacement.tx * tileSize;
-      const npcY = npcPlacement.ty * tileSize;
+      const npcX = npcPlacement.tx * tileSize + tileSize / 2;
+      const npcY = npcPlacement.ty * tileSize + tileSize / 2;
       return dist(player.x, player.y, npcX, npcY) < tileSize * 1.5;
     });
   }
@@ -1935,8 +2039,8 @@ class ServerWorld {
     if (!mapEntry) return;
 
     const tileSize = mapEntry.collision.tileSize || 48;
-    const targetX = hs.tx * tileSize;
-    const targetY = hs.ty * tileSize;
+    const targetX = hs.tx * tileSize + tileSize / 2;
+    const targetY = hs.ty * tileSize + tileSize / 2;
 
     if (player.mapId !== targetMapId) {
       // Cross-map teleport
@@ -1981,27 +2085,39 @@ class ServerWorld {
 
   _recalcStats(player) {
     const eq = player.equipment;
-    const weapon = eq.mainHand || null;
+    const allSlots = ["mainHand", "offHand", "armor", "helmet", "pants", "boots", "ring1", "ring2", "amulet"];
+    const cs = classStats(player.charClass);
 
-    // Sum HP bonuses from all armour-like slots (armor, shield, helmet, pants, boots)
+    // Sum all stat bonuses from every equipped item (any slot can boost any stat)
     let hpBonus = 0;
-    for (const s of ["armor", "offHand", "helmet", "pants", "boots"]) {
-      hpBonus += eq[s]?.hpBonus || 0;
-    }
-
-    // Sum mana bonuses from rings + amulet
     let manaBonus = 0;
-    for (const s of ["ring1", "ring2", "amulet"]) {
-      manaBonus += eq[s]?.manaBonus || 0;
+    let attackBonus = 0;
+    let defenseBonus = 0;
+
+    for (const slot of allSlots) {
+      const item = eq[slot];
+      if (!item) continue;
+      if (item.stats) {
+        hpBonus += item.stats.maxHp || 0;
+        manaBonus += item.stats.maxMana || 0;
+        attackBonus += item.stats.attack || 0;
+        defenseBonus += item.stats.defense || 0;
+      } else {
+        // Backward compat for old item format in existing saves
+        hpBonus += item.hpBonus || 0;
+        manaBonus += item.manaBonus || 0;
+        attackBonus += item.attackBonus || 0;
+      }
     }
 
-    const maxHp = PLAYER_BASE.maxHp + (player.level - 1) * 24 + hpBonus;
-    const maxMana = PLAYER_BASE.maxMana + (player.level - 1) * 16 + manaBonus;
-    const damage = player.baseDamage + (weapon?.attackBonus || 0);
+    const maxHp = cs.maxHp + (player.level - 1) * cs.hpPerLevel + hpBonus;
+    const maxMana = cs.maxMana + (player.level - 1) * cs.manaPerLevel + manaBonus;
+    const damage = player.baseDamage + attackBonus;
 
     // Use weapon range if present (ranged weapons), otherwise default melee range
+    const weapon = eq.mainHand || null;
     const weaponDef = weapon ? ITEMS[weapon.id] : null;
-    player.attackRange = weaponDef?.range || PLAYER_BASE.attackRange;
+    player.attackRange = weaponDef?.range || cs.attackRange;
 
     // Preserve HP/mana ratio when max changes
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
@@ -2010,6 +2126,7 @@ class ServerWorld {
     player.maxHp = maxHp;
     player.maxMana = maxMana;
     player.damage = damage;
+    player.defense = defenseBonus;
     player.hp = clamp(Math.round(maxHp * hpRatio), 1, maxHp);
     player.mana = clamp(Math.round(maxMana * manaRatio), 0, maxMana);
   }
@@ -2027,7 +2144,8 @@ class ServerWorld {
     while (player.xp >= xpToLevel && player.level < 100) {
       player.xp -= xpToLevel;
       player.level += 1;
-      player.baseDamage = PLAYER_BASE.damage + (player.level - 1) * 4;
+      const cs = classStats(player.charClass);
+      player.baseDamage = cs.damage + (player.level - 1) * cs.damagePerLevel;
       this._recalcStats(player);
       // Fully heal on level-up
       player.hp = player.maxHp;
@@ -2051,7 +2169,7 @@ class ServerWorld {
       const positions = spawn.positions || [];
       const floor = spawn.floor || 0;
       for (const [tx, ty] of positions) {
-        const e = this.makeEnemy(type, tx * tileSize, ty * tileSize, floor);
+        const e = this.makeEnemy(type, tx * tileSize + tileSize / 2, ty * tileSize + tileSize / 2, floor);
         if (e) enemies.push(e);
       }
     }
@@ -2819,9 +2937,24 @@ class ServerWorld {
   /* ── buff & debuff expiry ──────────────────────────── */
 
   updateBuffsAndDebuffs(now) {
-    // Expire player buffs
+    // Tick player HoTs and expire player buffs
     for (const [, player] of this.players) {
       if (!player.activeBuffs) continue;
+      for (const buff of player.activeBuffs) {
+        if (buff.stat === "hot" && buff.tickHeal && buff.ticksRemaining > 0) {
+          const interval = (buff.tickInterval || 1) * 1000;
+          if (!buff._lastTickAt) buff._lastTickAt = buff.appliedAt;
+          if (now - buff._lastTickAt >= interval) {
+            buff._lastTickAt = now;
+            buff.ticksRemaining--;
+            const before = player.hp;
+            player.hp = Math.min(player.maxHp, player.hp + buff.tickHeal);
+            if (player.hp > before && buff.ticksRemaining <= 0) {
+              buff.expiresAt = 0; // force expire on next filter
+            }
+          }
+        }
+      }
       player.activeBuffs = player.activeBuffs.filter(b => now < b.expiresAt);
     }
 
@@ -2890,6 +3023,7 @@ class ServerWorld {
           gold: player.gold || 0,
           level: player.level,
           xp: player.xp || 0,
+          xpToLevel: this._xpToLevelForLevel(player.level),
           damage: Math.round(player.damage * this._getPlayerDamageMultiplier(player)),
           buffs: (player.activeBuffs || []).map(b => ({
             id: b.id, stat: b.stat, modifier: b.modifier,
@@ -3207,8 +3341,8 @@ class ServerWorld {
       const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
       if (!npcDef || npcDef.type !== "crafting_station") return false;
       if (npcDef.craftingSkill !== recipe.skill) return false;
-      const npcX = npcPlacement.tx * tileSize;
-      const npcY = npcPlacement.ty * tileSize;
+      const npcX = npcPlacement.tx * tileSize + tileSize / 2;
+      const npcY = npcPlacement.ty * tileSize + tileSize / 2;
       return dist(player.x, player.y, npcX, npcY) < tileSize * 2;
     });
     if (!nearStation) {
@@ -3294,6 +3428,92 @@ class ServerWorld {
       xpGained,
       leveledUp,
       newLevel: playerSkill.level
+    });
+
+    this._savePlayer(player);
+  }
+
+  handleDismantleItem(player, msg) {
+    if (player.dead) return;
+    const index = Number(msg.index);
+    if (!Number.isInteger(index) || index < 0 || index >= 20) return;
+
+    const inventory = player.inventory;
+    const item = inventory[index];
+    if (!item) return;
+
+    const template = ITEMS[item.id];
+    if (!template || !template.dismantleable || !template.dismantleResult || template.dismantleResult.length === 0) {
+      this.send(player.ws, { type: "dismantle_item_result", ok: false, reason: "This item cannot be dismantled." });
+      return;
+    }
+
+    // Must be near a vendor NPC
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+    const tileSize = mapEntry.collision.tileSize || 48;
+    const npcsOnMap = mapEntry.data.npcs || [];
+    const nearVendor = npcsOnMap.some(npcPlacement => {
+      const npcDef = ServerWorld._NPC_DATA[npcPlacement.npcId];
+      if (!npcDef || !npcDef.shop || npcDef.shop.length === 0) return false;
+      const npcX = npcPlacement.tx * tileSize + tileSize / 2;
+      const npcY = npcPlacement.ty * tileSize + tileSize / 2;
+      return dist(player.x, player.y, npcX, npcY) < tileSize * 1.5;
+    });
+    if (!nearVendor) {
+      this.send(player.ws, { type: "dismantle_item_result", ok: false, reason: "You must be near a vendor to dismantle items." });
+      return;
+    }
+
+    // Check there is enough space for results (worst case: each result needs its own slot)
+    const emptySlots = inventory.filter(s => s === null).length;
+    // The item being dismantled frees 1 slot
+    let slotsNeeded = 0;
+    for (const res of template.dismantleResult) {
+      const resTpl = ITEMS[res.id];
+      if (!resTpl) continue;
+      const maxStack = resTpl.stackSize || 1;
+      // Check if this result can stack onto existing items
+      let remaining = res.qty;
+      for (const s of inventory) {
+        if (s && s.id === res.id && maxStack > 1) {
+          const room = maxStack - (s.qty || 1);
+          remaining -= room;
+        }
+      }
+      if (remaining > 0) slotsNeeded += Math.ceil(remaining / Math.max(1, maxStack));
+    }
+    if (slotsNeeded > emptySlots + 1) {
+      this.send(player.ws, { type: "dismantle_item_result", ok: false, reason: "Not enough inventory space." });
+      return;
+    }
+
+    // Remove the item (only 1 from a stack)
+    const dismantledName = item.name;
+    const qty = item.qty || 1;
+    if (qty > 1) {
+      item.qty = qty - 1;
+    } else {
+      inventory[index] = null;
+    }
+
+    // Grant dismantle results
+    const gained = [];
+    for (const res of template.dismantleResult) {
+      const resTpl = ITEMS[res.id];
+      if (!resTpl) continue;
+      const newItem = { id: resTpl.id, name: resTpl.name, type: resTpl.type, icon: resTpl.icon, qty: res.qty };
+      this._addItemToSlots(inventory, newItem);
+      gained.push({ name: resTpl.name, qty: res.qty });
+    }
+
+    this.send(player.ws, {
+      type: "dismantle_item_result",
+      ok: true,
+      index,
+      inventory: player.inventory,
+      dismantledName,
+      gained
     });
 
     this._savePlayer(player);

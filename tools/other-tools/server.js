@@ -141,6 +141,13 @@ const RESOURCE_NODES_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/resourceNodes.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/resourceNodes.json'),
 ];
+const RECIPES_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/recipes.json'),
+  path.resolve(process.cwd(), '../../public/data/recipes.json'),
+  path.resolve(process.cwd(), 'public/data/recipes.json'),
+  path.resolve(process.cwd(), '../public/data/recipes.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/recipes.json'),
+];
 const SFX_DIR_CANDIDATES = [
   path.resolve(__dirname, '../../public/assets/sfx'),
   path.resolve(process.cwd(), '../../public/assets/sfx'),
@@ -172,6 +179,7 @@ function resolveExistingSkillIconDir() { return firstExisting(SKILL_ICON_DIR_CAN
 function resolveExistingGatheringSpriteDir() { return firstExisting(GATHERING_SPRITE_DIR_CANDIDATES); }
 function resolveExistingGatheringSkillsPath() { return firstExisting(GATHERING_SKILLS_CANDIDATES); }
 function resolveExistingResourceNodesPath() { return firstExisting(RESOURCE_NODES_CANDIDATES); }
+function resolveExistingRecipesPath() { return firstExisting(RECIPES_CANDIDATES); }
 function resolveExistingSfxDir() { return firstExisting(SFX_DIR_CANDIDATES); }
 
 function listTileSpriteIds() {
@@ -244,7 +252,7 @@ function validateItems(items) {
   return null;
 }
 function validateNpcs(npcs) {
-  const validTypes = new Set(['quest_giver','vendor','banker']);
+  const validTypes = new Set(['npc','quest_giver','vendor','banker','crafting_station']);
   if (!npcs || typeof npcs !== 'object' || Array.isArray(npcs)) return 'npcs must be an object keyed by npc id.';
   for (const [key, entry] of Object.entries(npcs)) {
     if (!key.trim()) return 'NPC ids cannot be blank.';
@@ -296,6 +304,21 @@ function validateGatheringSkills(gs) {
   }
   return null;
 }
+function validateRecipes(recipes) {
+  if (!recipes || typeof recipes !== 'object' || Array.isArray(recipes)) return 'recipes must be an object keyed by recipe id.';
+  const VALID_SKILLS = new Set(['smelting','milling','cooking']);
+  for (const [key, entry] of Object.entries(recipes)) {
+    if (!key.trim()) return 'Recipe ids cannot be blank.';
+    if (!entry || typeof entry !== 'object') return `Entry for "${key}" must be an object.`;
+    if (typeof entry.name !== 'string') return `Entry for "${key}" must have name: string.`;
+    if (!VALID_SKILLS.has(entry.skill)) return `Entry for "${key}" skill must be one of ${[...VALID_SKILLS].join(', ')}.`;
+    if (!entry.input || typeof entry.input !== 'object' || Array.isArray(entry.input) || !Object.keys(entry.input).length) return `Entry for "${key}" must have a non-empty input object.`;
+    if (!entry.output || typeof entry.output.id !== 'string' || typeof entry.output.qty !== 'number') return `Entry for "${key}" must have output: { id: string, qty: number }.`;
+    if (typeof entry.craftTime !== 'number' || entry.craftTime <= 0) return `Entry for "${key}" craftTime must be a positive number.`;
+  }
+  return null;
+}
+
 function validateResourceNodes(rn) {
   if (!rn || typeof rn !== 'object' || Array.isArray(rn)) return 'resourceNodes must be an object keyed by node type id.';
   for (const [key, entry] of Object.entries(rn)) {
@@ -398,9 +421,42 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), recipesPath: resolveExistingRecipesPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname === '/api/recipes' && req.method === 'GET') {
+    try { return sendJson(res, 200, { recipes: JSON.parse(await fs.promises.readFile(resolveExistingRecipesPath(), 'utf8')), path: resolveExistingRecipesPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingRecipesPath() }); }
+  }
+  if (pathname === '/api/recipes' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateRecipes(body.recipes);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingRecipesPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.recipes, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingRecipesPath() }); }
+  }
 
   // Serve status effect icons by their relative path (e.g. assets/sprites/status/stunned.png)
+  // Class icons: icon field is just the filename, e.g. "class_warrior.png"
+  // Served from public/assets/sprites/ui/
+  if (pathname.startsWith('/api/class-icon/') && req.method === 'GET') {
+    try {
+      const filename = decodeURIComponent(pathname.replace('/api/class-icon/', '')).trim();
+      if (!filename) return sendText(res, 400, 'Missing filename');
+      const publicRoot = resolvePublicRoot();
+      const filePath = path.normalize(path.join(publicRoot, 'assets', 'sprites', 'ui', filename));
+      if (!filePath.startsWith(path.normalize(publicRoot))) return sendText(res, 403, 'Forbidden');
+      if (!fs.existsSync(filePath)) return sendText(res, 404, 'Not found');
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = { '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp' };
+      const data = await fs.promises.readFile(filePath);
+      res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+      return res.end(data);
+    } catch (error) { return sendText(res, 500, error.message); }
+  }
+
   if (pathname.startsWith('/api/status-sprite/') && req.method === 'GET') {
     try {
       const relPath = decodeURIComponent(pathname.replace('/api/status-sprite/', '')).trim();
@@ -700,6 +756,7 @@ server.listen(PORT, () => {
   console.log(`Status effects:   ${resolveExistingStatusEffectsPath()}`);
   console.log(`Gathering skills: ${resolveExistingGatheringSkillsPath()}`);
   console.log(`Resource nodes:   ${resolveExistingResourceNodesPath()}`);
+  console.log(`Recipes:          ${resolveExistingRecipesPath()}`);
   console.log(`Skill icon dir:   ${resolveExistingSkillIconDir()}`);
   console.log(`Gathering dir:    ${resolveExistingGatheringSpriteDir()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);

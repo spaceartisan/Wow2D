@@ -116,7 +116,7 @@ export class ScreenManager {
     this.renderCharList();
   }
 
-  bindCharSelect() {
+  async bindCharSelect() {
     const btnEnter = document.getElementById("btn-enter-world");
     const btnCreate = document.getElementById("btn-create-char");
     const btnDelete = document.getElementById("btn-delete-char");
@@ -125,7 +125,26 @@ export class ScreenManager {
     const createForm = document.getElementById("char-create-form");
     const cancelCreate = document.getElementById("btn-cancel-create");
     const createError = document.getElementById("char-create-error");
-    const classBtns = document.querySelectorAll(".class-btn");
+
+    // Load class definitions and build class picker dynamically
+    if (!this._classesData) {
+      const pb = await fetch("/data/playerBase.json").then(r => r.json());
+      this._classesData = pb.classes || {};
+    }
+    const classPicker = document.querySelector(".class-picker");
+    classPicker.textContent = "";
+    let first = true;
+    for (const [classId, classDef] of Object.entries(this._classesData)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "class-btn" + (first ? " selected" : "");
+      btn.dataset.class = classId;
+      btn.innerHTML = `<img class="class-icon" src="/assets/sprites/ui/${classDef.icon}" alt="${classDef.name}"><span class="class-label">${classDef.name}</span>`;
+      classPicker.appendChild(btn);
+      first = false;
+    }
+
+    const classBtns = classPicker.querySelectorAll(".class-btn");
 
     // class picker
     classBtns.forEach((btn) => {
@@ -226,13 +245,14 @@ export class ScreenManager {
       const card = document.createElement("div");
       card.className = "char-card" + (index === this.selectedCharIndex ? " selected" : "");
 
-      const classInitial = char.charClass.charAt(0).toUpperCase();
+      const classInitial = (this._classesData[char.charClass]?.name || char.charClass).charAt(0).toUpperCase();
+      const className = this._classesData[char.charClass]?.name || this.capitalize(char.charClass);
 
       card.innerHTML = `
         <div class="char-avatar ${char.charClass}">${classInitial}</div>
         <div class="char-info">
           <div class="char-info-name">${this.escapeHtml(char.name)}</div>
-          <div class="char-info-detail">Level ${char.level} ${this.capitalize(char.charClass)}</div>
+          <div class="char-info-detail">Level ${char.level} ${className}</div>
         </div>
       `;
 

@@ -11,6 +11,10 @@ const crypto = require("crypto");
 const DATA_DIR = path.join(__dirname, "..", "data");
 const DB_PATH = path.join(DATA_DIR, "azerfall.db");
 
+/* Load class definitions for validation */
+const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "data", "playerBase.json"), "utf8"));
+const VALID_CLASSES = Object.keys(PLAYER_BASE_DATA.classes || {});
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -35,7 +39,7 @@ db.exec(`
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     username    TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
     name        TEXT NOT NULL,
-    char_class  TEXT NOT NULL CHECK(char_class IN ('warrior','mage','rogue')),
+    char_class  TEXT NOT NULL,
     level       INTEGER NOT NULL DEFAULT 1,
     created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
   );
@@ -188,7 +192,7 @@ function createCharacter(token, charName, charClass) {
     return { error: "Max 5 characters per account." };
   }
 
-  const validClasses = ["warrior", "mage", "rogue"];
+  const validClasses = VALID_CLASSES;
   const cls = (charClass || "warrior").toLowerCase();
   if (!validClasses.includes(cls)) {
     return { error: "Invalid class." };

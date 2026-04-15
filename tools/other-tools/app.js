@@ -1,6 +1,6 @@
 
 (() => {
-  const ITEM_TYPES = ['weapon', 'armor', 'shield', 'helmet', 'pants', 'boots', 'ring', 'amulet', 'trinket', 'quiver', 'consumable', 'junk', 'hearthstone'];
+  const ITEM_TYPES = ['weapon', 'armor', 'shield', 'helmet', 'pants', 'boots', 'ring', 'amulet', 'trinket', 'quiver', 'tool', 'material', 'consumable', 'junk', 'hearthstone'];
   const DEFAULT_NEW_TILE = { color: [128, 128, 128], blocked: false };
   const DEFAULT_NEW_ITEM = {
     id: 'newItem',
@@ -26,7 +26,7 @@
     attackCooldown: 1.25,
     loot: [],
   };
-  const NPC_TYPES = ['quest_giver', 'vendor', 'banker'];
+  const NPC_TYPES = ['quest_giver', 'vendor', 'banker', 'crafting_station'];
   const DEFAULT_NEW_NPC = {
     id: 'newNpc',
     name: 'New NPC',
@@ -125,17 +125,22 @@
     resourceNodeSearch: '',
     resourceNodeDirty: false,
     resourceNodeSpriteExists: null,
+
+    recipes: {},
+    selectedRecipeKey: null,
+    recipeSearch: '',
+    recipeDirty: false,
   };
 
   const els = {};
   const ids = [
     'connectionBadge','dirtyBadge','loadButton','saveButton',
     'reloadButton','validateButton','scanTilesButton','addTileButton','duplicateTileButton','deleteTileButton','searchInput','tileList','entryCount','blockedCount','selectedTileLabel','emptyState','tileForm','tileIdInput','tileBlockedInput','tileColorPicker','tileRInput','tileGInput','tileBInput','colorPreview','spritePreviewImage','spritePreviewFallback','spriteStatusBadge','spritePathLabel','entryJsonPreview','diagnosticsList','validationSummary','tileListItemTemplate','scanModal','scanModalSubtitle','scanModalCloseButton','scanCancelButton','scanConfirmButton','scanNewCount','scanExistingCount','scanSpriteDirLabel','scanTileIdList',
-    'itemSearchInput','itemList','itemEntryCount','itemTypeCount','selectedItemLabel','itemEmptyState','itemForm','itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemRequiresQuiverInput','itemWeaponRangeInput','itemHpBonusInput','itemManaBonusInput','itemMaxArrowsInput','itemEffectInput','itemPowerInput','itemPermanentInput','itemConcentrationInput','itemCastTimeInput','itemCooldownInput','itemIconPreviewImage','itemIconPreviewFallback','itemIconStatusBadge','itemIconPathLabel','itemJsonPreview','itemDiagnosticsList','itemValidationSummary','itemListItemTemplate','addItemButton','duplicateItemButton','deleteItemButton','validateItemsButton','reloadItemsButton',
+    'itemSearchInput','itemList','itemEntryCount','itemTypeCount','selectedItemLabel','itemEmptyState','itemForm','itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemStatsAttackInput','itemStatsHpInput','itemStatsManaInput','itemStatsDefenseInput','itemRarityInput','itemDismantleableInput','itemDismantleEditor','itemDismantleEmptyState','itemDismantleAddButton','itemEffectsEditor','itemEffectsEmptyState','itemEffectAddButton','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemRequiresQuiverInput','itemWeaponRangeInput','itemHpBonusInput','itemManaBonusInput','itemMaxArrowsInput','itemToolTypeInput','itemToolTierInput','itemGatheringLevelReqInput','itemPermanentInput','itemConcentrationInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput','itemIconPreviewImage','itemIconPreviewFallback','itemIconStatusBadge','itemIconPathLabel','itemJsonPreview','itemDiagnosticsList','itemValidationSummary','itemListItemTemplate','addItemButton','duplicateItemButton','deleteItemButton','validateItemsButton','reloadItemsButton',
     'enemySearchInput','enemyList','enemyEntryCount','enemyLootRefCount','selectedEnemyLabel','enemyEmptyState','enemyForm','enemyIdInput','enemyNameInput','enemyPreviewImage','enemyPreviewFallback','enemySpriteStatusBadge','enemySpritePathLabel','enemyColorPreview','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyLootEditor','enemyLootEmptyState','enemyLootAddButton','enemyJsonPreview','enemyDiagnosticsList','enemyValidationSummary','enemyListItemTemplate','addEnemyButton','duplicateEnemyButton','deleteEnemyButton','validateEnemiesButton','reloadEnemiesButton',
-    'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
+    'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcCraftingSkillInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
     'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNotStartedTextInput','questDialogNotStartedOptionsEditor','questDialogNotStartedOptionsEmptyState','questDialogNotStartedAddButton','questDialogActiveTextInput','questDialogActiveOptionsEditor','questDialogActiveOptionsEmptyState','questDialogActiveAddButton','questDialogReadyTextInput','questDialogReadyOptionsEditor','questDialogReadyOptionsEmptyState','questDialogReadyAddButton','questDialogCompletedTextInput','questDialogCompletedOptionsEditor','questDialogCompletedOptionsEmptyState','questDialogCompletedAddButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
-    'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
+    'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbHpPerLevelInput','pbManaPerLevelInput','pbDamagePerLevelInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','pbClassesEditor','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
     'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton',
     'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleEmitIntervalInput','particleContinuousInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
     'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton','skillIconPreviewImage','skillIconPreviewFallback','skillIconStatusBadge','skillIconPathLabel',
@@ -144,12 +149,13 @@
     'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput',
     'statusEffectSearchInput','statusEffectList','statusEffectEntryCount','statusEffectBuffCount','selectedStatusEffectLabel','statusEffectEmptyState','statusEffectForm','statusEffectIdInput','statusEffectNameInput','statusEffectDescriptionInput','statusEffectTypeInput','statusEffectIconInput','statusEffectJsonPreview','statusEffectDiagnosticsList','statusEffectValidationSummary','addStatusEffectButton','duplicateStatusEffectButton','deleteStatusEffectButton','validateStatusEffectsButton','reloadStatusEffectsButton','statusEffectIconPreviewImage','statusEffectIconPreviewFallback','statusEffectIconStatusBadge','statusEffectIconPathLabel',
     'skillRequiresWeaponInput','skillRequiresShieldInput','skillRequiresWeaponTypeInput',
-    'gatheringSkillSearchInput','gatheringSkillList','gatheringSkillEntryCount','gatheringSkillToolCount','selectedGatheringSkillLabel','gatheringSkillEmptyState','gatheringSkillForm','gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillIconInput','gatheringSkillToolTypeInput','gatheringSkillDescriptionInput','gatheringSkillJsonPreview','gatheringSkillDiagnosticsList','gatheringSkillValidationSummary','addGatheringSkillButton','duplicateGatheringSkillButton','deleteGatheringSkillButton','validateGatheringSkillsButton','reloadGatheringSkillsButton',
-    'resourceNodeSearchInput','resourceNodeList','resourceNodeEntryCount','resourceNodeSkillCount','selectedResourceNodeLabel','resourceNodeEmptyState','resourceNodeForm','resourceNodeIdInput','resourceNodeNameInput','resourceNodeSpriteImage','resourceNodeSpriteFallback','resourceNodeSpriteStatusBadge','resourceNodeSpritePathLabel','resourceNodeColorPreview','resourceNodeSkillInput','resourceNodeToolTypeInput','resourceNodeToolTierInput','resourceNodeRequiredLevelInput','resourceNodeXpInput','resourceNodeMaxHarvestsInput','resourceNodeRespawnTicksInput','resourceNodeGatherItemInput','resourceNodeColorPicker','resourceNodeRInput','resourceNodeGInput','resourceNodeBInput','resourceNodeJsonPreview','resourceNodeDiagnosticsList','resourceNodeValidationSummary','addResourceNodeButton','duplicateResourceNodeButton','deleteResourceNodeButton','validateResourceNodesButton','reloadResourceNodesButton'
+    'gatheringSkillSearchInput','gatheringSkillList','gatheringSkillEntryCount','gatheringSkillToolCount','selectedGatheringSkillLabel','gatheringSkillEmptyState','gatheringSkillForm','gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillIconInput','gatheringSkillToolTypeInput','gatheringSkillCategoryInput','gatheringSkillDescriptionInput','gatheringSkillJsonPreview','gatheringSkillDiagnosticsList','gatheringSkillValidationSummary','addGatheringSkillButton','duplicateGatheringSkillButton','deleteGatheringSkillButton','validateGatheringSkillsButton','reloadGatheringSkillsButton',
+    'resourceNodeSearchInput','resourceNodeList','resourceNodeEntryCount','resourceNodeSkillCount','selectedResourceNodeLabel','resourceNodeEmptyState','resourceNodeForm','resourceNodeIdInput','resourceNodeNameInput','resourceNodeSpriteImage','resourceNodeSpriteFallback','resourceNodeSpriteStatusBadge','resourceNodeSpritePathLabel','resourceNodeColorPreview','resourceNodeSkillInput','resourceNodeToolTypeInput','resourceNodeToolTierInput','resourceNodeRequiredLevelInput','resourceNodeXpInput','resourceNodeMaxHarvestsInput','resourceNodeRespawnTicksInput','resourceNodeGatherItemInput','resourceNodeColorPicker','resourceNodeRInput','resourceNodeGInput','resourceNodeBInput','resourceNodeJsonPreview','resourceNodeDiagnosticsList','resourceNodeValidationSummary','addResourceNodeButton','duplicateResourceNodeButton','deleteResourceNodeButton','validateResourceNodesButton','reloadResourceNodesButton',
+    'recipeSearchInput','recipeList','recipeEntryCount','recipeSkillCount','selectedRecipeLabel','recipeEmptyState','recipeForm','recipeIdInput','recipeNameInput','recipeSkillInput','recipeRequiredLevelInput','recipeXpInput','recipeCraftTimeInput','recipeInputEditor','recipeInputEmptyState','recipeInputAddButton','recipeOutputIdInput','recipeOutputQtyInput','recipeJsonPreview','recipeDiagnosticsList','recipeValidationSummary','addRecipeButton','duplicateRecipeButton','deleteRecipeButton','validateRecipesButton','reloadRecipesButton'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : state.tileDirty)))))))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : (state.activeTab === 'recipes' ? state.recipeDirty : state.tileDirty))))))))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -172,6 +178,7 @@
   function setStatusEffectDirty(v){ state.statusEffectDirty = v; updateDirtyBadge(); }
   function setGatheringSkillDirty(v){ state.gatheringSkillDirty = v; updateDirtyBadge(); }
   function setResourceNodeDirty(v){ state.resourceNodeDirty = v; updateDirtyBadge(); }
+  function setRecipeDirty(v){ state.recipeDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -395,6 +402,67 @@
   // Items
   function getItemIconUrl(icon) { return `/api/item-icon/${encodeURIComponent(icon)}?v=${Date.now()}`; }
   function getItemIconDisplayPath(icon) { return `public/assets/sprites/icons/${icon}.png`; }
+  function renderItemDismantleEditor(resultArr) {
+    els.itemDismantleEditor.innerHTML = '';
+    if (!resultArr.length) { els.itemDismantleEmptyState.classList.remove('hidden'); return; }
+    els.itemDismantleEmptyState.classList.add('hidden');
+    resultArr.forEach(({ id='', qty=1 }) => {
+      const row = document.createElement('div');
+      row.className = 'linked-list-row dismantle-row';
+      row.innerHTML = `<input class="dis-id mono" type="text" value="${id}" placeholder="itemId" style="flex:1" /><input class="dis-qty" type="number" min="1" value="${qty}" style="width:60px" /><button type="button" class="button danger small dis-remove" style="flex-shrink:0">✕</button>`;
+      row.querySelector('.dis-id').addEventListener('input', syncSelectedItemFromForm);
+      row.querySelector('.dis-qty').addEventListener('input', syncSelectedItemFromForm);
+      row.querySelector('.dis-remove').addEventListener('click', () => { row.remove(); if (!els.itemDismantleEditor.children.length) els.itemDismantleEmptyState.classList.remove('hidden'); syncSelectedItemFromForm(); });
+      els.itemDismantleEditor.appendChild(row);
+    });
+  }
+
+  function renderItemEffectsEditor(effectsArr) {
+    els.itemEffectsEditor.innerHTML = '';
+    if (!effectsArr.length) { els.itemEffectsEmptyState.classList.remove('hidden'); return; }
+    els.itemEffectsEmptyState.classList.add('hidden');
+    effectsArr.forEach(eff => {
+      const row = document.createElement('div');
+      row.className = 'linked-list-row item-effect-row';
+      const EFFECT_TYPES = ['healHp','healMana','refillQuiver','buff','debuff'];
+      const opts = EFFECT_TYPES.map(t => `<option value="${t}"${eff.type===t?' selected':''}>${t}</option>`).join('');
+      row.innerHTML = `<select class="eff-type" style="flex:1">${opts}</select><input class="eff-power" type="number" step="1" value="${eff.power??''}" placeholder="power" style="width:80px" /><button type="button" class="button danger small eff-remove" style="flex-shrink:0">✕</button>`;
+      row.querySelector('.eff-type').addEventListener('change', syncSelectedItemFromForm);
+      row.querySelector('.eff-power').addEventListener('input', syncSelectedItemFromForm);
+      row.querySelector('.eff-remove').addEventListener('click', () => { row.remove(); if (!els.itemEffectsEditor.children.length) els.itemEffectsEmptyState.classList.remove('hidden'); syncSelectedItemFromForm(); });
+      els.itemEffectsEditor.appendChild(row);
+    });
+  }
+
+  function addItemDismantleRow() {
+    els.itemDismantleEmptyState.classList.add('hidden');
+    const row = document.createElement('div');
+    row.className = 'linked-list-row dismantle-row';
+    row.innerHTML = `<input class="dis-id mono" type="text" placeholder="itemId" style="flex:1" /><input class="dis-qty" type="number" min="1" value="1" style="width:60px" /><button type="button" class="button danger small dis-remove" style="flex-shrink:0">✕</button>`;
+    row.querySelector('.dis-id').addEventListener('input', syncSelectedItemFromForm);
+    row.querySelector('.dis-qty').addEventListener('input', syncSelectedItemFromForm);
+    row.querySelector('.dis-remove').addEventListener('click', () => { row.remove(); if (!els.itemDismantleEditor.children.length) els.itemDismantleEmptyState.classList.remove('hidden'); syncSelectedItemFromForm(); });
+    els.itemDismantleEditor.appendChild(row);
+    row.querySelector('.dis-id').focus();
+  }
+
+  function addItemEffectRow() {
+    els.itemEffectsEmptyState.classList.add('hidden');
+    const row = document.createElement('div');
+    row.className = 'linked-list-row item-effect-row';
+    const EFFECT_TYPES = ['healHp','healMana','refillQuiver','buff','debuff'];
+    const opts = EFFECT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+    row.innerHTML = `<select class="eff-type" style="flex:1">${opts}</select><input class="eff-power" type="number" step="1" placeholder="power" style="width:80px" /><button type="button" class="button danger small eff-remove" style="flex-shrink:0">✕</button>`;
+    row.querySelector('.eff-type').addEventListener('change', syncSelectedItemFromForm);
+    row.querySelector('.eff-power').addEventListener('input', syncSelectedItemFromForm);
+    row.querySelector('.eff-remove').addEventListener('click', () => { row.remove(); if (!els.itemEffectsEditor.children.length) els.itemEffectsEmptyState.classList.remove('hidden'); syncSelectedItemFromForm(); });
+    els.itemEffectsEditor.appendChild(row);
+  }
+
+  function getItemRarityColor(rarity) {
+    return {common:'#9daabf',uncommon:'#3fb06a',rare:'#5a9cf5',epic:'#c87acc',legendary:'#c8983a'}[rarity]||'#9daabf';
+  }
+
   function getVisibleItemKeys() {
     const q = state.itemSearch.toLowerCase();
     return Object.keys(state.items).filter(k => {
@@ -449,12 +517,15 @@
   }
   function updateTypeFieldVisibility(type) {
     const visible = new Set();
+    const EQUIPPABLE = ['weapon','armor','shield','helmet','pants','boots','ring','amulet','trinket','quiver'];
+    if (EQUIPPABLE.includes(type)) { visible.add('statsRarityDismantle'); }
     if (type === 'weapon') { visible.add('attackBonus'); visible.add('hitParticle'); visible.add('weaponMeta'); }
     if (['armor','shield','helmet','pants','boots'].includes(type)) visible.add('hpBonus');
     if (['trinket','ring','amulet'].includes(type)) visible.add('manaBonus');
-    if (type === 'consumable') { visible.add('effect'); visible.add('power'); visible.add('useParticle'); }
+    if (type === 'consumable') { visible.add('effects'); visible.add('useParticle'); }
     if (type === 'hearthstone') { visible.add('permanent'); visible.add('castTime'); visible.add('cooldown'); visible.add('concentration'); }
     if (type === 'quiver') visible.add('maxArrows');
+    if (type === 'tool') visible.add('toolMeta');
     document.querySelectorAll('[data-type-field]').forEach(el => el.classList.toggle('hidden-field', !visible.has(el.dataset.typeField)));
   }
   function buildCurrentItemObject(baseKey) {
@@ -480,12 +551,66 @@
       if (els.itemHitSfxInput.value.trim()) obj.hitSfx = els.itemHitSfxInput.value.trim();
       if (els.itemSwingSfxInput.value.trim()) obj.swingSfx = els.itemSwingSfxInput.value.trim();
     }
+    // Stats (equippable items)
+    const EQUIPPABLE = ['weapon','armor','shield','helmet','pants','boots','ring','amulet','trinket','quiver'];
+    if (EQUIPPABLE.includes(obj.type)) {
+      const statsAttack = els.itemStatsAttackInput.value;
+      const statsHp = els.itemStatsHpInput.value;
+      const statsMana = els.itemStatsManaInput.value;
+      const statsDefense = els.itemStatsDefenseInput.value;
+      const stats = {};
+      if (statsAttack !== '') stats.attack = Number(statsAttack);
+      if (statsHp !== '') stats.maxHp = Number(statsHp);
+      if (statsMana !== '') stats.maxMana = Number(statsMana);
+      if (statsDefense !== '') stats.defense = Number(statsDefense);
+      if (Object.keys(stats).length) obj.stats = stats;
+      obj.rarity = els.itemRarityInput.value || 'common';
+      if (els.itemDismantleableInput.checked) {
+        obj.dismantleable = true;
+        const rows = els.itemDismantleEditor.querySelectorAll('.dismantle-row');
+        const result = [];
+        rows.forEach(row => {
+          const id = (row.querySelector('.dis-id')?.value||'').trim();
+          const qty = Number(row.querySelector('.dis-qty')?.value||1);
+          if (id) result.push({ id, qty });
+        });
+        if (result.length) obj.dismantleResult = result;
+      }
+    }
+    if (obj.type === 'weapon') {
+      if (els.itemAttackBonusInput.value !== '') obj.attackBonus = Number(els.itemAttackBonusInput.value);
+      const handed = els.itemHandedInput.value;
+      if (handed) obj.handed = Number(handed);
+      const weaponType = els.itemWeaponTypeInput.value.trim();
+      if (weaponType) obj.weaponType = weaponType;
+      if (els.itemRequiresQuiverInput.checked) obj.requiresQuiver = true;
+      const wRange = els.itemWeaponRangeInput.value;
+      if (wRange !== '') obj.range = Number(wRange);
+      if (els.itemHitParticleInput.value.trim()) obj.hitParticle = els.itemHitParticleInput.value.trim();
+      if (els.itemHitSfxInput.value.trim()) obj.hitSfx = els.itemHitSfxInput.value.trim();
+      if (els.itemSwingSfxInput.value.trim()) obj.swingSfx = els.itemSwingSfxInput.value.trim();
+    }
     if (['armor','shield','helmet','pants','boots'].includes(obj.type) && els.itemHpBonusInput.value !== '') obj.hpBonus = Number(els.itemHpBonusInput.value);
     if (['trinket','ring','amulet'].includes(obj.type) && els.itemManaBonusInput.value !== '') obj.manaBonus = Number(els.itemManaBonusInput.value);
     if (obj.type === 'quiver' && els.itemMaxArrowsInput.value !== '') obj.maxArrows = Number(els.itemMaxArrowsInput.value);
+    if (obj.type === 'tool') {
+      const toolType = els.itemToolTypeInput.value.trim();
+      if (toolType) obj.toolType = toolType;
+      const toolTier = els.itemToolTierInput.value;
+      if (toolTier) obj.toolTier = Number(toolTier);
+      const glr = els.itemGatheringLevelReqInput.value;
+      if (glr !== '') obj.gatheringLevelReq = Number(glr);
+    }
     if (obj.type === 'consumable') {
-      if (els.itemEffectInput.value) obj.effect = els.itemEffectInput.value;
-      if (els.itemPowerInput.value !== '') obj.power = Number(els.itemPowerInput.value);
+      // New effects array format
+      const effectRows = els.itemEffectsEditor.querySelectorAll('.item-effect-row');
+      const effects = [];
+      effectRows.forEach(row => {
+        const type = row.querySelector('.eff-type')?.value || '';
+        const power = row.querySelector('.eff-power')?.value;
+        if (type) { const e = { type }; if (power !== '' && power !== undefined) e.power = Number(power); effects.push(e); }
+      });
+      if (effects.length) obj.effects = effects;
       if (els.itemUseParticleInput.value.trim()) obj.useParticle = els.itemUseParticleInput.value.trim();
       if (els.itemUseSfxInput.value.trim()) obj.useSfx = els.itemUseSfxInput.value.trim();
     }
@@ -524,8 +649,31 @@
     els.itemHpBonusInput.value = toIntOrEmpty(item.hpBonus);
     els.itemManaBonusInput.value = toIntOrEmpty(item.manaBonus);
     els.itemMaxArrowsInput.value = toIntOrEmpty(item.maxArrows);
-    els.itemEffectInput.value = item.effect || '';
-    els.itemPowerInput.value = toIntOrEmpty(item.power);
+    els.itemToolTypeInput.value = item.toolType || '';
+    els.itemToolTierInput.value = item.toolTier != null ? String(item.toolTier) : '';
+    els.itemGatheringLevelReqInput.value = item.gatheringLevelReq != null ? item.gatheringLevelReq : '';
+    // Stats / rarity / dismantle (equippable)
+    const EQUIPPABLE_R = ['weapon','armor','shield','helmet','pants','boots','ring','amulet','trinket','quiver'];
+    if (EQUIPPABLE_R.includes(item.type)) {
+      const stats = item.stats || {};
+      els.itemStatsAttackInput.value = stats.attack != null ? stats.attack : '';
+      els.itemStatsHpInput.value = stats.maxHp != null ? stats.maxHp : '';
+      els.itemStatsManaInput.value = stats.maxMana != null ? stats.maxMana : '';
+      els.itemStatsDefenseInput.value = stats.defense != null ? stats.defense : '';
+      els.itemRarityInput.value = item.rarity || 'common';
+      els.itemDismantleableInput.checked = !!item.dismantleable;
+      renderItemDismantleEditor(item.dismantleResult || []);
+    } else {
+      els.itemStatsAttackInput.value = '';
+      els.itemStatsHpInput.value = '';
+      els.itemStatsManaInput.value = '';
+      els.itemStatsDefenseInput.value = '';
+      els.itemRarityInput.value = 'common';
+      els.itemDismantleableInput.checked = false;
+      renderItemDismantleEditor([]);
+    }
+    // Effects (consumable)
+    renderItemEffectsEditor(item.type === 'consumable' ? (item.effects || []) : []);
     els.itemPermanentInput.checked = !!item.permanent;
     els.itemCastTimeInput.value = toNumOrEmpty(item.castTime);
     els.itemCooldownInput.value = toNumOrEmpty(item.cooldown);
@@ -908,7 +1056,7 @@
   function updateNpcTypeFieldVisibility(type) {
     document.querySelectorAll('[data-npc-field]').forEach(el => {
       const field = el.dataset.npcField;
-      const show = (type === 'quest_giver' && field === 'questIds') || (type === 'vendor' && field === 'shop');
+      const show = (type === 'quest_giver' && field === 'questIds') || (type === 'vendor' && field === 'shop') || (type === 'crafting_station' && field === 'craftingSkill');
       el.classList.toggle('hidden-field', !show);
     });
   }
@@ -978,6 +1126,7 @@
     };
     if (obj.type === 'quest_giver') obj.questIds = Array.isArray(current.questIds) ? [...current.questIds] : [];
     if (obj.type === 'vendor') obj.shop = Array.isArray(current.shop) ? [...current.shop] : [];
+    if (obj.type === 'crafting_station') obj.craftingSkill = els.npcCraftingSkillInput.value || 'smelting';
     return obj;
   }
   function renderNpcPanel() {
@@ -1001,6 +1150,7 @@
     els.npcSpritePathLabel.textContent = getEntitySpriteDisplayPath(state.selectedNpcKey);
     els.npcJsonPreview.textContent = JSON.stringify({ [state.selectedNpcKey]: npc }, null, 2);
     updateNpcTypeFieldVisibility(els.npcTypeInput.value);
+    if (npc.craftingSkill) els.npcCraftingSkillInput.value = npc.craftingSkill;
     renderNpcQuestEditor();
     renderNpcShopEditor();
     setNpcSpriteStatus(null);
@@ -1063,6 +1213,9 @@
       if(npc.type === 'banker') {
         if('questIds' in npc && Array.isArray(npc.questIds) && npc.questIds.length) messages.push({level:'info', title:`Unused questIds: ${key}`, message:'banker NPCs do not use questIds.'});
         if('shop' in npc && Array.isArray(npc.shop) && npc.shop.length) messages.push({level:'info', title:`Unused shop: ${key}`, message:'banker NPCs do not use shop.'});
+      }
+      if(npc.type === 'crafting_station') {
+        if(!npc.craftingSkill) messages.push({level:'error', title:`Missing craftingSkill: ${key}`, message:'crafting_station NPCs require a craftingSkill field.'});
       }
     }
     if (state.npcSpriteExists === false && state.selectedNpcKey) messages.push({level:'warning', title:'Selected NPC sprite missing', message:`${getEntitySpriteDisplayPath(state.selectedNpcKey)} was not found.`});
@@ -1413,35 +1566,92 @@
   function renderPlayerBaseJsonPreview() {
     els.playerBaseJsonPreview.textContent = state.playerBase ? JSON.stringify(state.playerBase, null, 2) : '{}';
   }
+  function renderClassCard(classId, classObj, defaults) {
+    const card = document.createElement('div');
+    card.className = 'field-group';
+    card.style.cssText = 'border:1px solid var(--border);border-radius:6px;padding:10px 12px;background:var(--surface-2)';
+    const STAT_FIELDS = ['maxHp','maxMana','damage','hpPerLevel','manaPerLevel','damagePerLevel','moveSpeed'];
+    const colorSwatch = classObj.color ? `<span style="display:inline-block;width:12px;height:12px;background:${classObj.color};border-radius:2px;margin-right:4px;vertical-align:middle"></span>` : '';
+    const iconFilename = classObj.icon || '';
+    const iconSrc = iconFilename ? `/api/class-icon/${encodeURIComponent(iconFilename)}?v=${Date.now()}` : '';
+    card.innerHTML = `<div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+        ${iconSrc ? `<img class="pb-class-icon" src="${iconSrc}" alt="${classId} icon" style="width:24px;height:24px;image-rendering:pixelated;border-radius:3px;background:var(--surface);border:1px solid var(--border);display:none" />` : ''}
+        <span class="pb-class-icon-fallback" style="width:24px;height:24px;background:${classObj.color||'#555'};border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;opacity:0.7">${classId[0].toUpperCase()}</span>
+        ${colorSwatch}${classObj.name||classId} <span class="subtle mono" style="font-weight:400;font-size:11px">(${classId})</span>
+        <span class="subtle" style="font-size:11px;font-weight:400;margin-left:auto">${iconFilename||'no icon'}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${classObj.description||''}</div>
+      <div class="split-grid four-columns" style="gap:6px">
+        ${STAT_FIELDS.map(f => {
+          const isOverride = classObj[f] !== undefined && classObj[f] !== defaults[f];
+          const val = classObj[f] !== undefined ? classObj[f] : (defaults[f]||'');
+          const label = {maxHp:'Max HP',maxMana:'Max Mana',damage:'Damage',hpPerLevel:'HP/lvl',manaPerLevel:'Mana/lvl',damagePerLevel:'Dmg/lvl',moveSpeed:'MoveSpd'}[f]||f;
+          return `<label class="field" title="${isOverride?'Class override':'Inherited from defaults'}"><span style="${isOverride?'color:var(--accent-gold)':''}">${label}${isOverride?' ★':''}</span><input class="pb-class-stat" data-class="${classId}" data-field="${f}" type="number" step="1" value="${val}" /></label>`;
+        }).join('')}
+      </div>`;
+    // Wire icon load/error
+    const img = card.querySelector('.pb-class-icon');
+    const fallback = card.querySelector('.pb-class-icon-fallback');
+    if (img) {
+      img.addEventListener('load', () => { img.style.display = 'inline-block'; if (fallback) fallback.style.display = 'none'; });
+      img.addEventListener('error', () => { img.style.display = 'none'; if (fallback) fallback.style.display = 'inline-flex'; });
+    }
+    card.querySelectorAll('.pb-class-stat').forEach(inp => inp.addEventListener('input', syncPlayerBaseFromForm));
+    return card;
+  }
   function renderPlayerBaseForm() {
     const pb = state.playerBase;
     if (!pb) return;
-    els.pbMaxHpInput.value = pb.maxHp ?? '';
-    els.pbMaxManaInput.value = pb.maxMana ?? '';
-    els.pbDamageInput.value = pb.damage ?? '';
-    els.pbMoveSpeedInput.value = pb.moveSpeed ?? '';
-    els.pbAttackRangeInput.value = pb.attackRange ?? '';
-    els.pbAttackCooldownInput.value = pb.attackCooldown ?? '';
-    els.pbHitParticleInput.value = pb.hitParticle || '';
-    els.pbHitSfxInput.value = pb.hitSfx || '';
-    els.pbSwingSfxInput.value = pb.swingSfx || '';
+    const def = pb.defaults || {};
+    els.pbMaxHpInput.value = def.maxHp ?? '';
+    els.pbMaxManaInput.value = def.maxMana ?? '';
+    els.pbDamageInput.value = def.damage ?? '';
+    els.pbHpPerLevelInput.value = def.hpPerLevel ?? '';
+    els.pbManaPerLevelInput.value = def.manaPerLevel ?? '';
+    els.pbDamagePerLevelInput.value = def.damagePerLevel ?? '';
+    els.pbMoveSpeedInput.value = def.moveSpeed ?? '';
+    els.pbAttackRangeInput.value = def.attackRange ?? '';
+    els.pbAttackCooldownInput.value = def.attackCooldown ?? '';
+    els.pbHitParticleInput.value = def.hitParticle || '';
+    els.pbHitSfxInput.value = def.hitSfx || '';
+    els.pbSwingSfxInput.value = def.swingSfx || '';
+    // Render class cards
+    els.pbClassesEditor.innerHTML = '';
+    const classes = pb.classes || {};
+    Object.entries(classes).forEach(([classId, classObj]) => {
+      els.pbClassesEditor.appendChild(renderClassCard(classId, classObj, def));
+    });
     renderPlayerBaseJsonPreview();
   }
   function syncPlayerBaseFromForm() {
-    if (!state.playerBase) state.playerBase = {};
+    if (!state.playerBase) state.playerBase = { defaults: {}, classes: {} };
     const pb = state.playerBase;
-    pb.moveSpeed = Number(els.pbMoveSpeedInput.value) || 0;
-    pb.attackRange = Number(els.pbAttackRangeInput.value) || 0;
-    pb.attackCooldown = Number(els.pbAttackCooldownInput.value) || 0;
-    pb.maxHp = Number(els.pbMaxHpInput.value) || 0;
-    pb.maxMana = Number(els.pbMaxManaInput.value) || 0;
-    pb.damage = Number(els.pbDamageInput.value) || 0;
+    if (!pb.defaults) pb.defaults = {};
+    const def = pb.defaults;
+    def.moveSpeed = Number(els.pbMoveSpeedInput.value) || 0;
+    def.attackRange = Number(els.pbAttackRangeInput.value) || 0;
+    def.attackCooldown = Number(els.pbAttackCooldownInput.value) || 0;
+    def.maxHp = Number(els.pbMaxHpInput.value) || 0;
+    def.maxMana = Number(els.pbMaxManaInput.value) || 0;
+    def.damage = Number(els.pbDamageInput.value) || 0;
+    def.hpPerLevel = Number(els.pbHpPerLevelInput.value) || 0;
+    def.manaPerLevel = Number(els.pbManaPerLevelInput.value) || 0;
+    def.damagePerLevel = Number(els.pbDamagePerLevelInput.value) || 0;
     const hitParticle = els.pbHitParticleInput.value.trim();
     const hitSfx = els.pbHitSfxInput.value.trim();
     const swingSfx = els.pbSwingSfxInput.value.trim();
-    if (hitParticle) pb.hitParticle = hitParticle; else delete pb.hitParticle;
-    if (hitSfx) pb.hitSfx = hitSfx; else delete pb.hitSfx;
-    if (swingSfx) pb.swingSfx = swingSfx; else delete pb.swingSfx;
+    if (hitParticle) def.hitParticle = hitParticle; else delete def.hitParticle;
+    if (hitSfx) def.hitSfx = hitSfx; else delete def.hitSfx;
+    if (swingSfx) def.swingSfx = swingSfx; else delete def.swingSfx;
+    // Sync class overrides
+    if (!pb.classes) pb.classes = {};
+    document.querySelectorAll('.pb-class-stat').forEach(inp => {
+      const classId = inp.dataset.class;
+      const field = inp.dataset.field;
+      if (!pb.classes[classId]) return;
+      const val = inp.value.trim();
+      if (val !== '') pb.classes[classId][field] = Number(val);
+    });
     setPlayerBaseDirty(true);
     renderPlayerBaseJsonPreview();
   }
@@ -1460,17 +1670,27 @@
   function validatePlayerBase() {
     const messages = [];
     const pb = state.playerBase;
-    if (!pb || typeof pb !== 'object' || Array.isArray(pb)) { messages.push({level:'error', title:'Invalid data', message:'playerBase must be a flat object.'}); renderPlayerBaseDiagnostics(messages, '1 error'); return; }
-    const numFields = [['moveSpeed','Movement speed in pixels/sec'],['attackRange','Melee range in pixels'],['attackCooldown','Seconds between attacks'],['maxHp','Base max HP'],['maxMana','Base max mana'],['damage','Base damage']];
-    numFields.forEach(([field, hint]) => {
-      if (typeof pb[field] !== 'number' || Number.isNaN(pb[field])) messages.push({level:'error', title:`Missing or invalid: ${field}`, message:`${field} must be a number. (${hint})`});
-      else if (pb[field] <= 0) messages.push({level:'warning', title:`Low value: ${field}`, message:`${field} is ${pb[field]} — expected a positive number.`});
-    });
+    if (!pb || typeof pb !== 'object' || Array.isArray(pb)) { messages.push({level:'error', title:'Invalid data', message:'playerBase must be an object with defaults and classes keys.'}); renderPlayerBaseDiagnostics(messages, '1 error'); return; }
+    if (!pb.defaults || typeof pb.defaults !== 'object') messages.push({level:'error', title:'Missing defaults', message:'playerBase.defaults is required.'});
+    else {
+      const numFields = ['moveSpeed','attackRange','attackCooldown','maxHp','maxMana','damage','hpPerLevel','manaPerLevel','damagePerLevel'];
+      numFields.forEach(f => { if (typeof pb.defaults[f] !== 'number') messages.push({level:'error', title:`defaults.${f}`, message:`${f} must be a number.`}); });
+      ['hitParticle','hitSfx','swingSfx'].forEach(f => { if (!pb.defaults[f]) messages.push({level:'warning', title:`defaults.${f}`, message:`${f} should be set for unarmed combat.`}); });
+    }
+    if (!pb.classes || typeof pb.classes !== 'object' || !Object.keys(pb.classes).length) messages.push({level:'warning', title:'No classes defined', message:'At least one class entry expected.'});
+    else {
+      Object.entries(pb.classes).forEach(([id, cls]) => {
+        if (!cls.name) messages.push({level:'error', title:`classes.${id}.name`, message:'Each class needs a name.'});
+        if (!cls.icon) messages.push({level:'warning', title:`classes.${id}.icon`, message:'icon should reference a sprite file.'});
+        if (!cls.color) messages.push({level:'warning', title:`classes.${id}.color`, message:'color (CSS) should be set for UI display.'});
+      });
+    }
     if (!messages.length) messages.push({level:'info', title:'Validation passed', message:'All required fields are present and valid.'});
     const errCount = messages.filter(m=>m.level==='error').length;
     const warnCount = messages.filter(m=>m.level==='warning').length;
     renderPlayerBaseDiagnostics(messages, errCount||warnCount ? `${errCount} error(s), ${warnCount} warning(s)` : 'Validation passed');
   }
+
 
   // Props
   function getPropSpriteUrl(id) { return `/api/prop-sprite/${encodeURIComponent(id)}?v=${Date.now()}`; }
@@ -2370,10 +2590,10 @@
     els.gatheringSkillToolCount.textContent = String(new Set(allKeys.map(k=>state.gatheringSkills[k]?.toolType).filter(Boolean)).size);
     els.gatheringSkillList.innerHTML = '';
     if (!visibleKeys.length) { const e=document.createElement('div'); e.className='subtle'; e.textContent='No matching skills.'; els.gatheringSkillList.appendChild(e); return; }
-    const COLORS = { pickaxe:'#c8983a', hatchet:'#3fb06a', fishing_rod:'#5a9cf5' };
+    const COLORS = { pickaxe:'#c8983a', hatchet:'#3fb06a', fishing_rod:'#5a9cf5', processing:'#c87060' };
     for (const key of visibleKeys) {
       const gs = state.gatheringSkills[key]||{};
-      const color = COLORS[gs.toolType]||'#888';
+      const color = gs.category === 'processing' ? COLORS.processing : (COLORS[gs.toolType]||'#888');
       const btn = document.createElement('button');
       btn.className = 'tile-list-item'+(key===state.selectedGatheringSkillKey?' active':'');
       btn.type='button';
@@ -2392,13 +2612,18 @@
     els.gatheringSkillDescriptionInput.value = gs.description||'';
     els.gatheringSkillIconInput.value = gs.icon||'';
     els.gatheringSkillToolTypeInput.value = gs.toolType||'';
+    els.gatheringSkillCategoryInput.value = gs.category||'';
     els.gatheringSkillJsonPreview.textContent = JSON.stringify({[state.selectedGatheringSkillKey]:gs},null,2);
   }
   function syncSelectedGatheringSkillFromForm() {
     const current = getSelectedGatheringSkillEntry(); if(!current) return;
     const newKey = (els.gatheringSkillIdInput.value||'').trim()||state.selectedGatheringSkillKey;
     if (newKey!==state.selectedGatheringSkillKey&&!state.gatheringSkills[newKey]) { const m={}; Object.keys(state.gatheringSkills).forEach(k=>{ m[k===state.selectedGatheringSkillKey?newKey:k]=state.gatheringSkills[k]; }); state.gatheringSkills=m; state.selectedGatheringSkillKey=newKey; }
-    state.gatheringSkills[state.selectedGatheringSkillKey] = { id:state.selectedGatheringSkillKey, name:els.gatheringSkillNameInput.value||'', description:els.gatheringSkillDescriptionInput.value||'', icon:(els.gatheringSkillIconInput.value||'').trim(), toolType:els.gatheringSkillToolTypeInput.value||'' };
+    state.gatheringSkills[state.selectedGatheringSkillKey] = { id:state.selectedGatheringSkillKey, name:els.gatheringSkillNameInput.value||'', description:els.gatheringSkillDescriptionInput.value||'', icon:(els.gatheringSkillIconInput.value||'').trim() };
+    const toolTypeVal = (els.gatheringSkillToolTypeInput.value||'').trim();
+    const catVal = (els.gatheringSkillCategoryInput.value||'').trim();
+    if (toolTypeVal) state.gatheringSkills[state.selectedGatheringSkillKey].toolType = toolTypeVal;
+    if (catVal) state.gatheringSkills[state.selectedGatheringSkillKey].category = catVal;
     setGatheringSkillDirty(true); renderGatheringSkillList(); els.gatheringSkillJsonPreview.textContent = JSON.stringify({[state.selectedGatheringSkillKey]:state.gatheringSkills[state.selectedGatheringSkillKey]},null,2);
   }
   function renderGatheringSkillDiagnostics(items=[],summary='No validation run yet') { els.gatheringSkillValidationSummary.textContent=summary; els.gatheringSkillDiagnosticsList.innerHTML=''; if(!items.length){els.gatheringSkillDiagnosticsList.className='diagnostics-list empty-diagnostics';els.gatheringSkillDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.gatheringSkillDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.gatheringSkillDiagnosticsList.appendChild(d);} }
@@ -2524,11 +2749,131 @@
   function duplicateResourceNode(){const rn=getSelectedResourceNodeEntry();if(!rn)return;const k=ensureUniqueResourceNodeKey(`${state.selectedResourceNodeKey}_copy`);state.resourceNodes[k]=JSON.parse(JSON.stringify(rn));state.selectedResourceNodeKey=k;setResourceNodeDirty(true);renderResourceNodes();}
   function deleteResourceNode(){if(!getSelectedResourceNodeEntry())return;if(!window.confirm(`Delete "${state.selectedResourceNodeKey}"?`))return;delete state.resourceNodes[state.selectedResourceNodeKey];state.selectedResourceNodeKey=Object.keys(state.resourceNodes)[0]||null;setResourceNodeDirty(true);renderResourceNodes();}
 
+  // Recipes
+  const RECIPE_SKILLS = ['smelting','milling','cooking'];
+  const RECIPE_SKILL_COLOR = { smelting:'#d06060', milling:'#c8983a', cooking:'#3fb06a' };
+  const DEFAULT_NEW_RECIPE = { id:'new_recipe', name:'New Recipe', skill:'smelting', requiredLevel:1, xp:10, input:{ 'material': 1 }, output:{ id:'result', qty:1 }, craftTime:2.0 };
+
+  function getVisibleRecipeKeys() { const q=state.recipeSearch.toLowerCase(); return Object.keys(state.recipes).filter(k=>!q||k.toLowerCase().includes(q)||String(state.recipes[k]?.name||'').toLowerCase().includes(q)||String(state.recipes[k]?.skill||'').toLowerCase().includes(q)).sort((a,b)=>a.localeCompare(b)); }
+  function getSelectedRecipeEntry() { return state.selectedRecipeKey ? state.recipes[state.selectedRecipeKey]||null : null; }
+  function ensureUniqueRecipeKey(base){ let c=base,i=2; while(state.recipes[c]) c=`${base}_${i++}`; return c; }
+
+  function buildCurrentRecipeObject() {
+    const inputs = {};
+    els.recipeInputEditor.querySelectorAll('.ingredient-row').forEach(row => {
+      const itemId = (row.querySelector('.ing-id')?.value||'').trim();
+      const qty = Number(row.querySelector('.ing-qty')?.value||1);
+      if (itemId) inputs[itemId] = qty;
+    });
+    return { id:state.selectedRecipeKey, name:els.recipeNameInput.value||'', skill:els.recipeSkillInput.value||'smelting', requiredLevel:Number(els.recipeRequiredLevelInput.value||1), xp:Number(els.recipeXpInput.value||0), craftTime:Number(els.recipeCraftTimeInput.value||2), input:inputs, output:{ id:(els.recipeOutputIdInput.value||'').trim(), qty:Number(els.recipeOutputQtyInput.value||1) } };
+  }
+
+  function renderRecipeInputEditor(inputObj) {
+    els.recipeInputEditor.innerHTML = '';
+    const entries = Object.entries(inputObj||{});
+    if (!entries.length) { els.recipeInputEmptyState.classList.remove('hidden'); return; }
+    els.recipeInputEmptyState.classList.add('hidden');
+    entries.forEach(([itemId, qty]) => {
+      const row = document.createElement('div');
+      row.className = 'linked-list-row ingredient-row';
+      row.innerHTML = `<input class="ing-id mono" type="text" value="${itemId}" placeholder="itemId" style="flex:1" /><input class="ing-qty" type="number" min="1" value="${qty}" style="width:60px" /><button type="button" class="button danger small ing-remove" style="flex-shrink:0">✕</button>`;
+      row.querySelector('.ing-id').addEventListener('input', syncSelectedRecipeFromForm);
+      row.querySelector('.ing-qty').addEventListener('input', syncSelectedRecipeFromForm);
+      row.querySelector('.ing-remove').addEventListener('click', () => { row.remove(); if (!els.recipeInputEditor.children.length) els.recipeInputEmptyState.classList.remove('hidden'); syncSelectedRecipeFromForm(); });
+      els.recipeInputEditor.appendChild(row);
+    });
+  }
+
+  function renderRecipeList() {
+    const visibleKeys = getVisibleRecipeKeys();
+    const allKeys = Object.keys(state.recipes);
+    els.recipeEntryCount.textContent = String(allKeys.length);
+    els.recipeSkillCount.textContent = String(new Set(allKeys.map(k=>state.recipes[k]?.skill).filter(Boolean)).size);
+    els.recipeList.innerHTML = '';
+    if (!visibleKeys.length) { const e=document.createElement('div'); e.className='subtle'; e.textContent='No matching recipes.'; els.recipeList.appendChild(e); return; }
+    for (const key of visibleKeys) {
+      const r = state.recipes[key]||{};
+      const color = RECIPE_SKILL_COLOR[r.skill]||'#888';
+      const inputSummary = Object.entries(r.input||{}).map(([id,qty])=>`${qty}×${id}`).join(', ');
+      const btn = document.createElement('button');
+      btn.className = 'tile-list-item'+(key===state.selectedRecipeKey?' active':'');
+      btn.type = 'button';
+      btn.innerHTML = `<span class="swatch" style="background:${color}"></span><span class="tile-text"><strong class="tile-name">${r.name||key}</strong><span class="tile-meta">${r.skill||'?'} • ${inputSummary} → ${r.output?.qty??'?'}×${r.output?.id||'?'}</span></span>`;
+      btn.addEventListener('click', ()=>{ state.selectedRecipeKey=key; renderRecipePanel(); renderRecipeList(); });
+      els.recipeList.appendChild(btn);
+    }
+  }
+
+  function renderRecipePanel() {
+    const r = getSelectedRecipeEntry();
+    if (!r) { els.selectedRecipeLabel.textContent='Nothing selected'; els.recipeEmptyState.classList.remove('hidden'); els.recipeForm.classList.add('hidden'); els.recipeJsonPreview.textContent=''; return; }
+    els.selectedRecipeLabel.textContent = state.selectedRecipeKey;
+    els.recipeEmptyState.classList.add('hidden'); els.recipeForm.classList.remove('hidden');
+    els.recipeIdInput.value = state.selectedRecipeKey;
+    els.recipeNameInput.value = r.name||'';
+    els.recipeSkillInput.value = RECIPE_SKILLS.includes(r.skill)?r.skill:'smelting';
+    els.recipeRequiredLevelInput.value = r.requiredLevel??1;
+    els.recipeXpInput.value = r.xp??0;
+    els.recipeCraftTimeInput.value = r.craftTime??2;
+    els.recipeOutputIdInput.value = r.output?.id||'';
+    els.recipeOutputQtyInput.value = r.output?.qty??1;
+    renderRecipeInputEditor(r.input||{});
+    els.recipeJsonPreview.textContent = JSON.stringify({[state.selectedRecipeKey]:r},null,2);
+  }
+
+  function syncSelectedRecipeFromForm() {
+    const current = getSelectedRecipeEntry(); if (!current) return;
+    const newKey = (els.recipeIdInput.value||'').trim()||state.selectedRecipeKey;
+    if (newKey!==state.selectedRecipeKey&&!state.recipes[newKey]) { const m={}; Object.keys(state.recipes).forEach(k=>{ m[k===state.selectedRecipeKey?newKey:k]=state.recipes[k]; }); state.recipes=m; state.selectedRecipeKey=newKey; }
+    state.recipes[state.selectedRecipeKey] = buildCurrentRecipeObject();
+    setRecipeDirty(true); renderRecipeList();
+    els.recipeJsonPreview.textContent = JSON.stringify({[state.selectedRecipeKey]:state.recipes[state.selectedRecipeKey]},null,2);
+  }
+
+  function renderRecipeDiagnostics(items=[],summary='No validation run yet') { els.recipeValidationSummary.textContent=summary; els.recipeDiagnosticsList.innerHTML=''; if(!items.length){els.recipeDiagnosticsList.className='diagnostics-list empty-diagnostics';els.recipeDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.recipeDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.recipeDiagnosticsList.appendChild(d);} }
+  function renderRecipes() { renderRecipeList(); renderRecipePanel(); }
+
+  async function loadRecipes() { const r=await apiFetch('/api/recipes'); state.recipes=r.recipes||{}; const keys=Object.keys(state.recipes); state.selectedRecipeKey=keys.includes(state.selectedRecipeKey)?state.selectedRecipeKey:(keys[0]||null); setRecipeDirty(false); renderRecipes(); renderRecipeDiagnostics([{level:'info',title:'Loaded',message:r.path}],`Loaded ${keys.length} entries`); }
+  async function saveRecipes() { const r=await apiFetch('/api/recipes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipes:state.recipes})}); setRecipeDirty(false); renderRecipeDiagnostics([{level:'info',title:'Saved',message:r.path}],`Saved ${Object.keys(state.recipes).length} entries`); }
+
+  function validateRecipes() {
+    const messages=[]; const entries=Object.entries(state.recipes); const itemIds=new Set(Object.keys(state.items));
+    if (!entries.length) messages.push({level:'warning',title:'Empty',message:'No recipes defined.'});
+    for (const [key,r] of entries) {
+      if (!r.name) messages.push({level:'warning',title:`Missing name: ${key}`,message:'name should be non-empty.'});
+      if (!RECIPE_SKILLS.includes(r.skill)) messages.push({level:'error',title:`Invalid skill: ${key}`,message:`skill must be one of ${RECIPE_SKILLS.join(', ')}.`});
+      if (!r.input||!Object.keys(r.input).length) messages.push({level:'error',title:`No input: ${key}`,message:'Recipe must have at least one input ingredient.'});
+      else for (const [itemId,qty] of Object.entries(r.input)) { if (!itemIds.has(itemId)) messages.push({level:'warning',title:`Unknown input: ${key}`,message:`Input item "${itemId}" not found in items.json.`}); if (typeof qty!=='number'||qty<1) messages.push({level:'error',title:`Bad qty: ${key}`,message:`Qty for "${itemId}" must be a positive number.`}); }
+      if (!r.output?.id) messages.push({level:'error',title:`No output: ${key}`,message:'Recipe must have an output item id.'});
+      else if (!itemIds.has(r.output.id)) messages.push({level:'warning',title:`Unknown output: ${key}`,message:`Output item "${r.output.id}" not found in items.json.`});
+      if (typeof r.craftTime!=='number'||r.craftTime<=0) messages.push({level:'error',title:`craftTime: ${key}`,message:'craftTime must be a positive number.'});
+    }
+    if (!messages.length) messages.push({level:'info',title:'Validation passed',message:'No schema problems.'});
+    const ec=messages.filter(m=>m.level==='error').length; const wc=messages.filter(m=>m.level==='warning').length;
+    renderRecipeDiagnostics(messages,ec||wc?`${ec} error(s), ${wc} warning(s)`:'Validation passed');
+  }
+
+  function addRecipeIngredient() {
+    els.recipeInputEmptyState.classList.add('hidden');
+    const row = document.createElement('div');
+    row.className = 'linked-list-row ingredient-row';
+    row.innerHTML = `<input class="ing-id mono" type="text" placeholder="itemId" style="flex:1" /><input class="ing-qty" type="number" min="1" value="1" style="width:60px" /><button type="button" class="button danger small ing-remove" style="flex-shrink:0">✕</button>`;
+    row.querySelector('.ing-id').addEventListener('input', syncSelectedRecipeFromForm);
+    row.querySelector('.ing-qty').addEventListener('input', syncSelectedRecipeFromForm);
+    row.querySelector('.ing-remove').addEventListener('click', () => { row.remove(); if (!els.recipeInputEditor.children.length) els.recipeInputEmptyState.classList.remove('hidden'); syncSelectedRecipeFromForm(); });
+    els.recipeInputEditor.appendChild(row);
+    row.querySelector('.ing-id').focus();
+  }
+
+  function addRecipe() { const k=ensureUniqueRecipeKey('new_recipe'); state.recipes[k]=JSON.parse(JSON.stringify(DEFAULT_NEW_RECIPE)); state.recipes[k].id=k; state.selectedRecipeKey=k; setRecipeDirty(true); renderRecipes(); }
+  function duplicateRecipe() { const r=getSelectedRecipeEntry(); if(!r) return; const k=ensureUniqueRecipeKey(`${state.selectedRecipeKey}_copy`); state.recipes[k]=JSON.parse(JSON.stringify(r)); state.recipes[k].id=k; state.selectedRecipeKey=k; setRecipeDirty(true); renderRecipes(); }
+  function deleteRecipe() { if(!getSelectedRecipeEntry()) return; if(!window.confirm(`Delete "${state.selectedRecipeKey}"?`)) return; delete state.recipes[state.selectedRecipeKey]; state.selectedRecipeKey=Object.keys(state.recipes)[0]||null; setRecipeDirty(true); renderRecipes(); }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : loadPalette())))))))))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : (state.activeTab === 'recipes' ? loadRecipes() : loadPalette()))))))))))));
     els.saveButton.addEventListener('click', () => {
-      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes' };
+      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes', recipes:'Recipes' };
       const label = tabNames[state.activeTab] || state.activeTab;
       if (!window.confirm(`Save ${label} to disk?\n\nThis will overwrite the JSON file.`)) return;
       if (state.activeTab === 'items') saveItems();
@@ -2542,6 +2887,7 @@
       else if (state.activeTab === 'statusEffects') saveStatusEffects();
       else if (state.activeTab === 'gatheringSkills') saveGatheringSkills();
       else if (state.activeTab === 'resourceNodes') saveResourceNodes();
+      else if (state.activeTab === 'recipes') saveRecipes();
       else savePalette();
     });
     els.reloadButton.addEventListener('click', loadPalette);
@@ -2568,10 +2914,15 @@
     els.duplicateItemButton.addEventListener('click', duplicateItem);
     els.deleteItemButton.addEventListener('click', deleteItem);
     els.itemSearchInput.addEventListener('input', e => { state.itemSearch = e.target.value || ''; renderItemList(); });
-    ['itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemWeaponRangeInput','itemMaxArrowsInput','itemHpBonusInput','itemManaBonusInput','itemEffectInput','itemPowerInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput'].forEach(id => els[id].addEventListener('input', syncSelectedItemFromForm));
+    ['itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemWeaponRangeInput','itemMaxArrowsInput','itemToolTypeInput','itemGatheringLevelReqInput','itemStatsAttackInput','itemStatsHpInput','itemStatsManaInput','itemStatsDefenseInput','itemHpBonusInput','itemManaBonusInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput'].forEach(id => els[id] && els[id].addEventListener('input', syncSelectedItemFromForm));
     els.itemPermanentInput.addEventListener('change', syncSelectedItemFromForm);
     els.itemConcentrationInput.addEventListener('change', syncSelectedItemFromForm);
     els.itemRequiresQuiverInput.addEventListener('change', syncSelectedItemFromForm);
+    els.itemToolTierInput.addEventListener('change', syncSelectedItemFromForm);
+    els.itemRarityInput.addEventListener('change', syncSelectedItemFromForm);
+    els.itemDismantleableInput.addEventListener('change', syncSelectedItemFromForm);
+    els.itemDismantleAddButton.addEventListener('click', addItemDismantleRow);
+    els.itemEffectAddButton.addEventListener('click', addItemEffectRow);
     els.itemTypeInput.addEventListener('change', () => { updateTypeFieldVisibility(els.itemTypeInput.value); syncSelectedItemFromForm(); });
     els.itemIconPreviewImage.addEventListener('load', () => setItemIconStatus(true));
     els.itemIconPreviewImage.addEventListener('error', () => setItemIconStatus(false));
@@ -2594,6 +2945,7 @@
     els.deleteNpcButton.addEventListener('click', deleteNpc);
     els.npcSearchInput.addEventListener('input', e => { state.npcSearch = e.target.value || ''; renderNpcList(); });
     ['npcIdInput','npcNameInput','npcColorInput','npcDefaultDialogInput'].forEach(id => els[id].addEventListener('input', syncSelectedNpcFromForm));
+    els.npcCraftingSkillInput.addEventListener("change", syncSelectedNpcFromForm);
     els.npcTypeInput.addEventListener('change', syncSelectedNpcFromForm);
     els.npcQuestAddButton.addEventListener('click', addNpcQuestEntry);
     els.npcShopAddButton.addEventListener('click', addNpcShopEntry);
@@ -2618,7 +2970,7 @@
 
     els.reloadPlayerBaseButton.addEventListener('click', loadPlayerBase);
     els.validatePlayerBaseButton.addEventListener('click', validatePlayerBase);
-    ['pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput'].forEach(id => els[id].addEventListener('input', syncPlayerBaseFromForm));
+    ['pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbHpPerLevelInput','pbManaPerLevelInput','pbDamagePerLevelInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput'].forEach(id => els[id].addEventListener('input', syncPlayerBaseFromForm));
 
     els.reloadPropsButton.addEventListener('click', loadProps);
     els.validatePropsButton.addEventListener('click', validateProps);
@@ -2701,7 +3053,7 @@
     els.duplicateGatheringSkillButton.addEventListener('click', duplicateGatheringSkill);
     els.deleteGatheringSkillButton.addEventListener('click', deleteGatheringSkill);
     els.gatheringSkillSearchInput.addEventListener('input', e=>{ state.gatheringSkillSearch=e.target.value||''; renderGatheringSkillList(); });
-    ['gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillDescriptionInput','gatheringSkillIconInput','gatheringSkillToolTypeInput'].forEach(id=>els[id].addEventListener('input',syncSelectedGatheringSkillFromForm));
+    ['gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillDescriptionInput','gatheringSkillIconInput','gatheringSkillToolTypeInput','gatheringSkillCategoryInput'].forEach(id=>els[id].addEventListener('input',syncSelectedGatheringSkillFromForm));
 
     els.reloadResourceNodesButton.addEventListener('click', loadResourceNodes);
     els.validateResourceNodesButton.addEventListener('click', validateResourceNodes);
@@ -2718,6 +3070,16 @@
     els.resourceNodeSpriteImage.addEventListener('load',()=>setResourceNodeSpriteStatus(true));
     els.resourceNodeSpriteImage.addEventListener('error',()=>setResourceNodeSpriteStatus(false));
 
+    els.reloadRecipesButton.addEventListener('click', loadRecipes);
+    els.validateRecipesButton.addEventListener('click', validateRecipes);
+    els.addRecipeButton.addEventListener('click', addRecipe);
+    els.duplicateRecipeButton.addEventListener('click', duplicateRecipe);
+    els.deleteRecipeButton.addEventListener('click', deleteRecipe);
+    els.recipeInputAddButton.addEventListener('click', addRecipeIngredient);
+    els.recipeSearchInput.addEventListener('input', e=>{ state.recipeSearch=e.target.value||''; renderRecipeList(); });
+    ['recipeIdInput','recipeNameInput','recipeOutputIdInput','recipeRequiredLevelInput','recipeXpInput','recipeCraftTimeInput','recipeOutputQtyInput'].forEach(id=>els[id].addEventListener('input',syncSelectedRecipeFromForm));
+    els.recipeSkillInput.addEventListener('change', syncSelectedRecipeFromForm);
+
     // SFX play buttons — single delegated listener covers all tabs
     document.addEventListener('click', e => {
       const btn = e.target.closest('.sfx-play-btn');
@@ -2729,7 +3091,7 @@
     });
 
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty || state.recipeDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -2749,7 +3111,8 @@
     renderStatusEffects();
     renderGatheringSkills();
     renderResourceNodes();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes()]); }
+    renderRecipes();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes(), loadRecipes()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -2762,6 +3125,7 @@
       renderStatusEffectDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderGatheringSkillDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderResourceNodeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderRecipeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 

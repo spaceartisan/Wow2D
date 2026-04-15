@@ -72,6 +72,7 @@ export class QuestSystem {
    * Handles quest dialog flow for multi-quest NPCs + non-quest NPCs.
    */
   interactWithNPC(npc) {
+    this.game.ui._interactNpc = npc;
     const questIds = npc.questIds || [];
 
     // Priority 1: quests ready to turn in

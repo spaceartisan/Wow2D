@@ -66,6 +66,13 @@
     "icon": "assets/sprites/status/poisoned.png"
   },
 
+  "hot_bandage": {
+    "name": "Bandage",
+    "description": "Slowly restoring health over time.",
+    "type": "buff",
+    "icon": "assets/sprites/status/evasion.png"
+  },
+
   "zoneSlow": {
     "name": "Bogged Down",
     "description": "Move speed reduced by treacherous terrain.",

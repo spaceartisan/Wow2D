@@ -302,6 +302,16 @@ Enemies use the same `CollisionMap` but with **separate X/Y axis movement** and 
 
 This allows enemies to slide along walls rather than getting stuck on diagonals.
 
+### Tile-to-world coordinate conversion
+
+All tile coordinates (spawn points, NPC positions, waystone positions, enemy spawns, hearthstone teleport destinations) are converted to world-pixel positions by centering on the tile:
+
+$$
+\text{worldX} = \text{tileX} \times \text{tileSize} + \frac{\text{tileSize}}{2}
+$$
+
+Both server (`ServerWorld.js`) and client (`EntitySystem.js`, `WorldSystem.js`) use this formula.
+
 ---
 
 ## 6. Combat — Melee
@@ -320,7 +330,7 @@ $$
 \text{damage} = \max(2, \; \text{player.damage} + \text{randInt}(-2, 4))
 $$
 
-`player.damage` is computed from `baseDamage + mainHand.attackBonus`.
+`player.damage` is computed from `baseDamage + sum(all equipped stats.attack)`. Base values are class-specific — see `playerBase.json`.
 
 Damage is applied **immediately**. No projectile. The server sends:
 
@@ -329,11 +339,13 @@ Damage is applied **immediately**. No projectile. The server sends:
 
 ### Default base stats
 
-| Stat | Value |
-|------|-------|
-| `attackRange` | **52 px** (overridden by weapon `range`) |
-| `attackCooldown` | **0.82 s** |
-| `baseDamage` | **16** + `(level - 1) × 4` |
+Base values are **class-specific** — loaded from `playerBase.json` via `classStats(charClass)`. Shared defaults (used when a class doesn't override):
+
+| Stat | Default | Notes |
+|------|---------|-------|
+| `attackRange` | **52 px** | Overridden by weapon `range` |
+| `attackCooldown` | **0.82 s** | |
+| `baseDamage` | **class.damage** + `(level - 1) × class.damagePerLevel` | e.g. Warrior: 18 + (lvl-1)×5 |
 
 ---
 
@@ -437,6 +449,8 @@ player.hp = min(maxHp, hp + healAmount)
 
 ### Legacy heal (hotkey)
 
+The Minor Heal skill uses the shared `_skillCooldowns["heal"]` map in `CombatSystem` for cooldown tracking (same system as all other skills).
+
 ```
 Cooldown: 5300 ms
 Mana cost: 22
@@ -461,7 +475,12 @@ Runs once per tick.
 player.activeBuffs = player.activeBuffs.filter(b => now < b.expiresAt)
 ```
 
-Simple timer-based expiry. No tick effects on buffs currently.
+Timer-based expiry. Buffs with `stat === "hot"` (heal-over-time) tick periodically:
+
+- If `now - buff.lastTickAt >= buff.tickInterval`: heal `buff.tickHeal` HP (capped at maxHp), decrement `buff.ticksRemaining`
+- When `ticksRemaining` reaches 0, the buff is removed
+
+This is used by the Bandage skill (`hot_bandage` buff), which applies a multi-tick HoT instead of an instant heal.
 
 ### Enemy debuffs
 
@@ -572,24 +591,26 @@ Iterative computation — each level requires 28% more XP than the last. Level c
 
 ### Stat formulas
 
+Base values and per-level scaling are **class-specific** — loaded from `playerBase.json` via `classStats(charClass)`. See DATA_GUIDE § playerBase.json for exact values per class.
+
 $$
-\text{maxHp} = 120 + (\text{level} - 1) \times 24 + \sum(\text{armor, offHand, helmet, pants, boots hpBonus})
+\text{maxHp} = \text{class.maxHp} + (\text{level} - 1) \times \text{class.hpPerLevel} + \sum(\text{all equipped stats.maxHp})
 $$
 
 $$
-\text{maxMana} = 80 + (\text{level} - 1) \times 16 + \sum(\text{ring1, ring2, amulet manaBonus})
+\text{maxMana} = \text{class.maxMana} + (\text{level} - 1) \times \text{class.manaPerLevel} + \sum(\text{all equipped stats.maxMana})
 $$
 
 $$
-\text{baseDamage} = 16 + (\text{level} - 1) \times 4
+\text{baseDamage} = \text{class.damage} + (\text{level} - 1) \times \text{class.damagePerLevel}
 $$
 
 $$
-\text{damage} = \text{baseDamage} + \text{mainHand.attackBonus}
+\text{damage} = \text{baseDamage} + \sum(\text{all equipped stats.attack})
 $$
 
 $$
-\text{attackRange} = \text{mainHand.range} \; || \; 52
+\text{attackRange} = \text{mainHand.range} \; || \; \text{class.attackRange}
 $$
 
 ### On stat recalculation
@@ -603,7 +624,9 @@ hp   = clamp(round(newMaxHp × hpRatio), 1, newMaxHp)
 mana = clamp(round(newMaxMana × manaRatio), 0, newMaxMana)
 ```
 
-### On level-up
+### On level-up (server-authoritative)
+
+Level-ups are computed entirely on the server in `_grantXp()`:
 
 1. `xp -= xpToLevel`
 2. `level += 1`
@@ -611,6 +634,8 @@ mana = clamp(round(newMaxMana × manaRatio), 0, newMaxMana)
 4. `_recalcStats()` called (adjusts maxHp, maxMana, damage)
 5. **Full heal**: `hp = maxHp, mana = maxMana`
 6. Loop continues — multi-level-ups from one XP grant are handled
+
+The server broadcasts `xpToLevel` in the `you` object of each `state` message. The client detects level-ups by comparing `msg.you.level > player.level` in `onWorldState()` and `onQuestCompleteResult()`, then triggers a chat message, level-up sound, and particle burst. The client never computes level-ups locally.
 
 ---
 
@@ -798,6 +823,12 @@ Zone effects use entries in `statusEffects.json` for client-side icon display:
 | `zoneCourage` | Emboldened | battleShout.png |
 | `zoneWeakness` | Enfeebled | weakened.png |
 
+Skill-applied HoT effects also use `statusEffects.json`:
+
+| ID | Display Name | Icon |
+|----|-------------|------|
+| `hot_bandage` | Bandage | evasion.png |
+
 ---
 
 ## 16. Inventory Context Menu & Dropping Items
@@ -812,6 +843,7 @@ Inventory items no longer equip on left-click. Instead, right-clicking an invent
 |--------|-----------|--------|
 | **Use** | Item is a consumable or hearthstone (`type === "consumable"` or `id === "hearthstone"`) | Calls `handleUseItem(index)` |
 | **Equip** | Item has an `equipSlot` | Triggers `equipItemAtIndex(index)` (optimistic client swap + server `equip_item` message) |
+| **Dismantle** | Item has `dismantleable: true` AND the shop panel is open (player is at a vendor) | Sends `dismantle_item` message to server |
 | **Drop** | Item is not permanent (`permanent !== true`) | Sends `drop_item` message to server |
 
 The context menu is a DOM element (`.item-context-menu`) positioned at the click coordinates, clamped to the viewport. It is dismissed by:
@@ -830,6 +862,34 @@ The context menu is a DOM element (`.item-context-menu`) positioned at the click
 4. **Client:** `onDropItemResult(msg)` syncs inventory from the server snapshot and shows a status message.
 
 > **Note:** Dropped items are destroyed, not placed on the ground as loot.
+
+### Dismantle item flow
+
+1. **Client:** Player right-clicks an inventory item while at a vendor (shop panel open). If `itemDef.dismantleable === true`, the "Dismantle" option appears in the context menu.
+2. **Client:** `NetworkSystem.sendDismantleItem(index)` sends `{ type: "dismantle_item", index }`.
+3. **Server:** `handleDismantleItem(player, msg)` validates:
+   - Player is alive
+   - `index` is a valid occupied inventory slot
+   - Item template has `dismantleable: true` and a `dismantleResult` array
+   - Player is within range of a vendor NPC (`dist < tileSize × 1.5`, same as sell validation)
+   - Inventory has space for all dismantle results (accounting for stacking and the freed slot)
+4. **Server:** Decrements item qty (or removes if qty = 1), grants each `dismantleResult` material via `_addItemToSlots()`, sends back `dismantle_item_result` with full inventory sync.
+5. **Client:** `onDismantleItemResult(msg)` syncs inventory, plays pickup SFX, shows "Dismantled X into N× Y, N× Z" chat message.
+
+> **Note:** Dismantling requires vendor proximity — both the client (shop panel must be open to show the option) and the server (proximity check) enforce this.
+
+### NPC auto-close on walk away
+
+When the player moves too far from an interacted NPC, all open NPC panels are automatically closed.
+
+- **Tracking:** `UISystem._interactNpc` stores a reference to the NPC object the player is currently interacting with. Set by `QuestSystem.interactWithNPC()` when the player initiates NPC interaction.
+- **Distance check:** `UISystem.update()` checks the distance between the player and `_interactNpc` every frame. If `distance > 120px` and any NPC panel is open (dialog, shop, bank, or crafting), all NPC panels are closed.
+- **Cleanup:** Each panel close method (`closeNpcDialog`, `closeShop`, `closeBank`, `closeCraftingStation`) clears `_interactNpc` only if no other NPC panel remains open, preventing premature cleanup when transitioning between panels (e.g., dialog → shop).
+
+| Constant | Value | Notes |
+|----------|-------|-------|
+| Auto-close distance | **120 px** | More generous than interaction range (60 px) to avoid flickering |
+| Interaction range | **60 px** | Standard NPC/node interaction distance |
 
 ### CSS
 
@@ -1059,7 +1119,7 @@ The raw float values are kept for smooth lerp accumulation.
 
 All positions are drawn relative to the integer-snapped camera.
 
-Entity labels (player names, NPC names, resource node names, waystone labels, portal labels, building names, floor indicator) are conditionally rendered based on `game.labelToggles` — an object of 8 booleans toggled via the game menu (Escape). All are off by default except `hoverNames`. When `hoverNames` is enabled, mousing over NPCs, enemies, or remote players shows their name (via `_drawHoverName()` in EntitySystem).
+Entity labels (player names, NPC names, resource node names, waystone labels, portal labels, building names, floor indicator) are conditionally rendered based on `game.labelToggles` — an object of 8 booleans toggled via the game menu (Escape). All are off by default except `hoverNames`. When `hoverNames` is enabled, mousing over NPCs, enemies, or remote players shows their name (via `_drawHoverName()` in EntitySystem). **Quest markers** (`!` for available, `?` for completable) are rendered above NPCs independently of `labelToggles.npcs` — they are always visible.
 
 ---
 
@@ -1079,11 +1139,18 @@ Entity labels (player names, NPC names, resource node names, waystone labels, po
 9. checkPortals()            — map transition detection
 10. checkStairs(dt)          — floor change detection (snaps player to stair tile center)
 11. updateCamera()           — lerp camera toward player
-12. ui.update()              — HUD refresh
+12. ui.update()              — HUD refresh (includes hotbar cooldown overlays)
 13. input.endFrame()         — clear per-frame input state
 ```
 
 `dt` is capped at **0.05 s** (20 fps floor) to prevent physics explosions from lag spikes.
+
+### Hotbar cooldown visuals
+
+`UISystem.updateHotbarCooldowns()` runs every frame during `ui.update()`. For each of the 10 hotbar slots:
+
+- **Skill-type entries:** Reads remaining cooldown from `CombatSystem._skillCooldowns[skillId]` and the skill's `cooldown` field. Displays a dark overlay (`div.hotbar-cooldown`) with a countdown timer over the slot, proportional to remaining cooldown.
+- **Item-type entries (hearthstone):** Reads `_hearthstoneCooldownStart` and `_hearthstoneCooldownMs` from the UI system (set when `hearthstone_teleport` is received). Displays the same overlay with the remaining hearthstone cooldown.
 
 ---
 
@@ -1140,7 +1207,7 @@ A clear breakdown of what runs where and who has the final say.
 
 Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
 
-### Client → Server (25 types)
+### Client → Server (26 types)
 
 | `type` | Payload | Handler |
 |--------|---------|---------|
@@ -1168,9 +1235,10 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `drop_item` | `index` | `handleDropItem()` |
 | `gather` | `nodeId` | `handleGather()` |
 | `craft` | `recipeId` | `handleCraft()` |
+| `dismantle_item` | `index` | `handleDismantleItem()` |
 | `respawn` | *(none)* | *(no-op — death timer auto-respawns)* |
 
-### Server → Client — Unicast (32 types)
+### Server → Client — Unicast (33 types)
 
 | `type` | Key payload fields | Sent by |
 |--------|--------------------|---------|
@@ -1203,6 +1271,7 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `drop_item_result` | `ok`, `inventory[]`, `message` | `handleDropItem()` |
 | `gather_result` | `success`, `reason?`, `itemId?`, `itemName?`, `inventory?`, `gatheringSkills?`, `skillId?`, `xpGained?`, `leveledUp?`, `newLevel?` | `handleGather()` |
 | `craft_result` | `success`, `reason?`, `recipeId?`, `outputItem?`, `inventory?`, `gatheringSkills?`, `xpGained?`, `leveledUp?`, `newLevel?` | `handleCraft()` |
+| `dismantle_item_result` | `ok`, `reason?`, `inventory[]?`, `dismantledName?`, `gained[]?` | `handleDismantleItem()` |
 | `auth_error` | `error` | `server.js` auth |
 | `kicked` | `reason` | `server.js` duplicate-login / admin |
 | `chat` | `channel`, `from`, `text`, `playerId?`, `to?` | `handleChat()` / admin |
@@ -1396,11 +1465,11 @@ The `respawn` client→server message is a no-op. Respawn is entirely timer-driv
      ├─ offHand check: reject shield/quiver if mainHand is 2H (non-bow)
      ├─ swap inventory[index] ↔ equipment[slot]
      ├─ _recalcStats(player)
-     │    ├─ hpBonus = sum(armor, offHand, helmet, pants, boots .hpBonus)
-     │    ├─ manaBonus = sum(ring1, ring2, amulet .manaBonus)
+     │    ├─ hpBonus = sum(all 9 slots .stats.maxHp)
+     │    ├─ manaBonus = sum(all 9 slots .stats.maxMana)
      │    ├─ maxHp = 120 + (level-1)×24 + hpBonus
      │    ├─ maxMana = 80 + (level-1)×16 + manaBonus
-     │    ├─ damage = baseDamage + mainHand.attackBonus
+     │    ├─ damage = baseDamage + sum(all 9 slots .stats.attack)
      │    ├─ attackRange = mainHand.range || 52
      │    └─ preserve HP/mana ratios
      └─ → send equip_item_result { ok, index, slot, newItem, oldItem, hp, maxHp, mana, maxMana, damage }
@@ -1619,7 +1688,7 @@ The game menu (Escape) includes a "Labels" section with 8 toggle buttons. Each c
 ```js
 this.labelToggles = {
   players: false,       // Player names above heads
-  npcs: false,          // NPC names and quest markers
+  npcs: false,          // NPC names (quest markers always render independently)
   resourceNodes: false, // Resource node names
   waystones: false,     // Waystone names and "✦ Bound" text
   portals: false,       // Portal labels on the world map
@@ -1639,7 +1708,7 @@ When `hoverNames` is enabled, moving the mouse near an entity reveals its name:
 
 | Entity type | Detection radius | Text color | Condition |
 |-------------|-----------------|------------|-----------|
-| NPC | 16px | `#1a1006` | Only when `labelToggles.npcs` is off |
+| NPC | 16px | `#1a1006` | Only when `labelToggles.npcs` is off. Quest markers (`!`/`?`) above NPCs always render regardless of toggle. |
 | Enemy | `radius + 4` px | `#e8c8c8` | Always (enemies have no always-on label) |
 | Remote player | 18px | `#e0dcc8` | Only when `labelToggles.players` is off |
 

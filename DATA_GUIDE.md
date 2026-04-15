@@ -83,12 +83,22 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 | `description` | string | Tooltip text |
 | `stackSize` | number | *(optional)* Max stack size. Omit or leave absent for unstackable items (e.g. equipment). Junk items typically use `99`, consumables `20`. |
 
+### Equipment fields (shared by weapon, shield, armor, helmet, pants, boots, ring, amulet, quiver)
+
+All equippable items support these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stats` | object | Stat bonuses granted while equipped. Keys: `attack`, `maxHp`, `maxMana`, `defense`. Values are numbers added to the player's base stats. Omit keys that don't apply (e.g. a ring only needs `{ "maxMana": 25 }`). |
+| `rarity` | string | Item rarity tier: `"common"`, `"uncommon"`, `"rare"`, `"epic"`, `"legendary"`. Shown in tooltips for non-common items. |
+| `dismantleable` | boolean | *(optional)* `true` if the item can be dismantled into components at a vendor NPC. |
+| `dismantleResult` | array | *(optional, required if dismantleable)* Array of `{ "id": string, "qty": number }` objects specifying materials returned when dismantled. Item IDs must reference valid entries in items.json. |
+
 ### Type-specific fields
 
 **weapon:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `attackBonus` | number | Added to player base damage |
 | `handed` | number | `1` = one-handed, `2` = two-handed |
 | `weaponType` | string | `"sword"`, `"dagger"`, `"staff"`, `"bow"` — cosmetic/UI categorization |
 | `requiresQuiver` | boolean | *(optional)* `true` for bows — requires a quiver in offHand to attack |
@@ -97,33 +107,32 @@ Top-level object keyed by item ID. Each item needs an icon at `public/assets/spr
 | `hitSfx` | string | *(optional)* SFX played when attack lands (falls back to `playerBase.hitSfx`) |
 | `swingSfx` | string | *(optional)* SFX played on swing (falls back to `playerBase.swingSfx`) |
 
-**shield:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `hpBonus` | number | Added to player max HP |
-
 **quiver:**
 | Field | Type | Description |
 |-------|------|-------------|
 | `maxArrows` | number | Maximum arrow capacity (e.g. 50, 100) |
 
-**armor / helmet / pants / boots:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `hpBonus` | number | Added to player max HP |
-
-**ring / amulet:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `manaBonus` | number | Added to player max mana |
-
 **consumable:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `effect` | string | `"healHp"`, `"healMana"`, or `"refillQuiver"` |
-| `power` | number | Amount restored (HP/mana) or arrows added (refillQuiver) |
+| `effects` | array | Array of effect objects applied when used (see Consumable Effects below) |
 | `useParticle` | string | *(optional)* Particle preset emitted on use (e.g. `"heal"`, `"mana_restore"`) |
 | `useSfx` | string | *(optional)* SFX played on use (e.g. `"potion_drink"`) |
+
+### Consumable Effects
+
+Each entry in the `effects` array has a `type` field and type-specific properties. A single consumable can have multiple effects (e.g. the antidote heals HP *and* cleanses debuffs).
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `healHp` | `power` (number) | Instantly restores `power` HP (capped at max HP) |
+| `healMana` | `power` (number) | Instantly restores `power` mana (capped at max mana) |
+| `refillQuiver` | `power` (number) | Adds `power` arrows to equipped quiver (requires quiver in offHand) |
+| `buff` | `id`, `stat`, `modifier`, `duration` | Applies a timed buff. `stat` matches the buff/debuff system (e.g. `"damage"`, `"moveSpeed"`). `modifier` is a multiplier (e.g. `0.2` = +20%). `duration` in seconds. |
+| `debuff` | `id`, `stat`, `modifier`, `duration` | Applies a timed debuff (same fields as buff but typically negative modifier). |
+| `hot` | `id`, `tickHeal`, `tickInterval`, `duration` | Heal-over-time. Restores `tickHeal` HP every `tickInterval` seconds for `duration` seconds. |
+| `dot` | `id`, `tickDamage`, `tickInterval`, `duration` | Damage-over-time. Deals `tickDamage` every `tickInterval` seconds for `duration` seconds. |
+| `cleanse` | *(none)* | Removes all negative effects (debuffs, DoTs, stuns) from the player. |
 
 **hearthstone:**
 | Field | Type | Description |
@@ -149,7 +158,10 @@ Materials are gathered resources (ores, logs, fish). They have no type-specific 
   "name": "Novice Ironblade",
   "type": "weapon",
   "icon": "noviceBlade",
-  "attackBonus": 5,
+  "rarity": "common",
+  "dismantleable": true,
+  "dismantleResult": [{ "id": "copperBar", "qty": 1 }, { "id": "oakPlank", "qty": 1 }],
+  "stats": { "attack": 5 },
   "handed": 1,
   "weaponType": "sword",
   "value": 20,
@@ -165,11 +177,24 @@ Materials are gathered resources (ores, logs, fish). They have no type-specific 
   "name": "Minor Healing Potion",
   "type": "consumable",
   "icon": "minorHealingPotion",
-  "effect": "healHp",
-  "power": 40,
+  "effects": [{ "type": "healHp", "power": 40 }],
   "value": 8,
   "stackSize": 20,
   "description": "Restores 40 HP when used.",
+  "useParticle": "heal",
+  "useSfx": "potion_drink"
+}
+```
+```json
+"antidote": {
+  "id": "antidote",
+  "name": "Herbal Antidote",
+  "type": "consumable",
+  "icon": "antidote",
+  "effects": [{ "type": "healHp", "power": 25 }, { "type": "cleanse" }],
+  "value": 6,
+  "stackSize": 20,
+  "description": "A bitter brew that cures ailments and restores 25 HP.",
   "useParticle": "heal",
   "useSfx": "potion_drink"
 }
@@ -191,10 +216,12 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 | `id` | string | Must match the object key |
 | `name` | string | Display name shown above head |
 | `color` | string | Hex color fallback |
-| `type` | string | `"quest_giver"`, `"vendor"`, `"banker"`, `"gathering"`, or `"crafting_station"` |
+| `type` | string | `"npc"`, `"quest_giver"`, `"vendor"`, `"banker"`, `"gathering"`, or `"crafting_station"` |
 | `defaultDialog` | string | Greeting text when no quest/shop action |
 | `questIds` | string[] | Quest IDs this NPC offers (quest_giver only) |
 | `shop` | string[] | Item IDs this NPC sells (vendor only) |
+
+**Basic NPCs** use `type: "npc"` and only need `id`, `name`, `color`, `type`, and `defaultDialog`. They provide conversation only — no shop, bank, quests, or crafting.
 
 **Banker NPCs** use `type: "banker"` and only need `id`, `name`, `color`, `type`, and `defaultDialog`. When the player interacts with a banker, a 48-slot bank panel opens for storage.
 
@@ -203,6 +230,15 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 **Crafting Station NPCs** use `type: "crafting_station"` and include a `craftingSkill` field indicating which processing profession they serve. When the player interacts, a crafting panel opens showing recipes for that skill. Requires `craftingSkill` field (one of `"smelting"`, `"milling"`, or `"cooking"`).
 
 **Examples:**
+```json
+"villager_tom": {
+  "id": "villager_tom",
+  "name": "Tom the Farmer",
+  "color": "#8B7355",
+  "type": "npc",
+  "defaultDialog": "Fine weather for the crops today!"
+}
+```
 ```json
 "elder_rowan": {
   "id": "elder_rowan",
@@ -414,33 +450,90 @@ Top-level object keyed by prop type. Defines blocking behavior and fallback colo
 
 ## playerBase.json
 
-Single flat object defining starting player stats. Equipment bonuses stack on top of these.
+Defines shared defaults and per-class stat overrides. Both server and client load this file; the helper `classStats(classId)` merges `defaults` with the matching `classes` entry so class-specific values override shared ones.
+
+### Top-level structure
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `defaults` | object | Shared base stats — every class inherits these unless overridden |
+| `classes` | object | Keyed by class ID (`warrior`, `mage`, …). Each entry can override any field from `defaults` and adds display metadata |
+
+### `defaults` fields
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `moveSpeed` | number | Movement speed (pixels/sec) |
 | `attackRange` | number | Melee range (pixels) |
 | `attackCooldown` | number | Seconds between attacks |
-| `maxHp` | number | Base max HP (armor/shield/helmet/pants/boots `hpBonus` stacks on top) |
-| `maxMana` | number | Base max mana (ring/amulet `manaBonus` adds to this) |
-| `damage` | number | Base damage (weapon `attackBonus` adds to this) |
+| `maxHp` | number | Base max HP at level 1 |
+| `maxMana` | number | Base max mana at level 1 |
+| `damage` | number | Base unarmed damage at level 1 |
+| `hpPerLevel` | number | HP gained per level-up |
+| `manaPerLevel` | number | Mana gained per level-up |
+| `damagePerLevel` | number | Damage gained per level-up |
 | `hitParticle` | string | Default particle preset when unarmed attack lands |
 | `hitSfx` | string | Default SFX when unarmed attack lands |
 | `swingSfx` | string | Default SFX on unarmed swing |
 
+### `classes` entry fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Display name shown in UI |
+| `icon` | string | yes | PNG filename in `assets/sprites/ui/` shown in class picker (e.g. `"class_warrior.png"`) |
+| `color` | string | yes | CSS color used for player name tags and UI accents |
+| `description` | string | yes | One-line description shown on character creation |
+| Any `defaults` field | number | no | Overrides the corresponding default (e.g. `maxHp`, `moveSpeed`, `hpPerLevel`) |
+
+### Stat resolution
+
+`classStats(classId)` returns `{ ...defaults, ...classes[classId] }`. The final stat formulas are:
+
+```
+maxHp   = class.maxHp   + (level-1) × class.hpPerLevel   + sum(equipped stats.maxHp)
+maxMana = class.maxMana  + (level-1) × class.manaPerLevel  + sum(equipped stats.maxMana)
+damage  = class.damage   + (level-1) × class.damagePerLevel + sum(equipped stats.attack)
+```
+
+### Example (current data)
+
 ```json
 {
-  "moveSpeed": 205,
-  "attackRange": 52,
-  "attackCooldown": 0.82,
-  "maxHp": 120,
-  "maxMana": 80,
-  "damage": 16,
-  "hitParticle": "punch",
-  "hitSfx": "punch_hit",
-  "swingSfx": "punch_swing"
+  "defaults": {
+    "moveSpeed": 205, "attackRange": 52, "attackCooldown": 0.82,
+    "maxHp": 120, "maxMana": 80, "damage": 16,
+    "hpPerLevel": 24, "manaPerLevel": 16, "damagePerLevel": 4,
+    "hitParticle": "punch", "hitSfx": "punch_hit", "swingSfx": "punch_swing"
+  },
+  "classes": {
+    "warrior": {
+      "name": "Warrior", "icon": "class_warrior.png", "color": "#d48a5e",
+      "description": "A tough melee fighter with high HP and powerful strikes.",
+      "maxHp": 150, "maxMana": 60, "damage": 18,
+      "hpPerLevel": 28, "manaPerLevel": 12, "damagePerLevel": 5
+    },
+    "mage": {
+      "name": "Mage", "icon": "class_mage.png", "color": "#8a7dc9",
+      "description": "A ranged spellcaster with high mana and devastating magic.",
+      "maxHp": 90, "maxMana": 120, "damage": 12,
+      "hpPerLevel": 18, "manaPerLevel": 22, "damagePerLevel": 3
+    },
+    "rogue": {
+      "name": "Rogue", "icon": "class_rogue.png", "color": "#7cc97d",
+      "description": "A swift striker who relies on speed and precision.",
+      "maxHp": 110, "maxMana": 80, "damage": 16, "moveSpeed": 225,
+      "hpPerLevel": 22, "manaPerLevel": 16, "damagePerLevel": 4
+    }
+  }
 }
 ```
+
+**To add a new class (no code changes needed):**
+1. Add an entry to `classes` with a unique key, display metadata, and any stat overrides
+2. Place a 32x32 class icon at `public/assets/sprites/ui/class_{classId}.png`
+3. Add class-specific skills to `skills.json` — include the class ID in each skill's `classes` array
+4. Place a player sprite at `public/assets/sprites/entities/player_{classId}.png`
 
 ---
 
@@ -646,6 +739,7 @@ Top-level object keyed by status effect ID. Defines the display metadata (name, 
 | `sundered` | Sundered | debuff | sundered.png |
 | `weakened` | Weakened | debuff | weakened.png |
 | `poisoned` | Poisoned | debuff | poisoned.png |
+| `hot_bandage` | Bandage | buff | evasion.png |
 
 ### Tile-zone effects
 

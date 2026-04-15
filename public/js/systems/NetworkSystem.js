@@ -254,6 +254,10 @@ export class NetworkSystem {
     this.send({ type: "craft", recipeId });
   }
 
+  sendDismantleItem(index) {
+    this.send({ type: "dismantle_item", index });
+  }
+
   sendBuyItem(itemId, npcId) {
     this.send({ type: "buy_item", itemId, npcId });
   }
@@ -423,6 +427,9 @@ export class NetworkSystem {
         break;
       case "craft_result":
         this.onCraftResult(msg);
+        break;
+      case "dismantle_item_result":
+        this.onDismantleItemResult(msg);
         break;
       case "auth_error":
         this._intentionalClose = true;
@@ -654,8 +661,20 @@ export class NetworkSystem {
       player.mana = msg.you.mana;
       player.maxMana = msg.you.maxMana;
       if (msg.you.gold !== undefined) player.gold = msg.you.gold;
-      if (msg.you.level !== undefined) player.level = msg.you.level;
+      // Detect level-up (server-authoritative)
+      if (msg.you.level !== undefined && msg.you.level > player.level) {
+        const oldLevel = player.level;
+        player.level = msg.you.level;
+        for (let lvl = oldLevel + 1; lvl <= player.level; lvl++) {
+          this.game.ui.addMessage(`Level up! You reached level ${lvl}.`);
+          this.game.audio.play("level_up");
+          this.game.particles.emit("levelup", player.x, player.y);
+        }
+      } else if (msg.you.level !== undefined) {
+        player.level = msg.you.level;
+      }
       if (msg.you.xp !== undefined) player.xp = msg.you.xp;
+      if (msg.you.xpToLevel !== undefined) player.xpToLevel = msg.you.xpToLevel;
       if (msg.you.damage !== undefined) player.damage = msg.you.damage;
       if (msg.you.buffs) player.activeBuffs = msg.you.buffs;
 
@@ -1048,13 +1067,40 @@ export class NetworkSystem {
     this.game.ui._inventoryDirty = true;
     this.game.ui._hotbarDirty = true;
 
-    if (msg.effect === "healHp") {
-      this.game.ui.addMessage(`Potion restores ${msg.amount} HP.`);
-    } else if (msg.effect === "healMana") {
-      this.game.ui.addMessage(`Potion restores ${msg.amount} mana.`);
-    } else if (msg.effect === "refillQuiver") {
-      this.game.ui.addMessage(`Added ${msg.amount} arrows to quiver.`);
-      this.game.ui._equipmentDirty = true;
+    // Process effects array (with legacy fallback)
+    const effects = msg.effects || (msg.effect ? [{ type: msg.effect, amount: msg.amount }] : []);
+    for (const fx of effects) {
+      switch (fx.type) {
+        case "healHp":
+          this.game.ui.addMessage(`Potion restores ${fx.amount} HP.`);
+          break;
+        case "healMana":
+          this.game.ui.addMessage(`Potion restores ${fx.amount} mana.`);
+          break;
+        case "refillQuiver":
+          this.game.ui.addMessage(`Added ${fx.amount} arrows to quiver.`);
+          this.game.ui._equipmentDirty = true;
+          break;
+        case "buff":
+          this.game.ui.addMessage(`Buff applied: ${fx.id || fx.stat} for ${fx.duration}s.`);
+          break;
+        case "debuff":
+          this.game.ui.addMessage(`Debuff applied: ${fx.id || fx.stat} for ${fx.duration}s.`);
+          break;
+        case "hot":
+          this.game.ui.addMessage(`Heal over time applied for ${fx.duration}s.`);
+          break;
+        case "dot":
+          this.game.ui.addMessage(`Damage over time applied for ${fx.duration}s.`);
+          break;
+        case "cleanse":
+          if (fx.removed > 0) {
+            this.game.ui.addMessage(`Cleansed ${fx.removed} negative effect${fx.removed > 1 ? "s" : ""}.`);
+          } else {
+            this.game.ui.addMessage("No negative effects to cleanse.");
+          }
+          break;
+      }
     }
 
     // Look up consumed item's effects from items.json
@@ -1180,7 +1226,18 @@ export class NetworkSystem {
     // Apply server-authoritative rewards
     player.gold = msg.playerGold;
     player.xp = msg.playerXp;
-    player.level = msg.playerLevel;
+    // Detect level-up from quest rewards
+    if (msg.playerLevel > player.level) {
+      const oldLevel = player.level;
+      player.level = msg.playerLevel;
+      for (let lvl = oldLevel + 1; lvl <= player.level; lvl++) {
+        this.game.ui.addMessage(`Level up! You reached level ${lvl}.`);
+        this.game.audio.play("level_up");
+        this.game.particles.emit("levelup", player.x, player.y);
+      }
+    } else {
+      player.level = msg.playerLevel;
+    }
     player.hp = msg.hp;
     player.maxHp = msg.maxHp;
     player.mana = msg.mana;
@@ -1267,6 +1324,10 @@ export class NetworkSystem {
 
     player.x = msg.x;
     player.y = msg.y;
+    // Record hearthstone cooldown for hotbar display
+    const hsDef = this.game.data?.items?.["hearthstone"];
+    this.game.ui._hearthstoneCooldownStart = performance.now();
+    this.game.ui._hearthstoneCooldownMs = (hsDef?.cooldown || 180) * 1000;
     this.game.ui.addChatMessage("system", "You have been teleported home.");
   }
 
@@ -1419,6 +1480,24 @@ export class NetworkSystem {
       // Trigger continuous crafting if enabled
       this.game.ui.onCraftSuccess(msg.recipeId);
     }
+  }
+
+  onDismantleItemResult(msg) {
+    if (!msg.ok) {
+      this.game.ui.addMessage(msg.reason || "Cannot dismantle that.");
+      return;
+    }
+    const player = this.game.entities.player;
+    if (msg.inventory) {
+      for (let i = 0; i < player.inventorySlots.length; i++) {
+        player.inventorySlots[i] = msg.inventory[i] || null;
+      }
+    }
+    this.game.ui._inventoryDirty = true;
+    this.game.ui._hotbarDirty = true;
+    this.game.audio.play("pickup");
+    const parts = (msg.gained || []).map(g => `${g.qty}x ${g.name}`).join(", ");
+    this.game.ui.addMessage(`Dismantled ${msg.dismantledName} into ${parts}.`);
   }
 
   /* ═══════════════════════════════════════════════════════

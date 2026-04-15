@@ -1,11 +1,55 @@
 {
-  "moveSpeed": 205,
-  "attackRange": 52,
-  "attackCooldown": 0.82,
-  "maxHp": 120,
-  "maxMana": 80,
-  "damage": 16,
-  "hitParticle": "punch",
-  "hitSfx": "punch_hit",
-  "swingSfx": "punch_swing"
+  "defaults": {
+    "moveSpeed": 205,
+    "attackRange": 52,
+    "attackCooldown": 0.82,
+    "maxHp": 120,
+    "maxMana": 80,
+    "damage": 16,
+    "hpPerLevel": 24,
+    "manaPerLevel": 16,
+    "damagePerLevel": 4,
+    "hitParticle": "punch",
+    "hitSfx": "punch_hit",
+    "swingSfx": "punch_swing"
+  },
+  "classes": {
+    "warrior": {
+      "name": "Warrior",
+      "icon": "class_warrior.png",
+      "color": "#d48a5e",
+      "description": "A tough melee fighter with high HP and powerful strikes.",
+      "maxHp": 150,
+      "maxMana": 60,
+      "damage": 18,
+      "hpPerLevel": 28,
+      "manaPerLevel": 12,
+      "damagePerLevel": 5
+    },
+    "mage": {
+      "name": "Mage",
+      "icon": "class_mage.png",
+      "color": "#8a7dc9",
+      "description": "A ranged spellcaster with high mana and devastating magic.",
+      "maxHp": 90,
+      "maxMana": 120,
+      "damage": 12,
+      "hpPerLevel": 18,
+      "manaPerLevel": 22,
+      "damagePerLevel": 3
+    },
+    "rogue": {
+      "name": "Rogue",
+      "icon": "class_rogue.png",
+      "color": "#7cc97d",
+      "description": "A swift striker who relies on speed and precision.",
+      "maxHp": 110,
+      "maxMana": 80,
+      "damage": 16,
+      "moveSpeed": 225,
+      "hpPerLevel": 22,
+      "manaPerLevel": 16,
+      "damagePerLevel": 4
+    }
+  }
 }

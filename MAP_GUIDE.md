@@ -47,7 +47,7 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
 | `width` | `number` | Map width in tiles. |
 | `height` | `number` | Map height in tiles. |
 | `tileSize` | `number` | Pixel size of each tile. Use `48` for consistency. |
-| `spawnPoint` | `[tx, ty]` | Default spawn position in tile coordinates. Players appear here when no other target is specified. |
+| `spawnPoint` | `[tx, ty]` | Default spawn position in tile coordinates. Players appear centered on this tile (`tx * tileSize + tileSize / 2`). |
 | `palette` | `string[]` | Array of tile type names referencing entries in `tilePalette.json`. Terrain values are indices into this array. |
 | `terrain` | `number[][]` | 2D grid (`height` rows × `width` columns) of palette indices. |
 
@@ -189,7 +189,7 @@ NPC placements reference definitions in `public/data/npcs.json`.
 ```
 
 - `npcId` — Must match a key in `npcs.json`
-- `tx`, `ty` — Tile position
+- `tx`, `ty` — Tile position (NPC spawns centered on the tile)
 - `floor` — Which floor the NPC is on (`0` = ground, `1` = 2nd floor, etc.). NPCs are only visible and interactable when the player is on the same floor. Defaults to `0` if omitted.
 
 NPC types include `quest_giver`, `vendor`, and `crafting_station`. Crafting station NPCs (e.g. `smelter_hilda`, `sawyer_brom`, `cook_marta`) have a `craftingSkill` field in `npcs.json` that determines which recipes the player can craft at that station. The NPC's dialogue, quest assignments, shop inventory, crafting skill, and appearance are all defined in `npcs.json`, not in the map file.
@@ -207,7 +207,7 @@ Waystones let players attune their hearthstone for teleport-to-town.
 
 - `id` — Unique identifier (used by the hearthstone system)
 - `name` — Display name
-- `tx`, `ty` — Tile position
+- `tx`, `ty` — Tile position (waystone spawns centered on the tile)
 - `floor` — *(optional)* Floor level. `0` = ground (default), `1` = 2nd floor, etc. Waystones are only visible and interactable when the player is on the same floor.
 
 ## Buildings

@@ -38,7 +38,7 @@
   "fireball": {
     "id": "fireball",
     "name": "Fireball",
-    "description": "Hurl a ball of fire at your target, dealing magic damage.",
+    "description": "Hurl a ball of fire at your target, dealing magic damage. Requires a staff.",
     "type": "attack",
     "targeting": "enemy",
     "range": 220,
@@ -61,7 +61,7 @@
   "frostbolt": {
     "id": "frostbolt",
     "name": "Frostbolt",
-    "description": "Launch a bolt of frost that damages and slows your target.",
+    "description": "Launch a bolt of frost that damages and slows your target. Requires a staff.",
     "type": "attack",
     "targeting": "enemy",
     "range": 240,
@@ -90,7 +90,7 @@
   "arcaneMissiles": {
     "id": "arcaneMissiles",
     "name": "Arcane Missiles",
-    "description": "Channel a barrage of arcane bolts at your target.",
+    "description": "Channel a barrage of arcane bolts at your target. Requires a staff.",
     "type": "attack",
     "targeting": "enemy",
     "range": 200,
@@ -116,7 +116,7 @@
   "heroicStrike": {
     "id": "heroicStrike",
     "name": "Heroic Strike",
-    "description": "A powerful melee strike that deals bonus physical damage.",
+    "description": "A powerful melee strike that deals bonus physical damage. Requires a weapon.",
     "type": "attack",
     "targeting": "enemy",
     "range": null,
@@ -137,7 +137,7 @@
   "shieldBash": {
     "id": "shieldBash",
     "name": "Shield Bash",
-    "description": "Slam your shield into the target, stunning them briefly.",
+    "description": "Slam your shield into the target, stunning them briefly. Requires a weapon and shield.",
     "type": "attack",
     "targeting": "enemy",
     "range": null,
@@ -165,7 +165,7 @@
   "whirlwind": {
     "id": "whirlwind",
     "name": "Whirlwind",
-    "description": "Spin in a circle, striking all nearby enemies.",
+    "description": "Spin in a circle, striking all nearby enemies. Requires a weapon.",
     "type": "attack",
     "targeting": "aoe",
     "range": null,
@@ -186,7 +186,7 @@
   "sinisterStrike": {
     "id": "sinisterStrike",
     "name": "Sinister Strike",
-    "description": "A swift dagger strike that deals extra damage.",
+    "description": "A swift dagger strike that deals extra damage. Requires a weapon.",
     "type": "attack",
     "targeting": "enemy",
     "range": null,
@@ -207,7 +207,7 @@
   "eviscerate": {
     "id": "eviscerate",
     "name": "Eviscerate",
-    "description": "A finishing move that deals massive damage.",
+    "description": "A finishing move that deals massive damage. Requires a weapon.",
     "type": "attack",
     "targeting": "enemy",
     "range": null,
@@ -316,7 +316,7 @@
   "sunder": {
     "id": "sunder",
     "name": "Sunder Armor",
-    "description": "Weaken the target's defenses, increasing damage taken.",
+    "description": "Weaken the target's defenses, increasing damage taken. Requires a weapon.",
     "type": "debuff",
     "targeting": "enemy",
     "range": null,
@@ -342,7 +342,7 @@
   "curse": {
     "id": "curse",
     "name": "Curse of Weakness",
-    "description": "Curse your target, reducing their damage output.",
+    "description": "Curse your target, reducing their damage output. Requires a staff.",
     "type": "debuff",
     "targeting": "enemy",
     "range": 180,
@@ -368,7 +368,7 @@
   "poison": {
     "id": "poison",
     "name": "Envenom",
-    "description": "Apply deadly poison, dealing damage over time.",
+    "description": "Apply deadly poison, dealing damage over time. Requires a weapon.",
     "type": "debuff",
     "targeting": "enemy",
     "range": null,

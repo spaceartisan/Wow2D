@@ -33,6 +33,7 @@
       <button class="tab" data-tab="statusEffects">Status Effects</button>
       <button class="tab" data-tab="gatheringSkills">Gathering</button>
       <button class="tab" data-tab="resourceNodes">Resources</button>
+      <button class="tab" data-tab="recipes">Recipes</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -246,6 +247,8 @@
                       <option value="amulet">amulet</option>
                       <option value="trinket">trinket</option>
                       <option value="quiver">quiver</option>
+                      <option value="tool">tool</option>
+                      <option value="material">material</option>
                       <option value="consumable">consumable</option>
                       <option value="junk">junk</option>
                       <option value="hearthstone">hearthstone</option>
@@ -344,20 +347,75 @@
                     <span>Max Arrows <span class="subtle">(quiver capacity)</span></span>
                     <input id="itemMaxArrowsInput" type="number" step="1" min="1" />
                   </label>
-                  <div class="split-grid four-columns">
-                    <label class="field type-field" data-type-field="effect">
-                      <span>Effect</span>
-                      <select id="itemEffectInput">
-                        <option value="">(none)</option>
-                        <option value="healHp">healHp</option>
-                        <option value="healMana">healMana</option>
-                        <option value="refillQuiver">refillQuiver</option>
+                  <div class="split-grid three-columns type-field" data-type-field="toolMeta">
+                    <label class="field">
+                      <span>Tool Type</span>
+                      <select id="itemToolTypeInput">
+                        <option value="">—</option>
+                        <option value="pickaxe">pickaxe</option>
+                        <option value="hatchet">hatchet</option>
+                        <option value="fishing_rod">fishing_rod</option>
                       </select>
                     </label>
-                    <label class="field type-field" data-type-field="power">
-                      <span>Power</span>
-                      <input id="itemPowerInput" type="number" step="1" />
+                    <label class="field">
+                      <span>Tool Tier</span>
+                      <select id="itemToolTierInput">
+                        <option value="">—</option>
+                        <option value="1">1 — Basic</option>
+                        <option value="2">2 — Improved</option>
+                        <option value="3">3 — Advanced</option>
+                      </select>
                     </label>
+                    <label class="field">
+                      <span>Gathering Level Req <span class="subtle">(optional)</span></span>
+                      <input id="itemGatheringLevelReqInput" type="number" step="1" min="1" placeholder="optional" />
+                    </label>
+                  </div>
+                  <!-- Stats, rarity, dismantle — equippable items only -->
+                  <div class="type-field" data-type-field="statsRarityDismantle">
+                    <div class="split-grid four-columns" style="margin-bottom:6px">
+                      <label class="field"><span>Stats: Attack</span><input id="itemStatsAttackInput" type="number" step="1" placeholder="optional" /></label>
+                      <label class="field"><span>Stats: Max HP</span><input id="itemStatsHpInput" type="number" step="1" placeholder="optional" /></label>
+                      <label class="field"><span>Stats: Max Mana</span><input id="itemStatsManaInput" type="number" step="1" placeholder="optional" /></label>
+                      <label class="field"><span>Stats: Defense</span><input id="itemStatsDefenseInput" type="number" step="1" placeholder="optional" /></label>
+                    </div>
+                    <div class="split-grid two-columns" style="margin-bottom:6px">
+                      <label class="field">
+                        <span>Rarity</span>
+                        <select id="itemRarityInput">
+                          <option value="common">common</option>
+                          <option value="uncommon">uncommon</option>
+                          <option value="rare">rare</option>
+                          <option value="epic">epic</option>
+                          <option value="legendary">legendary</option>
+                        </select>
+                      </label>
+                      <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                        <input id="itemDismantleableInput" type="checkbox" />
+                        <span>Dismantleable</span>
+                      </label>
+                    </div>
+                    <section class="field-group" id="itemDismantleSection">
+                      <div class="inline-json-header row-between">
+                        <h4>Dismantle Result <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(materials returned)</span></h4>
+                        <button id="itemDismantleAddButton" type="button" class="button secondary small">Add Material</button>
+                      </div>
+                      <div id="itemDismantleEditor" class="linked-list-editor"></div>
+                      <p id="itemDismantleEmptyState" class="subtle linked-empty">No dismantle result set.</p>
+                    </section>
+                  </div>
+
+                  <!-- Consumable effects -->
+                  <div class="type-field" data-type-field="effects">
+                    <div class="inline-json-header row-between">
+                      <h4>Effects <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(applied when used)</span></h4>
+                      <button id="itemEffectAddButton" type="button" class="button secondary small">Add Effect</button>
+                    </div>
+                    <div id="itemEffectsEditor" class="linked-list-editor"></div>
+                    <p id="itemEffectsEmptyState" class="subtle linked-empty">No effects.</p>
+                  </div>
+
+                  <div class="split-grid two-columns">
                     <label class="field type-field" data-type-field="castTime">
                       <span>Cast Time</span>
                       <input id="itemCastTimeInput" type="number" step="0.1" />
@@ -662,6 +720,7 @@
                       <option value="quest_giver">quest_giver</option>
                       <option value="vendor">vendor</option>
                       <option value="banker">banker</option>
+                      <option value="crafting_station">crafting_station</option>
                     </select>
                   </label>
                   <label class="field">
@@ -692,6 +751,17 @@
                   <span>Default Dialog</span>
                   <textarea id="npcDefaultDialogInput" rows="3"></textarea>
                 </label>
+                <section class="field-group" data-npc-field="craftingSkill">
+                  <div class="inline-json-header"><h4>Crafting Station</h4></div>
+                  <label class="field">
+                    <span>Crafting Skill</span>
+                    <select id="npcCraftingSkillInput">
+                      <option value="smelting">smelting</option>
+                      <option value="milling">milling</option>
+                      <option value="cooking">cooking</option>
+                    </select>
+                  </label>
+                </section>
                 <section class="field-group" data-npc-field="questIds">
                   <div class="inline-json-header row-between">
                     <h4>Quest IDs</h4>
@@ -905,7 +975,7 @@
           <div class="panel-header">
             <div>
               <h2>Player Base Editor</h2>
-              <p class="panel-subtitle">Edit <code>public/data/playerBase.json</code> — base stats before equipment bonuses apply</p>
+              <p class="panel-subtitle">Edit <code>public/data/playerBase.json</code> — shared defaults and per-class stat overrides</p>
             </div>
             <div class="inline-actions">
               <button id="validatePlayerBaseButton" class="button secondary">Validate</button>
@@ -916,75 +986,50 @@
           <div class="panel-body playerbase-grid">
             <section class="card editor-form-card">
               <div class="card-header">
-                <h3>Base Stats</h3>
-                <span class="mono subtle">Equipment bonuses stack on top</span>
+                <h3>Defaults</h3>
+                <span class="mono subtle">Inherited by all classes unless overridden</span>
               </div>
-
               <form id="playerBaseForm" class="editor-form" autocomplete="off">
                 <div class="playerbase-stat-group">
-                  <div class="playerbase-stat-label">Combat</div>
+                  <div class="playerbase-stat-label">Base Stats</div>
                   <div class="split-grid three-columns">
-                    <label class="field">
-                      <span>Max HP</span>
-                      <input id="pbMaxHpInput" type="number" step="1" min="1" />
-                    </label>
-                    <label class="field">
-                      <span>Max Mana</span>
-                      <input id="pbMaxManaInput" type="number" step="1" min="0" />
-                    </label>
-                    <label class="field">
-                      <span>Damage</span>
-                      <input id="pbDamageInput" type="number" step="1" min="0" />
-                    </label>
+                    <label class="field"><span>Max HP</span><input id="pbMaxHpInput" type="number" step="1" min="1" /></label>
+                    <label class="field"><span>Max Mana</span><input id="pbMaxManaInput" type="number" step="1" min="0" /></label>
+                    <label class="field"><span>Damage</span><input id="pbDamageInput" type="number" step="1" min="0" /></label>
+                  </div>
+                </div>
+                <div class="playerbase-stat-group">
+                  <div class="playerbase-stat-label">Per-Level Gains</div>
+                  <div class="split-grid three-columns">
+                    <label class="field"><span>HP / Level</span><input id="pbHpPerLevelInput" type="number" step="1" min="0" /></label>
+                    <label class="field"><span>Mana / Level</span><input id="pbManaPerLevelInput" type="number" step="1" min="0" /></label>
+                    <label class="field"><span>Damage / Level</span><input id="pbDamagePerLevelInput" type="number" step="1" min="0" /></label>
+                  </div>
+                </div>
+                <div class="playerbase-stat-group">
+                  <div class="playerbase-stat-label">Movement &amp; Attack</div>
+                  <div class="split-grid three-columns">
+                    <label class="field"><span>Move Speed <span class="subtle">(px/s)</span></span><input id="pbMoveSpeedInput" type="number" step="1" min="1" /></label>
+                    <label class="field"><span>Attack Range <span class="subtle">(px)</span></span><input id="pbAttackRangeInput" type="number" step="1" min="1" /></label>
+                    <label class="field"><span>Attack Cooldown <span class="subtle">(s)</span></span><input id="pbAttackCooldownInput" type="number" step="0.01" min="0.01" /></label>
+                  </div>
+                </div>
+                <div class="playerbase-stat-group">
+                  <div class="playerbase-stat-label">Unarmed FX &amp; Audio</div>
+                  <div class="split-grid three-columns">
+                    <label class="field"><span>Hit Particle</span><input id="pbHitParticleInput" type="text" placeholder="e.g. punch" /></label>
+                    <div class="field"><span class="field-label">Hit SFX</span><div class="sfx-field"><input id="pbHitSfxInput" type="text" placeholder="e.g. punch_hit" /><button type="button" class="button secondary small sfx-play-btn" data-sfx-input="pbHitSfxInput" title="Preview sound">▶</button></div></div>
+                    <div class="field"><span class="field-label">Swing SFX</span><div class="sfx-field"><input id="pbSwingSfxInput" type="text" placeholder="e.g. punch_swing" /><button type="button" class="button secondary small sfx-play-btn" data-sfx-input="pbSwingSfxInput" title="Preview sound">▶</button></div></div>
                   </div>
                 </div>
 
                 <div class="playerbase-stat-group">
-                  <div class="playerbase-stat-label">Movement & Attack</div>
-                  <div class="split-grid three-columns">
-                    <label class="field">
-                      <span>Move Speed <span class="subtle">(px/s)</span></span>
-                      <input id="pbMoveSpeedInput" type="number" step="1" min="1" />
-                    </label>
-                    <label class="field">
-                      <span>Attack Range <span class="subtle">(px)</span></span>
-                      <input id="pbAttackRangeInput" type="number" step="1" min="1" />
-                    </label>
-                    <label class="field">
-                      <span>Attack Cooldown <span class="subtle">(s)</span></span>
-                      <input id="pbAttackCooldownInput" type="number" step="0.01" min="0.01" />
-                    </label>
-                  </div>
-                </div>
-
-                <div class="playerbase-stat-group">
-                  <div class="playerbase-stat-label">Unarmed FX &amp; Audio <span style="opacity:0.6;font-weight:400;text-transform:none;letter-spacing:0">(fallback when no weapon equipped)</span></div>
-                  <div class="split-grid three-columns">
-                    <label class="field">
-                      <span>Hit Particle <span class="subtle">(preset)</span></span>
-                      <input id="pbHitParticleInput" type="text" placeholder="e.g. punch" />
-                    </label>
-                    <div class="field">
-                      <span class="field-label">Hit SFX</span>
-                      <div class="sfx-field">
-                        <input id="pbHitSfxInput" type="text" placeholder="e.g. punch_hit" />
-                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="pbHitSfxInput" title="Preview sound">▶</button>
-                      </div>
-                    </div>
-                    <div class="field">
-                      <span class="field-label">Swing SFX</span>
-                      <div class="sfx-field">
-                        <input id="pbSwingSfxInput" type="text" placeholder="e.g. punch_swing" />
-                        <button type="button" class="button secondary small sfx-play-btn" data-sfx-input="pbSwingSfxInput" title="Preview sound">▶</button>
-                      </div>
-                    </div>
-                  </div>
+                  <div class="playerbase-stat-label">Classes</div>
+                  <div id="pbClassesEditor" style="display:flex;flex-direction:column;gap:12px;"></div>
                 </div>
 
                 <section class="inline-json">
-                  <div class="inline-json-header">
-                    <h4>JSON Preview</h4>
-                  </div>
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
                   <pre id="playerBaseJsonPreview" class="json-preview"></pre>
                 </section>
               </form>
@@ -1801,7 +1846,10 @@
                 </div>
                 <div class="split-grid two-columns">
                   <label class="field"><span>Icon <span class="subtle">(key)</span></span><input id="gatheringSkillIconInput" type="text" placeholder="e.g. mining" /></label>
-                  <label class="field"><span>Tool Type</span><input id="gatheringSkillToolTypeInput" type="text" placeholder="e.g. pickaxe" /></label>
+                  <label class="field"><span>Tool Type <span class="subtle">(gathering)</span></span><input id="gatheringSkillToolTypeInput" type="text" placeholder="e.g. pickaxe" /></label>
+                </div>
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Category <span class="subtle">(processing only)</span></span><input id="gatheringSkillCategoryInput" type="text" placeholder="e.g. processing" /></label>
                 </div>
                 <label class="field"><span>Description</span><textarea id="gatheringSkillDescriptionInput" rows="2"></textarea></label>
                 <section class="inline-json">
@@ -1953,6 +2001,111 @@
                 <span id="resourceNodeValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="resourceNodeDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="recipes">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>Recipes</h2>
+            <div class="inline-actions">
+              <button id="addRecipeButton" class="button secondary small">Add</button>
+              <button id="duplicateRecipeButton" class="button secondary small">Duplicate</button>
+              <button id="deleteRecipeButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="recipeSearchInput" type="text" placeholder="Find recipe id, name, or skill" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box">
+                <span class="stat-label">Entries</span>
+                <strong id="recipeEntryCount">0</strong>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Skills</span>
+                <strong id="recipeSkillCount">0</strong>
+              </div>
+            </div>
+            <div id="recipeList" class="tile-list" role="listbox" aria-label="Recipe entries"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Recipes Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/recipes.json</code> — crafting recipes for smelting, milling, and cooking stations</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateRecipesButton" class="button secondary">Validate</button>
+              <button id="reloadRecipesButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Recipe</h3>
+                <span id="selectedRecipeLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="recipeEmptyState" class="empty-state">
+                <p>Select a recipe from the list to begin editing.</p>
+              </div>
+              <form id="recipeForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Recipe ID</span><input id="recipeIdInput" type="text" /></label>
+                  <label class="field"><span>Name</span><input id="recipeNameInput" type="text" /></label>
+                </div>
+
+                <div class="split-grid four-columns">
+                  <label class="field">
+                    <span>Skill</span>
+                    <select id="recipeSkillInput">
+                      <option value="smelting">smelting</option>
+                      <option value="milling">milling</option>
+                      <option value="cooking">cooking</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Required Level</span><input id="recipeRequiredLevelInput" type="number" step="1" min="1" /></label>
+                  <label class="field"><span>XP</span><input id="recipeXpInput" type="number" step="1" min="0" /></label>
+                  <label class="field"><span>Craft Time <span class="subtle">(sec)</span></span><input id="recipeCraftTimeInput" type="number" step="0.1" min="0.1" /></label>
+                </div>
+
+                <section class="field-group">
+                  <div class="inline-json-header row-between">
+                    <h4>Input Ingredients</h4>
+                    <button id="recipeInputAddButton" type="button" class="button secondary small">Add Ingredient</button>
+                  </div>
+                  <div id="recipeInputEditor" class="linked-list-editor"></div>
+                  <p id="recipeInputEmptyState" class="subtle linked-empty">No ingredients.</p>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Output</h4></div>
+                  <div class="split-grid two-columns">
+                    <label class="field"><span>Output Item ID</span><input id="recipeOutputIdInput" type="text" placeholder="e.g. copperBar" /></label>
+                    <label class="field"><span>Output Qty</span><input id="recipeOutputQtyInput" type="number" step="1" min="1" /></label>
+                  </div>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                  <pre id="recipeJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="recipeValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="recipeDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
             </section>
           </div>
         </section>

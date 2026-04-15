@@ -145,8 +145,10 @@ export class CombatSystem {
       return;
     }
 
-    if (now - this.lastHealCastAt < 5300) {
-      const remaining = ((5300 - (now - this.lastHealCastAt)) / 1000).toFixed(1);
+    if (!this._skillCooldowns) this._skillCooldowns = {};
+    const lastUsed = this._skillCooldowns["heal"] || 0;
+    if (now - lastUsed < 5300) {
+      const remaining = ((5300 - (now - lastUsed)) / 1000).toFixed(1);
       this.game.ui.addMessage(`Minor Heal cooling down (${remaining}s).`);
       return;
     }
@@ -156,7 +158,7 @@ export class CombatSystem {
       return;
     }
 
-    this.lastHealCastAt = now;
+    this._skillCooldowns["heal"] = now;
     // send heal request to server
     this.game.network.sendHeal();
     this.game.audio.play("heal");

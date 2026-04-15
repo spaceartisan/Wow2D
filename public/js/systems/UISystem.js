@@ -1,4 +1,5 @@
 import { DragManager } from "./DragManager.js";
+import { CLASSES } from "../config.js";
 
 export class UISystem {
   constructor(game) {
@@ -60,6 +61,7 @@ export class UISystem {
     this._craftContinuous = false;
     this._shopNpcId = null;
     this._shopItems = [];
+    this._interactNpc = null;
     this._inventoryDirty = true;
     this._equipmentDirty = true;
     this._hotbarDirty = true;
@@ -182,7 +184,8 @@ export class UISystem {
     const charData = this.game.charData;
     this.el.playerName.textContent = charData.name;
 
-    const classInitials = { warrior: "W", mage: "M", rogue: "R" };
+    const classInitials = {};
+    for (const [id, cls] of Object.entries(CLASSES)) classInitials[id] = cls.name.charAt(0);
     this.el.playerPortrait.textContent = classInitials[charData.charClass] || "A";
   }
 
@@ -372,6 +375,7 @@ export class UISystem {
   closeNpcDialog() {
     this.npcDialogOpen = false;
     this.el.npcDialogPanel.classList.add("hidden");
+    if (!this.shopOpen && !this.bankOpen && !this.craftingOpen) this._interactNpc = null;
   }
 
   /* ── Game Menu ──────────────────────────────────────── */
@@ -485,6 +489,19 @@ export class UISystem {
   update() {
     const player = this.game.entities.player;
 
+    // Auto-close NPC panels when player walks too far from the NPC
+    if (this._interactNpc && (this.npcDialogOpen || this.shopOpen || this.bankOpen || this.craftingOpen)) {
+      const dx = player.x - this._interactNpc.x;
+      const dy = player.y - this._interactNpc.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 120) {
+        if (this.npcDialogOpen) this.closeNpcDialog();
+        if (this.shopOpen) this.closeShop();
+        if (this.bankOpen) this.closeBank();
+        if (this.craftingOpen) this.closeCraftingStation();
+        this._interactNpc = null;
+      }
+    }
+
     this.el.playerLevel.textContent = `Level ${player.level}`;
 
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
@@ -537,6 +554,7 @@ export class UISystem {
       this.renderHotbar();
       this._hotbarDirty = false;
     }
+    this.updateHotbarCooldowns();
     if (this.bankOpen && this._bankDirty) {
       this.renderBank();
       this._bankDirty = false;
@@ -725,23 +743,43 @@ export class UISystem {
   }
 
   _itemTooltipText(item) {
+    const STAT_LABELS = { attack: "Attack", maxHp: "HP", maxMana: "Mana", defense: "Defense" };
     let tip = item.name;
+    if (item.rarity && item.rarity !== "common") {
+      tip += ` (${item.rarity.charAt(0).toUpperCase() + item.rarity.slice(1)})`;
+    }
+    // Dynamic stat display from stats object
+    if (item.stats) {
+      for (const [key, val] of Object.entries(item.stats)) {
+        if (val) tip += `\n${STAT_LABELS[key] || key} +${val}`;
+      }
+    } else {
+      // Backward compat for old item format
+      if (item.attackBonus) tip += `\nAttack +${item.attackBonus}`;
+      if (item.hpBonus) tip += `\nHP +${item.hpBonus}`;
+      if (item.manaBonus) tip += `\nMana +${item.manaBonus}`;
+    }
     if (item.type === "weapon") {
-      tip += `\nAttack +${item.attackBonus}`;
       const def = this.game.data?.items?.[item.id];
       if (def?.handed) tip += ` (${def.handed === 2 ? "Two-Hand" : "One-Hand"})`;
       if (def?.requiresQuiver) tip += " [Requires Quiver]";
     }
-    if (item.hpBonus) tip += `\nHP +${item.hpBonus}`;
-    if (item.manaBonus) tip += `\nMana +${item.manaBonus}`;
     if (item.type === "quiver") {
       const maxArr = this.game.data?.items?.[item.id]?.maxArrows || item.maxArrows || 50;
       tip += `\nArrows: ${item.arrows ?? maxArr}/${maxArr}`;
     }
     if (item.type === "consumable") {
-      if (item.effect === "healHp") tip += `\nRestores ${item.power} HP`;
-      if (item.effect === "healMana") tip += `\nRestores ${item.power} Mana`;
-      if (item.effect === "refillQuiver") tip += `\nAdds ${item.power} arrows to quiver`;
+      const effects = item.effects || (item.effect ? [{ type: item.effect, power: item.power }] : []);
+      for (const fx of effects) {
+        if (fx.type === "healHp") tip += `\nRestores ${fx.power} HP`;
+        else if (fx.type === "healMana") tip += `\nRestores ${fx.power} Mana`;
+        else if (fx.type === "refillQuiver") tip += `\nAdds ${fx.power} arrows to quiver`;
+        else if (fx.type === "buff") tip += `\n+${Math.round((fx.modifier || 0) * 100)}% ${fx.stat || fx.id} (${fx.duration}s)`;
+        else if (fx.type === "debuff") tip += `\n${Math.round((fx.modifier || 0) * 100)}% ${fx.stat || fx.id} (${fx.duration}s)`;
+        else if (fx.type === "hot") tip += `\nHeals ${fx.tickHeal}/tick for ${fx.duration}s`;
+        else if (fx.type === "dot") tip += `\n${fx.tickDamage} dmg/tick for ${fx.duration}s`;
+        else if (fx.type === "cleanse") tip += `\nCleanses negative effects`;
+      }
     }
     if (item.description) tip += `\n${item.description}`;
     if (item.value) tip += `\nValue: ${item.value}g`;
@@ -883,11 +921,27 @@ export class UISystem {
 
       const desc = document.createElement("span");
       desc.className = "shop-item-desc";
-      if (item.type === "weapon") desc.textContent = `Attack +${item.attackBonus}`;
+      if (item.stats && Object.keys(item.stats).length > 0) {
+        const STAT_LABELS = { attack: "Attack", maxHp: "HP", maxMana: "Mana", defense: "Defense" };
+        desc.textContent = Object.entries(item.stats)
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${STAT_LABELS[k] || k} +${v}`)
+          .join(", ");
+      } else if (item.type === "weapon") desc.textContent = `Attack +${item.attackBonus}`;
       else if (item.type === "armor") desc.textContent = `HP +${item.hpBonus}`;
       else if (item.type === "trinket") desc.textContent = `Mana +${item.manaBonus}`;
       else if (item.type === "consumable") {
-        desc.textContent = item.effect === "healHp" ? `Restores ${item.power} HP` : `Restores ${item.power} Mana`;
+        const effects = item.effects || (item.effect ? [{ type: item.effect, power: item.power }] : []);
+        const parts = effects.map(fx => {
+          if (fx.type === "healHp") return `Restores ${fx.power} HP`;
+          if (fx.type === "healMana") return `Restores ${fx.power} Mana`;
+          if (fx.type === "refillQuiver") return `+${fx.power} arrows`;
+          if (fx.type === "buff") return `+${Math.round((fx.modifier||0)*100)}% ${fx.stat||fx.id}`;
+          if (fx.type === "hot") return `Heals ${fx.tickHeal}/tick`;
+          if (fx.type === "cleanse") return "Cleanses";
+          return fx.type;
+        });
+        desc.textContent = parts.join(", ");
       }
 
       info.append(name, desc);
@@ -945,6 +999,7 @@ export class UISystem {
     const panel = document.getElementById("shop-panel");
     if (panel) panel.classList.add("hidden");
     this._inventoryDirty = true; // re-render inventory to hide sell buttons
+    if (!this.npcDialogOpen && !this.bankOpen && !this.craftingOpen) this._interactNpc = null;
   }
 
   /* ── Bank UI ────────────────────────────────────────── */
@@ -963,6 +1018,7 @@ export class UISystem {
     this.bankOpen = false;
     this.el.bankPanel.classList.add("hidden");
     this._inventoryDirty = true; // hide deposit buttons
+    if (!this.npcDialogOpen && !this.shopOpen && !this.craftingOpen) this._interactNpc = null;
   }
 
   renderBank() {
@@ -1102,6 +1158,53 @@ export class UISystem {
             }
           }
         }
+      }
+    });
+  }
+
+  updateHotbarCooldowns() {
+    const p = this.game.entities?.player;
+    if (!p) return;
+    const hotbar = p.hotbar;
+    const skillDefs = this.game.data?.skills || {};
+    const cooldowns = this.game.combat?._skillCooldowns || {};
+    const now = performance.now();
+
+    const slotEls = document.querySelectorAll("#action-bar .hotbar-slot");
+    slotEls.forEach((el, i) => {
+      const entry = hotbar[i];
+      if (!entry) {
+        el.classList.remove("hotbar-cooldown");
+        const cdEl = el.querySelector(".hotbar-cd-text");
+        if (cdEl) cdEl.remove();
+        return;
+      }
+
+      let remaining = 0;
+      if (entry.type === "skill") {
+        const skillDef = skillDefs[entry.skillId];
+        const cooldownMs = (skillDef?.cooldown || 0) * 1000;
+        const lastUsed = cooldowns[entry.skillId] || 0;
+        remaining = cooldownMs - (now - lastUsed);
+      } else if (entry.type === "item" && entry.itemId === "hearthstone") {
+        const start = this._hearthstoneCooldownStart || 0;
+        const cdMs = this._hearthstoneCooldownMs || 0;
+        remaining = cdMs - (now - start);
+      }
+
+      if (remaining > 0) {
+        el.classList.add("hotbar-cooldown");
+        let cdEl = el.querySelector(".hotbar-cd-text");
+        if (!cdEl) {
+          cdEl = document.createElement("span");
+          cdEl.className = "hotbar-cd-text";
+          el.appendChild(cdEl);
+        }
+        cdEl.textContent = Math.ceil(remaining / 1000);
+      } else {
+        el.classList.remove("hotbar-cooldown");
+        const cdEl = el.querySelector(".hotbar-cd-text");
+        if (cdEl) cdEl.remove();
       }
     });
   }
@@ -1417,6 +1520,13 @@ export class UISystem {
         if (this.game.network) this.game.network.sendEquipItem(index);
         this._inventoryDirty = true;
         this._equipmentDirty = true;
+      });
+    }
+
+    // Dismantle option — dismantleable items at a vendor (inventory only)
+    if (isInventory && this.shopOpen && itemDef?.dismantleable) {
+      addOption("Dismantle", () => {
+        if (this.game.network) this.game.network.sendDismantleItem(index);
       });
     }
 
@@ -1758,7 +1868,8 @@ export class UISystem {
     const p = this.game.entities.player;
     body.textContent = "";
 
-    const classNames = { warrior: "Warrior", mage: "Mage", rogue: "Rogue" };
+    const classNames = {};
+    for (const [id, cls] of Object.entries(CLASSES)) classNames[id] = cls.name;
 
     const stats = [
       ["Name", p.name],
@@ -2049,6 +2160,7 @@ export class UISystem {
     if (this.game.crafting.active) this.game.stopCrafting();
     const panel = document.getElementById("crafting-panel");
     if (panel) panel.classList.add("hidden");
+    if (!this.npcDialogOpen && !this.shopOpen && !this.bankOpen) this._interactNpc = null;
   }
 
   showCraftingBar(durationSec, label) {

@@ -54,7 +54,7 @@ http://localhost:3000
 | Left-click enemy | Select target (does not attack) |
 | Left-click player | Select target (friendly) |
 | Right-click enemy | Select target and engage auto-attack |
-| Right-click inventory item | Context menu: Equip, Use, or Drop |
+| Right-click inventory item | Context menu: Equip, Use, Dismantle, or Drop |
 | Click equipment slot | Unequip item back to inventory |
 | `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
 | `E` | Interact with nearby NPC or waystone; auto-gather from resource nodes |
@@ -121,6 +121,7 @@ http://localhost:3000
 - Data-driven combat effects: weapons, enemies, and consumables define their own particle effects and SFX via JSON
 - Data-driven skill system: class-restricted abilities (attacks, heals, buffs, debuffs, support) defined in skills.json with per-skill icons
 - 9-slot equipment system: mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet
+- Dismantle system — break down equipment into crafting materials at vendor NPCs
 - 1-handed and 2-handed weapons with automatic offHand management
 - Ranged weapon support: bows require quivers with finite arrows; refill via arrow bundles
 - Projectile system: homing projectiles with sprite support (arrow.png for bows) and glow-circle fallback for magic
@@ -150,16 +151,18 @@ http://localhost:3000
 - Target panel with HP bar (different style for friendly vs enemy targets)
 - 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear; hover tooltips for skills and items
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
-- Inventory (20 slots) with right-click context menu (Equip/Use/Drop), drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
+- Inventory (20 slots) with right-click context menu (Equip/Use/Dismantle/Drop), drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
 - Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
 - Equipment panel with 9 slots (mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet) — click to unequip
 - Quest tracker, quest log, character sheet, and skills panel
 - NPC dialog system with quest accept/turn-in flow
+- NPC auto-close — dialog, shop, bank, and crafting panels close automatically when the player walks away from the NPC
 - Floor indicator when inside multi-story buildings
-- Label visibility toggles in the game menu (Escape): show/hide floating names for players, NPCs, resource nodes, waystones, portals, buildings, and the floor indicator (all off by default)
+- Label visibility toggles in the game menu (Escape): show/hide floating names for players, NPCs, resource nodes, waystones, portals, buildings, and the floor indicator (all off by default). Quest markers (`!`/`?`) above NPCs are always visible regardless of toggle.
 - Hover names: mouse over NPCs, enemies, or other players to reveal their name (on by default, toggleable)
 - Professions panel (G key) with per-skill XP bars and level display
 - Skill icons in skills panel and hotbar (data-driven from skills.json `icon` field)
+- Hotbar cooldown overlays — dark sweep with countdown timer on skills and hearthstone while on cooldown
 
 ## Project Structure
 

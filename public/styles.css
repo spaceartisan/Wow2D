@@ -444,7 +444,9 @@ input, textarea {
 }
 
 .class-icon {
-  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
 }
 
 .class-label {
@@ -1771,6 +1773,25 @@ input, textarea {
 }
 .hotbar-slot.hotbar-unavailable .stack-qty {
   color: #ff5555;
+}
+
+.hotbar-slot.hotbar-cooldown {
+  filter: brightness(0.4);
+}
+.hotbar-slot.hotbar-cooldown:hover {
+  filter: brightness(0.5);
+}
+.hotbar-cd-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+  pointer-events: none;
+  z-index: 1;
 }
 
 #gold-counter {
