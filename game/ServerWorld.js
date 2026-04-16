@@ -20,6 +20,7 @@ const PROP_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "props.json"), "
 const RESOURCE_NODE_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "resourceNodes.json"), "utf8"));
 const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatheringSkills.json"), "utf8"));
 const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
+const AOE_PATTERNS = JSON.parse(fs.readFileSync(path.join(dataDir, "aoePatterns.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
 const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
@@ -74,6 +75,56 @@ function clamp(v, lo, hi) {
 
 function tileKey(x, y) {
   return `${x},${y}`;
+}
+
+/* ── AoE pattern helpers ─────────────────────────────────── */
+
+/**
+ * Rotate a tile offset [dx, dy] by the given direction index (0–7).
+ * Direction 0 = north (no rotation), increments clockwise by 45°.
+ */
+function rotateTileOffset(dx, dy, dirIndex) {
+  // 90° rotations are exact; 45° rotations use rounded approximation
+  switch (dirIndex) {
+    case 0: return [dx, dy];                                                       // N
+    case 1: return [Math.round((dx - dy) * 0.7071), Math.round((dx + dy) * 0.7071)]; // NE
+    case 2: return [-dy, dx];                                                      // E
+    case 3: return [Math.round((-dx - dy) * 0.7071), Math.round((dx - dy) * 0.7071)]; // SE  (= 90+45)
+    case 4: return [-dx, -dy];                                                     // S
+    case 5: return [Math.round((-dx + dy) * 0.7071), Math.round((-dx - dy) * 0.7071)]; // SW
+    case 6: return [dy, -dx];                                                      // W
+    case 7: return [Math.round((dx + dy) * 0.7071), Math.round((-dx + dy) * 0.7071)]; // NW  (= 270+45)
+    default: return [dx, dy];
+  }
+}
+
+/**
+ * Get the 8-direction index (0=N, 1=NE, 2=E, ... 7=NW) from a direction vector.
+ */
+function directionIndex(dx, dy) {
+  const angle = Math.atan2(dx, -dy); // 0 = north, CW positive
+  const idx = Math.round(angle / (Math.PI / 4));
+  return ((idx % 8) + 8) % 8;
+}
+
+/**
+ * Resolve an AoE pattern into a Set of "tx,ty" tile keys.
+ * @param {Object} pattern — entry from AOE_PATTERNS
+ * @param {number} originTx — tile X of the pattern origin
+ * @param {number} originTy — tile Y of the pattern origin
+ * @param {number} [dirIdx] — 8-direction index for directional patterns
+ * @returns {Set<string>}
+ */
+function resolveAoeTiles(pattern, originTx, originTy, dirIdx) {
+  const tiles = new Set();
+  for (const [dx, dy] of pattern.tiles) {
+    let rx = dx, ry = dy;
+    if (pattern.directional && dirIdx != null) {
+      [rx, ry] = rotateTileOffset(dx, dy, dirIdx);
+    }
+    tiles.add(tileKey(originTx + rx, originTy + ry));
+  }
+  return tiles;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -539,6 +590,9 @@ class ServerWorld {
       case "cancel_hearthstone":
         this.handleCancelHearthstone(player);
         break;
+      case "cancel_cast":
+        this._interruptCast(player, "manual");
+        break;
       case "attune_hearthstone":
         this.handleAttuneHearthstone(player, msg);
         break;
@@ -790,6 +844,7 @@ class ServerWorld {
 
   handleUseSkill(player, msg) {
     if (player.dead) return;
+    if (player.casting) return; // Already casting something
 
     const skillId = String(msg.skillId || "");
     const skillDef = SKILLS[skillId];
@@ -845,7 +900,8 @@ class ServerWorld {
 
     // For enemy-targeted skills, validate target and range
     let enemy = null;
-    if (skillDef.targeting === "enemy" || skillDef.targeting === "aoe") {
+    const targeting = skillDef.targeting;
+    if (targeting === "enemy") {
       const mapEntry = this.maps.get(player.mapId);
       if (!mapEntry) return;
       enemy = mapEntry.enemies.find(e => e.id === msg.enemyId);
@@ -855,16 +911,110 @@ class ServerWorld {
       const skillRange = skillDef.range || player.attackRange;
       if (d > skillRange + 30) return;
     }
+    // ground_aoe / directional — validate target position is in range
+    if (targeting === "ground_aoe" || targeting === "directional") {
+      const tx = msg.targetX, ty = msg.targetY;
+      if (tx == null || ty == null) return;
+      const d = dist(player.x, player.y, tx, ty);
+      const skillRange = skillDef.range || 200;
+      if (d > skillRange + 30) return;
+    }
+    // self_aoe — no target needed
+
+    // ── Cast time: if skill has castTime, begin casting instead of resolving now ──
+    const castTimeSec = skillDef.castTime || 0;
+    if (castTimeSec > 0) {
+      // Pre-consume mana so it's locked in on cast start
+      player.mana -= manaCost;
+      player.skillCooldowns[skillId] = now;
+
+      player.casting = {
+        type: "skill",
+        skillId,
+        skillDef,
+        startedAt: now,
+        duration: castTimeSec * 1000,
+        concentration: (skillDef.concentration !== false) && !skillDef.ignoreConcentration,
+        ignoreHits: !!skillDef.ignoreConcentration,
+        castX: player.x,
+        castY: player.y,
+        // Store targeting data for resolution on complete
+        enemyId: msg.enemyId || null,
+        targetX: msg.targetX ?? null,
+        targetY: msg.targetY ?? null,
+      };
+
+      this.send(player.ws, {
+        type: "skill_cast_start",
+        skillId,
+        castTime: castTimeSec,
+        name: skillDef.name,
+        mana: player.mana,
+        maxMana: player.maxMana,
+      });
+      return;
+    }
+
+    // ── Channeled: if skill is channeled, begin channel ──
+    if (skillDef.channeled) {
+      player.mana -= manaCost;
+      player.skillCooldowns[skillId] = now;
+
+      const ticks = skillDef.channelTicks || skillDef.hits || skillDef.healTicks || 1;
+      const tickIntervalSec = skillDef.hitInterval || skillDef.healInterval || 1.0;
+      const channelDuration = skillDef.channelDuration || (ticks * tickIntervalSec);
+
+      player.casting = {
+        type: "channel",
+        skillId,
+        skillDef,
+        startedAt: now,
+        duration: channelDuration * 1000,
+        concentration: !skillDef.ignoreConcentration,
+        ignoreHits: !!skillDef.ignoreConcentration,
+        castX: player.x,
+        castY: player.y,
+        enemyId: msg.enemyId || null,
+        targetX: msg.targetX ?? null,
+        targetY: msg.targetY ?? null,
+        tickInterval: tickIntervalSec * 1000,
+        lastTickAt: now,
+        ticksRemaining: ticks,
+        totalTicks: ticks,
+      };
+
+      this.send(player.ws, {
+        type: "skill_channel_start",
+        skillId,
+        channelDuration,
+        ticks,
+        name: skillDef.name,
+        mana: player.mana,
+        maxMana: player.maxMana,
+      });
+      return;
+    }
 
     // Consume mana & record cooldown
     player.mana -= manaCost;
     player.skillCooldowns[skillId] = now;
 
+    this._resolveSkill(player, skillDef, skillId, enemy, now, msg);
+  }
+
+  /**
+   * Resolve skill effects — extracted so both instant and cast-time paths use it.
+   */
+  _resolveSkill(player, skillDef, skillId, enemy, now, msg) {
+    const targeting = skillDef.targeting;
+
     // Resolve skill effects by type
     if (skillDef.type === "attack" || skillDef.type === "debuff") {
-      if (!enemy) return;
-      // ── Ranged skill — create server-side projectile, defer damage ──
-      if (skillDef.projectileSpeed > 0) {
+      const isAoe = targeting === "self_aoe" || targeting === "ground_aoe" || targeting === "directional";
+
+      // ── Ranged single-target skill — create server-side projectile, defer damage ──
+      if (!isAoe && skillDef.projectileSpeed > 0) {
+        if (!enemy) return;
         const mapEntry = this.maps.get(player.mapId);
         const projId = this._nextProjId++;
         mapEntry.projectiles.push({
@@ -876,12 +1026,10 @@ class ServerWorld {
           damageType: skillDef.damageType || "physical",
           debuff: skillDef.debuff || null,
         });
-        // Confirm mana/cooldown to attacker (no damage yet)
         this.send(player.ws, {
           type: "skill_result", ok: true, skillId,
           mana: player.mana, maxMana: player.maxMana,
         });
-        // Broadcast projectile spawn to all clients
         this.broadcastToMap(player.mapId, {
           type: "projectile_spawn",
           attackerId: player.id,
@@ -894,20 +1042,121 @@ class ServerWorld {
         return;
       }
 
-      // ── Instant skill — apply damage immediately ──
+      // ── AoE skill — hit all enemies in the pattern area ──
+      if (isAoe) {
+        const mapEntry = this.maps.get(player.mapId);
+        if (!mapEntry) return;
+        const ts = mapEntry.collision.tileSize || 48;
+        const pattern = AOE_PATTERNS[skillDef.aoePattern];
+        if (!pattern) return;
+
+        // Determine origin and direction
+        let originX, originY, dirIdx;
+        if (targeting === "self_aoe") {
+          originX = player.x;
+          originY = player.y;
+        } else if (targeting === "ground_aoe") {
+          originX = msg.targetX;
+          originY = msg.targetY;
+        } else { // directional
+          originX = player.x;
+          originY = player.y;
+        }
+        const originTx = Math.floor(originX / ts);
+        const originTy = Math.floor(originY / ts);
+
+        if (pattern.directional) {
+          const dx = (targeting === "directional" || targeting === "ground_aoe")
+            ? (msg.targetX || player.x) - player.x
+            : 0;
+          const dy = (targeting === "directional" || targeting === "ground_aoe")
+            ? (msg.targetY || player.y) - player.y
+            : -1; // default north
+          dirIdx = directionIndex(dx, dy);
+        }
+
+        const affectedTiles = resolveAoeTiles(pattern, originTx, originTy, dirIdx);
+
+        // Find all alive enemies on the same floor whose tile is in the AoE
+        const hits = [];
+        let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+        if (!skillDef.range && skillDef.damageType === "physical") baseDmg += player.damage;
+        const dmgMult = this._getPlayerDamageMultiplier(player);
+
+        for (const e of mapEntry.enemies) {
+          if (e.dead) continue;
+          if ((e.floor || 0) !== (player.floor || 0)) continue;
+          const eTx = Math.floor(e.x / ts);
+          const eTy = Math.floor(e.y / ts);
+          if (!affectedTiles.has(tileKey(eTx, eTy))) continue;
+
+          const takenMult = this._getEnemyDamageTakenMult(e);
+          const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
+          e.hp -= damage;
+
+          let debuffApplied = null;
+          if (skillDef.debuff) {
+            if (!e.activeDebuffs) e.activeDebuffs = [];
+            e.activeDebuffs = e.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
+            e.activeDebuffs.push({
+              ...skillDef.debuff,
+              appliedAt: now,
+              expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
+              casterId: player.id,
+            });
+            debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
+          }
+
+          hits.push({ enemyId: e.id, damage, enemyHp: e.hp, enemyMaxHp: e.maxHp, debuff: debuffApplied });
+
+          // Broadcast visual per hit to other players
+          this.broadcastToMap(player.mapId, {
+            type: "combat_visual",
+            attackerId: player.id,
+            ax: player.x, ay: player.y,
+            enemyId: e.id, ex: e.x, ey: e.y,
+            skillId,
+            hitParticle: skillDef.hitParticle || skillDef.particle || null,
+            hitSfx: skillDef.sfx || null,
+            projectileSpeed: 0,
+            damageType: skillDef.damageType || "physical",
+            damage, enemyHp: e.hp, enemyMaxHp: e.maxHp,
+          }, player.id);
+
+          if (e.hp <= 0) {
+            e.hp = 0;
+            this.killEnemy(e, player);
+          }
+        }
+
+        this.send(player.ws, {
+          type: "skill_result",
+          ok: true,
+          skillId,
+          aoe: true,
+          hits,
+          aoeTiles: [...affectedTiles].map(k => {
+            const [tx, ty] = k.split(",").map(Number);
+            return [tx * ts + ts / 2, ty * ts + ts / 2];
+          }),
+          mana: player.mana,
+          maxMana: player.maxMana,
+        });
+        return;
+      }
+
+      // ── Instant single-target skill — apply damage immediately ──
+      if (!enemy) return;
       let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
-      // Physical melee skills scale with weapon/base damage
       if (!skillDef.range && skillDef.damageType === 'physical') baseDmg += player.damage;
       const dmgMult = this._getPlayerDamageMultiplier(player);
       const takenMult = this._getEnemyDamageTakenMult(enemy);
       const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
       enemy.hp -= damage;
 
-      // Apply debuff to enemy if skill has one
       let debuffApplied = null;
       if (skillDef.debuff) {
         if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
-        // Replace existing debuff of same id
         enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
         const debuffEntry = {
           ...skillDef.debuff,
@@ -932,23 +1181,17 @@ class ServerWorld {
         debuff: debuffApplied
       });
 
-      // Broadcast visual effect to all OTHER players on this map
       this.broadcastToMap(player.mapId, {
         type: "combat_visual",
         attackerId: player.id,
-        ax: player.x,
-        ay: player.y,
-        enemyId: enemy.id,
-        ex: enemy.x,
-        ey: enemy.y,
+        ax: player.x, ay: player.y,
+        enemyId: enemy.id, ex: enemy.x, ey: enemy.y,
         skillId,
         hitParticle: skillDef.hitParticle || skillDef.particle || null,
         hitSfx: skillDef.sfx || null,
         projectileSpeed: 0,
         damageType: skillDef.damageType || "physical",
-        damage,
-        enemyHp: enemy.hp,
-        enemyMaxHp: enemy.maxHp
+        damage, enemyHp: enemy.hp, enemyMaxHp: enemy.maxHp
       }, player.id);
 
       if (enemy.hp <= 0) {
@@ -1034,14 +1277,33 @@ class ServerWorld {
         buffApplied = { id: skillDef.buff.id, stat: skillDef.buff.stat, modifier: skillDef.buff.modifier, duration: skillDef.buff.duration };
       }
 
-      this.send(player.ws, {
+      // Compute AoE tile positions for particle effects
+      let aoeTiles = null;
+      if (skillDef.aoePattern && AOE_PATTERNS[skillDef.aoePattern]) {
+        const mapEntry = this.maps.get(player.mapId);
+        if (mapEntry) {
+          const ts = mapEntry.collision.tileSize || 48;
+          const pattern = AOE_PATTERNS[skillDef.aoePattern];
+          const originTx = Math.floor(player.x / ts);
+          const originTy = Math.floor(player.y / ts);
+          const tiles = resolveAoeTiles(pattern, originTx, originTy);
+          aoeTiles = [...tiles].map(k => {
+            const [tx, ty] = k.split(",").map(Number);
+            return [tx * ts + ts / 2, ty * ts + ts / 2];
+          });
+        }
+      }
+
+      const result = {
         type: "skill_result",
         ok: true,
         skillId,
         mana: player.mana,
         maxMana: player.maxMana,
         buff: buffApplied
-      });
+      };
+      if (aoeTiles) result.aoeTiles = aoeTiles;
+      this.send(player.ws, result);
 
       // Broadcast buff visual to other players
       if (skillDef.particle) {
@@ -2027,10 +2289,21 @@ class ServerWorld {
   }
 
   _completeCast(player) {
-    if (!player.casting || player.casting.type !== "hearthstone") return;
-
-    const hs = player.hearthstone;
+    if (!player.casting) return;
+    const cast = player.casting;
     player.casting = null;
+
+    if (cast.type === "hearthstone") {
+      this._completeCastHearthstone(player);
+    } else if (cast.type === "skill") {
+      this._completeCastSkill(player, cast);
+    } else if (cast.type === "channel") {
+      this._completeCastChannel(player, cast);
+    }
+  }
+
+  _completeCastHearthstone(player) {
+    const hs = player.hearthstone;
     player.hearthstone.lastUsedAt = Date.now();
 
     // Teleport
@@ -2077,8 +2350,273 @@ class ServerWorld {
 
   _interruptCast(player, reason) {
     if (!player.casting) return;
+    const castType = player.casting.type;
+    const skillId = player.casting.skillId || null;
     player.casting = null;
-    this.send(player.ws, { type: "hearthstone_cast_cancelled", reason: reason || "interrupted" });
+
+    if (castType === "hearthstone") {
+      this.send(player.ws, { type: "hearthstone_cast_cancelled", reason: reason || "interrupted" });
+    } else if (castType === "skill") {
+      this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: reason || "interrupted" });
+    } else if (castType === "channel") {
+      this.send(player.ws, { type: "skill_channel_cancelled", skillId, reason: reason || "interrupted" });
+    }
+  }
+
+  /**
+   * Complete a skill cast — re-invoke the skill resolution logic.
+   * Mana/cooldown were already consumed at cast start.
+   */
+  _completeCastSkill(player, cast) {
+    const skillDef = cast.skillDef;
+    const skillId = cast.skillId;
+    if (!skillDef) return;
+    if (player.dead) return;
+
+    // Re-validate target (enemy may have died or moved during cast)
+    const targeting = skillDef.targeting;
+    const now = Date.now();
+    let enemy = null;
+
+    if (targeting === "enemy") {
+      const mapEntry = this.maps.get(player.mapId);
+      if (!mapEntry) return;
+      enemy = mapEntry.enemies.find(e => e.id === cast.enemyId);
+      if (!enemy || enemy.dead) {
+        this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "target_lost" });
+        return;
+      }
+      const d = dist(player.x, player.y, enemy.x, enemy.y);
+      const skillRange = skillDef.range || player.attackRange;
+      if (d > skillRange + 30) {
+        this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "out_of_range" });
+        return;
+      }
+    }
+
+    // Notify cast complete, then resolve using the same msg shape
+    this.send(player.ws, { type: "skill_cast_complete", skillId });
+    // Build a synthetic msg and call the resolution path
+    this._resolveSkill(player, skillDef, skillId, enemy, now, {
+      enemyId: cast.enemyId,
+      targetX: cast.targetX,
+      targetY: cast.targetY,
+    });
+  }
+
+  _completeCastChannel(player, cast) {
+    this.send(player.ws, { type: "skill_channel_complete", skillId: cast.skillId });
+  }
+
+  /**
+   * Process one tick of a channeled spell.
+   */
+  _channelTick(player, now) {
+    const cast = player.casting;
+    if (!cast || cast.type !== "channel") return;
+
+    const skillDef = cast.skillDef;
+    const skillId = cast.skillId;
+    const tickNum = cast.totalTicks - cast.ticksRemaining + 1;
+
+    cast.lastTickAt = now;
+    cast.ticksRemaining--;
+
+    const targeting = skillDef.targeting;
+
+    if (skillDef.type === "attack" || skillDef.type === "debuff") {
+      const isAoe = targeting === "self_aoe" || targeting === "ground_aoe" || targeting === "directional";
+
+      if (isAoe) {
+        // AoE channel tick
+        const mapEntry = this.maps.get(player.mapId);
+        if (!mapEntry) return;
+        const ts = mapEntry.collision.tileSize || 48;
+        const pattern = AOE_PATTERNS[skillDef.aoePattern];
+        if (!pattern) return;
+
+        let originX, originY, dirIdx;
+        if (targeting === "self_aoe") {
+          originX = player.x; originY = player.y;
+        } else if (targeting === "ground_aoe") {
+          originX = cast.targetX; originY = cast.targetY;
+        } else {
+          originX = player.x; originY = player.y;
+        }
+        const originTx = Math.floor(originX / ts);
+        const originTy = Math.floor(originY / ts);
+
+        if (pattern.directional) {
+          const dx = (cast.targetX || player.x) - player.x;
+          const dy = (cast.targetY || player.y) - player.y;
+          dirIdx = directionIndex(dx, dy);
+        }
+
+        const affectedTiles = resolveAoeTiles(pattern, originTx, originTy, dirIdx);
+
+        const hits = [];
+        let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+        if (!skillDef.range && skillDef.damageType === "physical") baseDmg += player.damage;
+        const dmgMult = this._getPlayerDamageMultiplier(player);
+
+        for (const e of mapEntry.enemies) {
+          if (e.dead) continue;
+          if ((e.floor || 0) !== (player.floor || 0)) continue;
+          const eTx = Math.floor(e.x / ts);
+          const eTy = Math.floor(e.y / ts);
+          if (!affectedTiles.has(tileKey(eTx, eTy))) continue;
+
+          const takenMult = this._getEnemyDamageTakenMult(e);
+          const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
+          e.hp -= damage;
+
+          let debuffApplied = null;
+          if (skillDef.debuff) {
+            if (!e.activeDebuffs) e.activeDebuffs = [];
+            e.activeDebuffs = e.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
+            e.activeDebuffs.push({
+              ...skillDef.debuff,
+              appliedAt: now,
+              expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
+              casterId: player.id,
+            });
+            debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
+          }
+
+          hits.push({ enemyId: e.id, damage, enemyHp: e.hp, enemyMaxHp: e.maxHp, debuff: debuffApplied });
+
+          this.broadcastToMap(player.mapId, {
+            type: "combat_visual",
+            attackerId: player.id,
+            ax: player.x, ay: player.y,
+            enemyId: e.id, ex: e.x, ey: e.y,
+            skillId,
+            hitParticle: skillDef.hitParticle || skillDef.particle || null,
+            hitSfx: skillDef.sfx || null,
+            projectileSpeed: 0,
+            damageType: skillDef.damageType || "physical",
+            damage, enemyHp: e.hp, enemyMaxHp: e.maxHp,
+          }, player.id);
+
+          if (e.hp <= 0) {
+            e.hp = 0;
+            this.killEnemy(e, player);
+          }
+        }
+
+        this.send(player.ws, {
+          type: "skill_channel_tick",
+          skillId,
+          tickNum,
+          aoe: true,
+          hits,
+          aoeTiles: [...affectedTiles].map(k => {
+            const [tx, ty] = k.split(",").map(Number);
+            return [tx * ts + ts / 2, ty * ts + ts / 2];
+          }),
+        });
+      } else {
+        // Single-target channel tick
+        const mapEntry = this.maps.get(player.mapId);
+        if (!mapEntry) { this._interruptCast(player, "target_lost"); return; }
+        const enemy = mapEntry.enemies.find(e => e.id === cast.enemyId);
+        if (!enemy || enemy.dead) { this._interruptCast(player, "target_lost"); return; }
+
+        const d = dist(player.x, player.y, enemy.x, enemy.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (d > skillRange + 30) { this._interruptCast(player, "out_of_range"); return; }
+
+        let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+        if (!skillDef.range && skillDef.damageType === "physical") baseDmg += player.damage;
+        const dmgMult = this._getPlayerDamageMultiplier(player);
+        const takenMult = this._getEnemyDamageTakenMult(enemy);
+        const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
+        enemy.hp -= damage;
+
+        let debuffApplied = null;
+        if (skillDef.debuff) {
+          if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
+          enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
+          enemy.activeDebuffs.push({
+            ...skillDef.debuff,
+            appliedAt: now,
+            expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
+            casterId: player.id,
+          });
+          debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
+        }
+
+        this.send(player.ws, {
+          type: "skill_channel_tick",
+          skillId,
+          tickNum,
+          enemyId: enemy.id,
+          damage,
+          enemyHp: enemy.hp,
+          enemyMaxHp: enemy.maxHp,
+          debuff: debuffApplied,
+        });
+
+        this.broadcastToMap(player.mapId, {
+          type: "combat_visual",
+          attackerId: player.id,
+          ax: player.x, ay: player.y,
+          enemyId: enemy.id, ex: enemy.x, ey: enemy.y,
+          skillId,
+          hitParticle: skillDef.hitParticle || skillDef.particle || null,
+          hitSfx: skillDef.sfx || null,
+          projectileSpeed: 0,
+          damageType: skillDef.damageType || "physical",
+          damage, enemyHp: enemy.hp, enemyMaxHp: enemy.maxHp,
+        }, player.id);
+
+        if (enemy.hp <= 0) {
+          enemy.hp = 0;
+          this.killEnemy(enemy, player);
+          this._interruptCast(player, "target_lost");
+        }
+      }
+    } else if (skillDef.type === "heal") {
+      const healAmount = (skillDef.healAmount || 0) + (skillDef.healPerLevel || 0) * (player.level - 1);
+      player.hp = Math.min(player.maxHp, player.hp + healAmount);
+
+      this.send(player.ws, {
+        type: "skill_channel_tick",
+        skillId,
+        tickNum,
+        healAmount,
+        hp: player.hp,
+        maxHp: player.maxHp,
+      });
+
+      if (skillDef.particle) {
+        this.broadcastToMap(player.mapId, {
+          type: "combat_visual",
+          attackerId: player.id,
+          ax: player.x, ay: player.y,
+          selfTarget: true,
+          particle: skillDef.particle,
+          sfx: skillDef.sfx || null,
+        }, player.id);
+      }
+    } else if (skillDef.type === "buff" || skillDef.type === "support") {
+      if (skillDef.buff) {
+        if (!player.activeBuffs) player.activeBuffs = [];
+        player.activeBuffs = player.activeBuffs.filter(b => b.id !== skillDef.buff.id);
+        player.activeBuffs.push({
+          ...skillDef.buff,
+          appliedAt: now,
+          expiresAt: now + (skillDef.buff.duration || 0) * 1000,
+        });
+      }
+
+      this.send(player.ws, {
+        type: "skill_channel_tick",
+        skillId,
+        tickNum,
+        buff: skillDef.buff ? { id: skillDef.buff.id, stat: skillDef.buff.stat, modifier: skillDef.buff.modifier, duration: skillDef.buff.duration } : null,
+      });
+    }
   }
 
   /* ── stat recalculation ─────────────────────────────── */
@@ -2507,8 +3045,8 @@ class ServerWorld {
             damage = this._applyManaShield(target, damage);
             target.hp -= damage;
 
-            // Interrupt casts on damage
-            if (target.casting) {
+            // Interrupt casts on damage (unless ignoreHits is set)
+            if (target.casting && !target.casting.ignoreHits) {
               this._interruptCast(target, "damaged");
             }
 
@@ -2719,6 +3257,13 @@ class ServerWorld {
         if (player.x !== player.casting.castX || player.y !== player.casting.castY) {
           this._interruptCast(player, "moved");
           continue;
+        }
+      }
+      // Channel tick check
+      if (player.casting.type === "channel" && player.casting.ticksRemaining > 0) {
+        if (now - player.casting.lastTickAt >= player.casting.tickInterval) {
+          this._channelTick(player, now);
+          if (!player.casting) continue; // tick may have ended channel
         }
       }
       if (now - player.casting.startedAt >= player.casting.duration) {

@@ -148,6 +148,13 @@ const RECIPES_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/recipes.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/recipes.json'),
 ];
+const AOE_PATTERNS_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/aoePatterns.json'),
+  path.resolve(process.cwd(), '../../public/data/aoePatterns.json'),
+  path.resolve(process.cwd(), 'public/data/aoePatterns.json'),
+  path.resolve(process.cwd(), '../public/data/aoePatterns.json'),
+  path.resolve(process.cwd(), '../../wow2d/public/data/aoePatterns.json'),
+];
 const SFX_DIR_CANDIDATES = [
   path.resolve(__dirname, '../../public/assets/sfx'),
   path.resolve(process.cwd(), '../../public/assets/sfx'),
@@ -180,6 +187,7 @@ function resolveExistingGatheringSpriteDir() { return firstExisting(GATHERING_SP
 function resolveExistingGatheringSkillsPath() { return firstExisting(GATHERING_SKILLS_CANDIDATES); }
 function resolveExistingResourceNodesPath() { return firstExisting(RESOURCE_NODES_CANDIDATES); }
 function resolveExistingRecipesPath() { return firstExisting(RECIPES_CANDIDATES); }
+function resolveExistingAoePatternsPath() { return firstExisting(AOE_PATTERNS_CANDIDATES); }
 function resolveExistingSfxDir() { return firstExisting(SFX_DIR_CANDIDATES); }
 
 function listTileSpriteIds() {
@@ -252,7 +260,7 @@ function validateItems(items) {
   return null;
 }
 function validateNpcs(npcs) {
-  const validTypes = new Set(['npc','quest_giver','vendor','banker','crafting_station']);
+  const validTypes = new Set(['quest_giver','vendor','banker']);
   if (!npcs || typeof npcs !== 'object' || Array.isArray(npcs)) return 'npcs must be an object keyed by npc id.';
   for (const [key, entry] of Object.entries(npcs)) {
     if (!key.trim()) return 'NPC ids cannot be blank.';
@@ -304,6 +312,22 @@ function validateGatheringSkills(gs) {
   }
   return null;
 }
+function validateAoePatterns(aoePatterns) {
+  if (!aoePatterns || typeof aoePatterns !== 'object' || Array.isArray(aoePatterns)) return 'aoePatterns must be an object keyed by pattern id.';
+  for (const [key, entry] of Object.entries(aoePatterns)) {
+    if (!key.trim()) return 'Pattern ids cannot be blank.';
+    if (!entry || typeof entry !== 'object') return `Entry for "${key}" must be an object.`;
+    if (typeof entry.name !== 'string') return `Entry for "${key}" must have name: string.`;
+    if (typeof entry.directional !== 'boolean') return `Entry for "${key}" directional must be boolean.`;
+    if (!['caster','target'].includes(entry.origin)) return `Entry for "${key}" origin must be "caster" or "target".`;
+    if (!Array.isArray(entry.tiles) || !entry.tiles.length) return `Entry for "${key}" tiles must be a non-empty array.`;
+    for (const tile of entry.tiles) {
+      if (!Array.isArray(tile) || tile.length !== 2 || typeof tile[0] !== 'number' || typeof tile[1] !== 'number') return `Entry for "${key}" has an invalid tile — each tile must be [dx, dy].`;
+    }
+  }
+  return null;
+}
+
 function validateRecipes(recipes) {
   if (!recipes || typeof recipes !== 'object' || Array.isArray(recipes)) return 'recipes must be an object keyed by recipe id.';
   const VALID_SKILLS = new Set(['smelting','milling','cooking']);
@@ -421,7 +445,22 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), recipesPath: resolveExistingRecipesPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), recipesPath: resolveExistingRecipesPath(), aoePatternsPath: resolveExistingAoePatternsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname === '/api/aoe-patterns' && req.method === 'GET') {
+    try { return sendJson(res, 200, { aoePatterns: JSON.parse(await fs.promises.readFile(resolveExistingAoePatternsPath(), 'utf8')), path: resolveExistingAoePatternsPath() }); }
+    catch (error) { return sendJson(res, 500, { error: error.message, path: resolveExistingAoePatternsPath() }); }
+  }
+  if (pathname === '/api/aoe-patterns' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const validationError = validateAoePatterns(body.aoePatterns);
+      if (validationError) return sendJson(res, 400, { error: validationError });
+      const p = resolveExistingAoePatternsPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.aoePatterns, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (error) { return sendJson(res, 500, { error:error.message, path: resolveExistingAoePatternsPath() }); }
+  }
 
   if (pathname === '/api/recipes' && req.method === 'GET') {
     try { return sendJson(res, 200, { recipes: JSON.parse(await fs.promises.readFile(resolveExistingRecipesPath(), 'utf8')), path: resolveExistingRecipesPath() }); }
@@ -757,6 +796,7 @@ server.listen(PORT, () => {
   console.log(`Gathering skills: ${resolveExistingGatheringSkillsPath()}`);
   console.log(`Resource nodes:   ${resolveExistingResourceNodesPath()}`);
   console.log(`Recipes:          ${resolveExistingRecipesPath()}`);
+  console.log(`AoE Patterns:     ${resolveExistingAoePatternsPath()}`);
   console.log(`Skill icon dir:   ${resolveExistingSkillIconDir()}`);
   console.log(`Gathering dir:    ${resolveExistingGatheringSpriteDir()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);

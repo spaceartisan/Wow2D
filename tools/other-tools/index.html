@@ -34,6 +34,7 @@
       <button class="tab" data-tab="gatheringSkills">Gathering</button>
       <button class="tab" data-tab="resourceNodes">Resources</button>
       <button class="tab" data-tab="recipes">Recipes</button>
+      <button class="tab" data-tab="aoePatterns">AoE Patterns</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -1458,6 +1459,9 @@
                       <option value="self">self</option>
                       <option value="aoe">aoe</option>
                       <option value="aoe_ally">aoe_ally</option>
+                      <option value="self_aoe">self_aoe</option>
+                      <option value="ground_aoe">ground_aoe</option>
+                      <option value="directional">directional</option>
                     </select>
                   </label>
                   <label class="field">
@@ -1470,26 +1474,20 @@
                   </label>
                 </div>
 
-                <section class="sprite-section">
-                  <div class="sprite-preview-card sprite-preview-card--inline">
-                    <div class="icon-preview-frame icon-preview-frame--sm">
-                      <img id="skillIconPreviewImage" class="item-icon-preview-image hidden" alt="Skill icon preview" />
-                      <div id="skillIconPreviewFallback">
-                        <div class="missing-icon-glyph">?</div>
-                      </div>
-                    </div>
-                    <div class="sprite-preview-meta-col">
-                      <div class="sprite-preview-header">
-                        <span class="field-label">Icon Preview</span>
-                        <span id="skillIconStatusBadge" class="badge muted">Unchecked</span>
-                      </div>
-                      <div class="sprite-meta">
-                        <div><span class="field-label">Expected path</span><code id="skillIconPathLabel">public/assets/sprites/skills/&lt;icon&gt;.png</code></div>
-                        <div><span class="subtle">32×32 pixel-art icons in the skills sprite folder.</span></div>
-                      </div>
-                    </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:6px 0">
+                  <div class="icon-preview-frame icon-preview-frame--sm" style="flex-shrink:0">
+                    <img id="skillIconPreviewImage" class="item-icon-preview-image hidden" alt="Skill icon preview" />
+                    <div id="skillIconPreviewFallback"><div class="missing-icon-glyph">?</div></div>
                   </div>
-                </section>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                      <span class="field-label">Icon Preview</span>
+                      <span id="skillIconStatusBadge" class="badge muted">Unchecked</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-3)">Expected: <code id="skillIconPathLabel">public/assets/sprites/skills/&lt;icon&gt;.png</code></div>
+                    <div style="font-size:11px;color:var(--text-3);margin-top:2px">32×32 px — skills sprite folder</div>
+                  </div>
+                </div>
                 <div class="split-grid three-columns">
                   <label class="field">
                     <span>Mana Cost</span>
@@ -1555,6 +1553,38 @@
                     <label class="field">
                       <span>Projectile Speed <span class="subtle">(px/s, ranged only)</span></span>
                       <input id="skillProjectileSpeedInput" type="number" step="1" min="0" placeholder="optional" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Cast &amp; Channel <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(optional)</span></h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field">
+                      <span>Cast Time <span class="subtle">(s)</span></span>
+                      <input id="skillCastTimeInput" type="number" step="0.1" min="0" placeholder="optional" />
+                    </label>
+                    <label class="field">
+                      <span>Channel Ticks</span>
+                      <input id="skillChannelTicksInput" type="number" step="1" min="1" placeholder="optional" />
+                    </label>
+                    <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                      <input id="skillIgnoreConcentrationInput" type="checkbox" />
+                      <span>Ignore Concentration</span>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>AoE Pattern <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(optional — self_aoe / ground_aoe / directional)</span></h4></div>
+                  <div class="split-grid two-columns">
+                    <label class="field">
+                      <span>AoE Pattern <span class="subtle">(pattern key)</span></span>
+                      <input id="skillAoePatternInput" type="text" placeholder="e.g. circle_small" />
+                    </label>
+                    <label class="field">
+                      <span>AoE Particle Effect <span class="subtle">(per tile)</span></span>
+                      <input id="skillAoeParticleEffectInput" type="text" placeholder="e.g. fire" />
                     </label>
                   </div>
                 </section>
@@ -2106,6 +2136,108 @@
                 <span id="recipeValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="recipeDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <section class="tool-view" data-view="aoePatterns">
+        <section class="panel sidebar-left">
+          <div class="panel-header compact">
+            <h2>AoE Patterns</h2>
+            <div class="inline-actions">
+              <button id="addAoePatternButton" class="button secondary small">Add</button>
+              <button id="duplicateAoePatternButton" class="button secondary small">Duplicate</button>
+              <button id="deleteAoePatternButton" class="button danger small">Delete</button>
+            </div>
+          </div>
+          <div class="panel-body left-stack">
+            <label class="field">
+              <span>Search</span>
+              <input id="aoePatternSearchInput" type="text" placeholder="Find pattern id or name" />
+            </label>
+            <div class="stat-row">
+              <div class="stat-box"><span class="stat-label">Patterns</span><strong id="aoePatternEntryCount">0</strong></div>
+              <div class="stat-box"><span class="stat-label">Directional</span><strong id="aoePatternDirectionalCount">0</strong></div>
+            </div>
+            <div id="aoePatternList" class="tile-list" role="listbox"></div>
+          </div>
+        </section>
+
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>AoE Patterns Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/aoePatterns.json</code> — tile offset patterns used by skills with <code>self_aoe</code>, <code>ground_aoe</code>, or <code>directional</code> targeting</p>
+            </div>
+            <div class="inline-actions">
+              <button id="validateAoePatternsButton" class="button secondary">Validate</button>
+              <button id="reloadAoePatternsButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+
+          <div class="panel-body editor-grid">
+            <section class="card editor-form-card">
+              <div class="card-header">
+                <h3>Selected Pattern</h3>
+                <span id="selectedAoePatternLabel" class="mono subtle">Nothing selected</span>
+              </div>
+              <div id="aoePatternEmptyState" class="empty-state">
+                <p>Select a pattern from the list to begin editing.</p>
+              </div>
+              <form id="aoePatternForm" class="editor-form hidden" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field"><span>Pattern ID</span><input id="aoePatternIdInput" type="text" /></label>
+                  <label class="field"><span>Name</span><input id="aoePatternNameInput" type="text" /></label>
+                </div>
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Origin</span>
+                    <select id="aoePatternOriginInput">
+                      <option value="caster">caster</option>
+                      <option value="target">target</option>
+                    </select>
+                  </label>
+                  <label class="field checkbox-field" style="align-self:end;padding-bottom:8px">
+                    <input id="aoePatternDirectionalInput" type="checkbox" />
+                    <span>Directional <span class="subtle">(rotates with caster facing)</span></span>
+                  </label>
+                </div>
+
+                <section class="field-group">
+                  <div class="inline-json-header row-between">
+                    <h4>Tile Grid <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">Click to toggle tiles — origin [0,0] is amber</span></h4>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-2)">
+                        <span>Size</span>
+                        <select id="aoePatternGridSizeInput" style="padding:2px 6px;font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text-1)">
+                          <option value="5">5×5</option>
+                          <option value="7" selected>7×7</option>
+                          <option value="9">9×9</option>
+                          <option value="11">11×11</option>
+                          <option value="13">13×13</option>
+                        </select>
+                      </label>
+                      <button id="aoePatternClearButton" type="button" class="button danger small">Clear</button>
+                    </div>
+                  </div>
+                  <canvas id="aoePatternCanvas" width="320" height="320" style="display:block;width:100%;max-width:320px;margin:8px auto 4px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);cursor:crosshair"></canvas>
+                  <p id="aoePatternTileCount" class="subtle" style="text-align:center;font-size:11px;margin:0 0 4px">0 tiles selected</p>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                  <pre id="aoePatternJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="aoePatternValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="aoePatternDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
             </section>
           </div>
         </section>

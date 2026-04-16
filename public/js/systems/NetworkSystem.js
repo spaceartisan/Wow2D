@@ -224,8 +224,11 @@ export class NetworkSystem {
     this.send({ type: "heal" });
   }
 
-  sendSkill(skillId, enemyId) {
-    this.send({ type: "use_skill", skillId, enemyId: enemyId || null });
+  sendSkill(skillId, enemyId, targetX, targetY) {
+    const msg = { type: "use_skill", skillId, enemyId: enemyId || null };
+    if (targetX != null) msg.targetX = targetX;
+    if (targetY != null) msg.targetY = targetY;
+    this.send(msg);
   }
 
   sendChat(text) {
@@ -288,6 +291,10 @@ export class NetworkSystem {
 
   sendCancelHearthstone() {
     this.send({ type: "cancel_hearthstone" });
+  }
+
+  sendCancelCast() {
+    this.send({ type: "cancel_cast" });
   }
 
   sendBankDeposit(invIndex) {
@@ -412,6 +419,27 @@ export class NetworkSystem {
         break;
       case "skill_result":
         this.onSkillResult(msg);
+        break;
+      case "skill_cast_start":
+        this.onSkillCastStart(msg);
+        break;
+      case "skill_cast_cancelled":
+        this.onSkillCastCancelled(msg);
+        break;
+      case "skill_cast_complete":
+        this.onSkillCastComplete(msg);
+        break;
+      case "skill_channel_start":
+        this.onSkillChannelStart(msg);
+        break;
+      case "skill_channel_tick":
+        this.onSkillChannelTick(msg);
+        break;
+      case "skill_channel_complete":
+        this.onSkillChannelComplete(msg);
+        break;
+      case "skill_channel_cancelled":
+        this.onSkillChannelCancelled(msg);
         break;
       case "combat_visual":
         this.onCombatVisual(msg);
@@ -920,6 +948,34 @@ export class NetworkSystem {
       }
       this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
       this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits for ${msg.damage}.`);
+    } else if (msg.aoe && msg.hits) {
+      // AoE skill — process all hits
+      let totalDmg = 0;
+      for (const hit of msg.hits) {
+        const enemy = this.game.entities.getEnemyById(hit.enemyId);
+        if (enemy) {
+          enemy.hp = hit.enemyHp;
+          enemy.maxHp = hit.enemyMaxHp;
+          if (skillDef?.hitParticle) {
+            this.game.particles.emit(skillDef.hitParticle, enemy.x, enemy.y);
+          }
+        }
+        this.enemyOverrides.set(hit.enemyId, { hp: hit.enemyHp, maxHp: hit.enemyMaxHp });
+        totalDmg += hit.damage;
+      }
+      // Emit AoE particle effect on each affected tile
+      const aoeParticle = skillDef?.aoeParticleEffect;
+      if (aoeParticle && msg.aoeTiles) {
+        for (const [wx, wy] of msg.aoeTiles) {
+          this.game.particles.emit(aoeParticle, wx, wy);
+        }
+      }
+      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      if (msg.hits.length > 0) {
+        this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits ${msg.hits.length} target(s) for ${totalDmg} total.`);
+      } else {
+        this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits no targets.`);
+      }
     } else if (msg.healAmount != null) {
       // Heal skill
       player.hp = msg.hp;
@@ -931,7 +987,159 @@ export class NetworkSystem {
       // Buff/support skill (or ranged skill launch confirmation)
       if (skillDef?.projectileSpeed > 0) return; // projectile in flight
       if (skillDef?.particle) this.game.particles.emit(skillDef.particle, player.x, player.y);
+      // Emit AoE particle on affected tiles (e.g. War Cry)
+      const aoeParticle = skillDef?.aoeParticleEffect;
+      if (aoeParticle && msg.aoeTiles) {
+        for (const [wx, wy] of msg.aoeTiles) {
+          this.game.particles.emit(aoeParticle, wx, wy);
+        }
+      }
       this.game.ui.addMessage(`${skillDef?.name || msg.skillId} activated.`);
+    }
+  }
+
+  // ── Skill cast-time handlers ────────────────────────────
+  onSkillCastStart(msg) {
+    const skillDef = this.game.data.skills[msg.skillId];
+    const label = msg.name || skillDef?.name || msg.skillId;
+    this.game.ui.showCastBar(msg.castTime, "Casting: " + label);
+
+    // Update mana immediately (server already deducted)
+    const player = this.game.entities.player;
+    if (msg.mana != null) player.mana = msg.mana;
+    if (msg.maxMana != null) player.maxMana = msg.maxMana;
+
+    // Emit casting particles while channeling
+    if (skillDef?.castSfx) this.game.audio.play(skillDef.castSfx);
+    const p = this.game.entities.player;
+    this.game.particles.emit("casting", p.x, p.y);
+    this._skillCastInterval = setInterval(() => {
+      const pl = this.game.entities.player;
+      if (pl) this.game.particles.emit("casting", pl.x, pl.y);
+    }, 250);
+  }
+
+  onSkillCastCancelled(msg) {
+    this.game.ui.hideCastBar();
+    clearInterval(this._skillCastInterval);
+    this._skillCastInterval = null;
+    const skillDef = this.game.data.skills[msg.skillId];
+    const name = skillDef?.name || msg.skillId;
+
+    if (msg.reason === "moved") {
+      this.game.ui.addMessage(`${name} interrupted by movement!`);
+    } else if (msg.reason === "damaged") {
+      this.game.ui.addMessage(`${name} interrupted!`);
+    } else if (msg.reason === "target_lost") {
+      this.game.ui.addMessage(`${name}: target lost.`);
+    } else if (msg.reason === "out_of_range") {
+      this.game.ui.addMessage(`${name}: target out of range.`);
+    } else {
+      this.game.ui.addMessage(`${name} cancelled.`);
+    }
+  }
+
+  onSkillCastComplete(msg) {
+    this.game.ui.hideCastBar();
+    clearInterval(this._skillCastInterval);
+    this._skillCastInterval = null;
+    // skill_result will follow immediately with the actual effect
+  }
+
+  // ── Skill channel handlers ────────────────────────────────
+  onSkillChannelStart(msg) {
+    const skillDef = this.game.data.skills[msg.skillId];
+    const label = msg.name || skillDef?.name || msg.skillId;
+    this.game.ui.showCastBar(msg.channelDuration, "Channeling: " + label, true);
+
+    const player = this.game.entities.player;
+    if (msg.mana != null) player.mana = msg.mana;
+    if (msg.maxMana != null) player.maxMana = msg.maxMana;
+
+    if (skillDef?.castSfx) this.game.audio.play(skillDef.castSfx);
+    // Emit initial particle burst so the player sees immediate feedback
+    if (skillDef?.particle) this.game.particles.emit(skillDef.particle, player.x, player.y);
+    this.game.particles.emit("casting", player.x, player.y);
+    this._skillCastInterval = setInterval(() => {
+      const pl = this.game.entities.player;
+      if (pl) {
+        this.game.particles.emit("casting", pl.x, pl.y);
+        if (skillDef?.particle) this.game.particles.emit(skillDef.particle, pl.x, pl.y);
+      }
+    }, 400);
+  }
+
+  onSkillChannelTick(msg) {
+    const player = this.game.entities.player;
+    const skillDef = this.game.data.skills[msg.skillId];
+
+    if (msg.damage != null && msg.enemyId != null) {
+      // Single-target damage tick
+      const enemy = this.game.entities.getEnemyById(msg.enemyId);
+      if (enemy) {
+        enemy.hp = msg.enemyHp;
+        enemy.maxHp = msg.enemyMaxHp;
+        if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, enemy.x, enemy.y);
+      }
+      this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
+      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: ${msg.damage} damage.`);
+    } else if (msg.aoe && msg.hits) {
+      // AoE damage tick
+      let totalDmg = 0;
+      for (const hit of msg.hits) {
+        const enemy = this.game.entities.getEnemyById(hit.enemyId);
+        if (enemy) {
+          enemy.hp = hit.enemyHp;
+          enemy.maxHp = hit.enemyMaxHp;
+          if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, enemy.x, enemy.y);
+        }
+        this.enemyOverrides.set(hit.enemyId, { hp: hit.enemyHp, maxHp: hit.enemyMaxHp });
+        totalDmg += hit.damage;
+      }
+      const aoeParticle = skillDef?.aoeParticleEffect;
+      if (aoeParticle && msg.aoeTiles) {
+        for (const [wx, wy] of msg.aoeTiles) {
+          this.game.particles.emit(aoeParticle, wx, wy);
+        }
+      }
+      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      if (msg.hits.length > 0) {
+        this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: ${totalDmg} total damage.`);
+      }
+    } else if (msg.healAmount != null) {
+      // Heal tick
+      player.hp = msg.hp;
+      player.maxHp = msg.maxHp;
+      if (skillDef?.particle) this.game.particles.emit(skillDef.particle, player.x, player.y);
+      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: +${msg.healAmount} HP.`);
+    }
+  }
+
+  onSkillChannelComplete(msg) {
+    this.game.ui.hideCastBar();
+    clearInterval(this._skillCastInterval);
+    this._skillCastInterval = null;
+  }
+
+  onSkillChannelCancelled(msg) {
+    this.game.ui.hideCastBar();
+    clearInterval(this._skillCastInterval);
+    this._skillCastInterval = null;
+    const skillDef = this.game.data.skills[msg.skillId];
+    const name = skillDef?.name || msg.skillId;
+
+    if (msg.reason === "moved") {
+      this.game.ui.addMessage(`${name} interrupted by movement!`);
+    } else if (msg.reason === "damaged") {
+      this.game.ui.addMessage(`${name} interrupted!`);
+    } else if (msg.reason === "target_lost") {
+      this.game.ui.addMessage(`${name}: target lost.`);
+    } else if (msg.reason === "out_of_range") {
+      this.game.ui.addMessage(`${name}: target out of range.`);
+    } else {
+      this.game.ui.addMessage(`${name} cancelled.`);
     }
   }
 

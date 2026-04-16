@@ -9,6 +9,8 @@ export class CombatSystem {
     this.engaged = false;
     this.lastPlayerAttackAt = 0;
     this.lastHealCastAt = 0;
+    /** @type {{ skillId: string, pattern: object, targeting: string } | null} */
+    this.aoeTargeting = null;
   }
 
   update(dt) {
@@ -17,6 +19,12 @@ export class CombatSystem {
   }
 
   handleWorldClick(worldX, worldY) {
+    // If in AoE targeting mode, confirm placement
+    if (this.aoeTargeting) {
+      this.confirmAoeTarget(worldX, worldY);
+      return;
+    }
+
     const clickedEnemy = this.game.entities.getEnemyAtWorld(worldX, worldY);
     if (clickedEnemy) {
       this.targetEnemyId = clickedEnemy.id;
@@ -39,6 +47,11 @@ export class CombatSystem {
   }
 
   handleWorldRightClick(worldX, worldY) {
+    if (this.aoeTargeting) {
+      this.cancelAoeTargeting();
+      return;
+    }
+
     const clickedEnemy = this.game.entities.getEnemyAtWorld(worldX, worldY);
     if (clickedEnemy) {
       this.targetEnemyId = clickedEnemy.id;
@@ -66,6 +79,9 @@ export class CombatSystem {
   useSkill(skillId) {
     const skillDef = this.game.data.skills[skillId];
     if (!skillDef) return;
+
+    // Cancel any active AoE targeting when a new skill is used
+    this.aoeTargeting = null;
 
     // Delegate "attack" (auto-attack) and legacy "heal" to existing handlers
     if (skillId === "attack") { this.useAttackAbility(); return; }
@@ -103,7 +119,7 @@ export class CombatSystem {
     }
 
     // Targeting check for enemy-targeted skills
-    if (skillDef.targeting === "enemy" || skillDef.targeting === "aoe") {
+    if (skillDef.targeting === "enemy") {
       if (!this.targetEnemyId) {
         this.game.ui.addMessage("No target.");
         return;
@@ -113,7 +129,6 @@ export class CombatSystem {
         this.game.ui.addMessage("Invalid target.");
         return;
       }
-      // Range check for targeted skills
       const dist = distance(player.x, player.y, enemy.x, enemy.y);
       const skillRange = skillDef.range || player.attackRange;
       if (dist > skillRange) {
@@ -122,18 +137,37 @@ export class CombatSystem {
       }
     }
 
+    // Ground-targeted or directional AoE — enter targeting mode (don't fire yet)
+    if (skillDef.targeting === "ground_aoe" || skillDef.targeting === "directional") {
+      const pattern = this.game.data.aoePatterns?.[skillDef.aoePattern];
+      if (!pattern) {
+        this.game.ui.addMessage("Missing AoE pattern.");
+        return;
+      }
+      this.aoeTargeting = { skillId, pattern, targeting: skillDef.targeting };
+      this.game.ui.addMessage("Click to place AoE. Right-click or Escape to cancel.");
+      return;
+    }
+
     // Record cooldown & send to server
     if (!this._skillCooldowns) this._skillCooldowns = {};
     this._skillCooldowns[skillId] = now;
-    this.game.network.sendSkill(skillId, this.targetEnemyId);
 
-    // Play cast SFX
-    if (skillDef.castSfx) this.game.audio.play(skillDef.castSfx);
-    else if (skillDef.sfx) this.game.audio.play(skillDef.sfx);
+    if (skillDef.targeting === "self_aoe") {
+      this.game.network.sendSkill(skillId, null, null, null);
+    } else {
+      this.game.network.sendSkill(skillId, this.targetEnemyId, null, null);
+    }
 
-    // Emit particle on self for buffs/support/heals
-    if ((skillDef.targeting === "self" || skillDef.targeting === "aoe_ally") && skillDef.particle) {
-      this.game.particles?.emit(skillDef.particle, player.x, player.y);
+    // For channeled or cast-time skills, let the server response handle SFX/particles
+    if (!skillDef.channeled && !skillDef.castTime) {
+      if (skillDef.castSfx) this.game.audio.play(skillDef.castSfx);
+      else if (skillDef.sfx) this.game.audio.play(skillDef.sfx);
+
+      // Emit particle on self for buffs/support/heals/self_aoe
+      if ((skillDef.targeting === "self" || skillDef.targeting === "self_aoe") && skillDef.particle) {
+        this.game.particles?.emit(skillDef.particle, player.x, player.y);
+      }
     }
   }
 
@@ -222,5 +256,132 @@ export class CombatSystem {
     const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
     const swingSfx = weaponDef?.swingSfx || PLAYER_BASE.swingSfx || "sword_swing";
     this.game.audio.play(swingSfx);
+  }
+
+  // ── AoE targeting ────────────────────────────────────
+  confirmAoeTarget(worldX, worldY) {
+    if (!this.aoeTargeting) return;
+    const { skillId, targeting } = this.aoeTargeting;
+    const skillDef = this.game.data.skills[skillId];
+    if (!skillDef) { this.cancelAoeTargeting(); return; }
+
+    const player = this.game.entities.player;
+
+    // Range check — target must be within skill range
+    if (skillDef.range) {
+      const dist = distance(player.x, player.y, worldX, worldY);
+      if (dist > skillDef.range) {
+        this.game.ui.addMessage("Out of range.");
+        return;
+      }
+    }
+
+    // Record cooldown & send
+    if (!this._skillCooldowns) this._skillCooldowns = {};
+    this._skillCooldowns[skillId] = performance.now();
+    this.game.network.sendSkill(skillId, null, worldX, worldY);
+
+    if (!skillDef.channeled && !skillDef.castTime) {
+      if (skillDef.castSfx) this.game.audio.play(skillDef.castSfx);
+      else if (skillDef.sfx) this.game.audio.play(skillDef.sfx);
+    }
+
+    this.aoeTargeting = null;
+  }
+
+  cancelAoeTargeting() {
+    if (this.aoeTargeting) {
+      this.game.ui.addMessage("AoE targeting cancelled.");
+      this.aoeTargeting = null;
+    }
+  }
+
+  /** Draw semi-transparent tile overlay showing AoE area. */
+  drawAoeIndicator(ctx, cam) {
+    if (!this.aoeTargeting) return;
+    const { skillId, pattern, targeting } = this.aoeTargeting;
+    const ts = this.game.world.tileSize || 48;
+    const player = this.game.entities.player;
+    const mouse = this.game.input.mouse;
+
+    let originX, originY;
+    if (targeting === "ground_aoe") {
+      originX = mouse.worldX;
+      originY = mouse.worldY;
+    } else {
+      // directional — origin is the player's tile
+      originX = player.x;
+      originY = player.y;
+    }
+
+    const originTx = Math.floor(originX / ts);
+    const originTy = Math.floor(originY / ts);
+
+    // Calculate direction index for directional patterns
+    let dirIdx = 0;
+    if (pattern.directional) {
+      const dx = mouse.worldX - player.x;
+      const dy = mouse.worldY - player.y;
+      const angle = Math.atan2(dy, dx);
+      dirIdx = Math.round(((angle + Math.PI) / (Math.PI * 2)) * 8) % 8;
+      // remap: atan2 gives 0=E, we want 0=N
+      dirIdx = (dirIdx + 6) % 8;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "#ff4444";
+
+    for (const [dx, dy] of pattern.tiles) {
+      let rx = dx, ry = dy;
+      if (pattern.directional && dirIdx !== 0) {
+        [rx, ry] = this._rotateTile(dx, dy, dirIdx);
+      }
+      const px = (originTx + rx) * ts - cam.x;
+      const py = (originTy + ry) * ts - cam.y;
+      ctx.fillRect(px, py, ts, ts);
+    }
+
+    // Draw border on each tile
+    ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = "#ff2222";
+    ctx.lineWidth = 1;
+    for (const [dx, dy] of pattern.tiles) {
+      let rx = dx, ry = dy;
+      if (pattern.directional && dirIdx !== 0) {
+        [rx, ry] = this._rotateTile(dx, dy, dirIdx);
+      }
+      const px = (originTx + rx) * ts - cam.x;
+      const py = (originTy + ry) * ts - cam.y;
+      ctx.strokeRect(px, py, ts, ts);
+    }
+    ctx.restore();
+  }
+
+  /** Rotate a tile offset by direction index (0=N, 1=NE, 2=E, ... 7=NW). */
+  _rotateTile(dx, dy, dirIdx) {
+    switch (dirIdx) {
+      case 0: return [dx, dy];       // N  (identity)
+      case 1: {                       // NE (45°)
+        const c = 0.7071;
+        return [Math.round((dx - dy) * c), Math.round((dx + dy) * c)];
+      }
+      case 2: return [-dy, dx];      // E  (90°)
+      case 3: {                       // SE (135°)
+        const c = 0.7071;
+        return [Math.round((-dx - dy) * c), Math.round((dx - dy) * c)];
+      }
+      case 4: return [-dx, -dy];     // S  (180°)
+      case 5: {                       // SW (225°)
+        const c = 0.7071;
+        return [Math.round((-dx + dy) * c), Math.round((-dx - dy) * c)];
+      }
+      case 6: return [dy, -dx];      // W  (270°)
+      case 7: {                       // NW (315°)
+        const c = 0.7071;
+        return [Math.round((dx + dy) * c), Math.round((-dx + dy) * c)];
+      }
+      default: return [dx, dy];
+    }
   }
 }

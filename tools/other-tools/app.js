@@ -130,6 +130,11 @@
     selectedRecipeKey: null,
     recipeSearch: '',
     recipeDirty: false,
+
+    aoePatterns: {},
+    selectedAoePatternKey: null,
+    aoePatternSearch: '',
+    aoePatternDirty: false,
   };
 
   const els = {};
@@ -143,7 +148,7 @@
     'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbHpPerLevelInput','pbManaPerLevelInput','pbDamagePerLevelInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','pbClassesEditor','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
     'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton',
     'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleEmitIntervalInput','particleContinuousInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
-    'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton','skillIconPreviewImage','skillIconPreviewFallback','skillIconStatusBadge','skillIconPathLabel',
+    'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillCastTimeInput','skillChannelTicksInput','skillIgnoreConcentrationInput','skillAoePatternInput','skillAoeParticleEffectInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton','skillIconPreviewImage','skillIconPreviewFallback','skillIconStatusBadge','skillIconPathLabel',
     'enemyHitParticleInput','enemyHitSfxInput',
     'itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput',
     'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput',
@@ -151,11 +156,12 @@
     'skillRequiresWeaponInput','skillRequiresShieldInput','skillRequiresWeaponTypeInput',
     'gatheringSkillSearchInput','gatheringSkillList','gatheringSkillEntryCount','gatheringSkillToolCount','selectedGatheringSkillLabel','gatheringSkillEmptyState','gatheringSkillForm','gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillIconInput','gatheringSkillToolTypeInput','gatheringSkillCategoryInput','gatheringSkillDescriptionInput','gatheringSkillJsonPreview','gatheringSkillDiagnosticsList','gatheringSkillValidationSummary','addGatheringSkillButton','duplicateGatheringSkillButton','deleteGatheringSkillButton','validateGatheringSkillsButton','reloadGatheringSkillsButton',
     'resourceNodeSearchInput','resourceNodeList','resourceNodeEntryCount','resourceNodeSkillCount','selectedResourceNodeLabel','resourceNodeEmptyState','resourceNodeForm','resourceNodeIdInput','resourceNodeNameInput','resourceNodeSpriteImage','resourceNodeSpriteFallback','resourceNodeSpriteStatusBadge','resourceNodeSpritePathLabel','resourceNodeColorPreview','resourceNodeSkillInput','resourceNodeToolTypeInput','resourceNodeToolTierInput','resourceNodeRequiredLevelInput','resourceNodeXpInput','resourceNodeMaxHarvestsInput','resourceNodeRespawnTicksInput','resourceNodeGatherItemInput','resourceNodeColorPicker','resourceNodeRInput','resourceNodeGInput','resourceNodeBInput','resourceNodeJsonPreview','resourceNodeDiagnosticsList','resourceNodeValidationSummary','addResourceNodeButton','duplicateResourceNodeButton','deleteResourceNodeButton','validateResourceNodesButton','reloadResourceNodesButton',
-    'recipeSearchInput','recipeList','recipeEntryCount','recipeSkillCount','selectedRecipeLabel','recipeEmptyState','recipeForm','recipeIdInput','recipeNameInput','recipeSkillInput','recipeRequiredLevelInput','recipeXpInput','recipeCraftTimeInput','recipeInputEditor','recipeInputEmptyState','recipeInputAddButton','recipeOutputIdInput','recipeOutputQtyInput','recipeJsonPreview','recipeDiagnosticsList','recipeValidationSummary','addRecipeButton','duplicateRecipeButton','deleteRecipeButton','validateRecipesButton','reloadRecipesButton'
+    'recipeSearchInput','recipeList','recipeEntryCount','recipeSkillCount','selectedRecipeLabel','recipeEmptyState','recipeForm','recipeIdInput','recipeNameInput','recipeSkillInput','recipeRequiredLevelInput','recipeXpInput','recipeCraftTimeInput','recipeInputEditor','recipeInputEmptyState','recipeInputAddButton','recipeOutputIdInput','recipeOutputQtyInput','recipeJsonPreview','recipeDiagnosticsList','recipeValidationSummary','addRecipeButton','duplicateRecipeButton','deleteRecipeButton','validateRecipesButton','reloadRecipesButton',
+    'aoePatternSearchInput','aoePatternList','aoePatternEntryCount','aoePatternDirectionalCount','selectedAoePatternLabel','aoePatternEmptyState','aoePatternForm','aoePatternIdInput','aoePatternNameInput','aoePatternOriginInput','aoePatternDirectionalInput','aoePatternCanvas','aoePatternGridSizeInput','aoePatternClearButton','aoePatternTileCount','aoePatternJsonPreview','aoePatternDiagnosticsList','aoePatternValidationSummary','addAoePatternButton','duplicateAoePatternButton','deleteAoePatternButton','validateAoePatternsButton','reloadAoePatternsButton'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : (state.activeTab === 'recipes' ? state.recipeDirty : state.tileDirty))))))))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : (state.activeTab === 'recipes' ? state.recipeDirty : (state.activeTab === 'aoePatterns' ? state.aoePatternDirty : state.tileDirty)))))))))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -179,6 +185,7 @@
   function setGatheringSkillDirty(v){ state.gatheringSkillDirty = v; updateDirtyBadge(); }
   function setResourceNodeDirty(v){ state.resourceNodeDirty = v; updateDirtyBadge(); }
   function setRecipeDirty(v){ state.recipeDirty = v; updateDirtyBadge(); }
+  function setAoePatternDirty(v){ state.aoePatternDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -850,7 +857,7 @@
     }
   }
   function buildCurrentEnemyObject(key) {
-    return {
+    const obj = {
       name: (els.enemyNameInput.value || '').trim() || key,
       maxHp: Number(els.enemyMaxHpInput.value || 0),
       damage: Number(els.enemyDamageInput.value || 0),
@@ -2232,7 +2239,7 @@
   }
 
   const SKILL_TYPES = ['attack','heal','buff','debuff','support'];
-  const SKILL_TARGETING = ['enemy','self','aoe','aoe_ally'];
+  const SKILL_TARGETING = ['enemy','self','aoe','aoe_ally','self_aoe','ground_aoe','directional'];
   const KNOWN_CLASSES = ['warrior','mage','ranger','cleric','rogue'];
   const DEFAULT_NEW_SKILL = { id:'newSkill', name:'New Skill', description:'', type:'attack', targeting:'enemy', range:null, cooldown:null, manaCost:0, damage:0, damageType:'physical', particle:null, sfx:null, classes:[], levelReq:1, icon:'newSkill' };
 
@@ -2286,6 +2293,15 @@
     if (sfx) obj.sfx = sfx;
     if (castSfx) obj.castSfx = castSfx;
     if (projSpeed !== '') obj.projectileSpeed = Number(projSpeed);
+    const castTime = els.skillCastTimeInput.value;
+    if (castTime !== '') obj.castTime = Number(castTime);
+    const channelTicks = els.skillChannelTicksInput.value;
+    if (channelTicks !== '') obj.channelTicks = Number(channelTicks);
+    if (els.skillIgnoreConcentrationInput.checked) obj.ignoreConcentration = true;
+    const aoePattern = els.skillAoePatternInput.value.trim();
+    if (aoePattern) obj.aoePattern = aoePattern;
+    const aoeParticleEffect = els.skillAoeParticleEffectInput.value.trim();
+    if (aoeParticleEffect) obj.aoeParticleEffect = aoeParticleEffect;
     if (els.skillRequiresWeaponInput.checked) obj.requiresWeapon = true;
     if (els.skillRequiresShieldInput.checked) obj.requiresShield = true;
     const weaponTypes = (els.skillRequiresWeaponTypeInput.value || '').split(',').map(s=>s.trim()).filter(Boolean);
@@ -2349,6 +2365,11 @@
     els.skillSfxInput.value = skill.sfx || '';
     els.skillCastSfxInput.value = skill.castSfx || '';
     els.skillProjectileSpeedInput.value = skill.projectileSpeed != null ? skill.projectileSpeed : '';
+    els.skillCastTimeInput.value = skill.castTime != null ? skill.castTime : '';
+    els.skillChannelTicksInput.value = skill.channelTicks != null ? skill.channelTicks : '';
+    els.skillIgnoreConcentrationInput.checked = !!skill.ignoreConcentration;
+    els.skillAoePatternInput.value = skill.aoePattern || '';
+    els.skillAoeParticleEffectInput.value = skill.aoeParticleEffect || '';
     els.skillRequiresWeaponInput.checked = !!skill.requiresWeapon;
     els.skillRequiresShieldInput.checked = !!skill.requiresShield;
     els.skillRequiresWeaponTypeInput.value = Array.isArray(skill.requiresWeaponType) ? skill.requiresWeaponType.join(', ') : '';
@@ -2869,11 +2890,204 @@
   function duplicateRecipe() { const r=getSelectedRecipeEntry(); if(!r) return; const k=ensureUniqueRecipeKey(`${state.selectedRecipeKey}_copy`); state.recipes[k]=JSON.parse(JSON.stringify(r)); state.recipes[k].id=k; state.selectedRecipeKey=k; setRecipeDirty(true); renderRecipes(); }
   function deleteRecipe() { if(!getSelectedRecipeEntry()) return; if(!window.confirm(`Delete "${state.selectedRecipeKey}"?`)) return; delete state.recipes[state.selectedRecipeKey]; state.selectedRecipeKey=Object.keys(state.recipes)[0]||null; setRecipeDirty(true); renderRecipes(); }
 
+  // AoE Patterns
+  const DEFAULT_NEW_AOE_PATTERN = { name:'New Pattern', directional:false, origin:'caster', tiles:[[0,0]] };
+
+  function getVisibleAoePatternKeys() { const q=state.aoePatternSearch.toLowerCase(); return Object.keys(state.aoePatterns).filter(k=>!q||k.toLowerCase().includes(q)||String(state.aoePatterns[k]?.name||'').toLowerCase().includes(q)).sort((a,b)=>a.localeCompare(b)); }
+  function getSelectedAoePatternEntry() { return state.selectedAoePatternKey ? state.aoePatterns[state.selectedAoePatternKey]||null : null; }
+  function ensureUniqueAoePatternKey(base){ let c=base,i=2; while(state.aoePatterns[c]) c=`${base}_${i++}`; return c; }
+
+  function getAoeGridSize() {
+    return parseInt(els.aoePatternGridSizeInput?.value || '7', 10);
+  }
+
+  function drawAoePatternCanvas(tiles, directional) {
+    const canvas = els.aoePatternCanvas;
+    if (!canvas) return;
+    try {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      const gridSize = getAoeGridSize();
+      const half = Math.floor(gridSize / 2);
+      const CELL = Math.floor(Math.min(W, H) / gridSize);
+      const offsetX = Math.floor((W - CELL * gridSize) / 2);
+      const offsetY = Math.floor((H - CELL * gridSize) / 2);
+      const tileSet = new Set((tiles || []).map(([dx, dy]) => dx + ',' + dy));
+      for (let dy = -half; dy <= half; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          const px = offsetX + (dx + half) * CELL;
+          const py = offsetY + (dy + half) * CELL;
+          const key = dx + ',' + dy;
+          const isOrigin = dx === 0 && dy === 0;
+          const isActive = tileSet.has(key);
+          if (isActive && isOrigin) ctx.fillStyle = 'rgba(200,152,58,0.9)';
+          else if (isActive) ctx.fillStyle = 'rgba(90,156,245,0.8)';
+          else if (isOrigin) ctx.fillStyle = 'rgba(200,152,58,0.18)';
+          else ctx.fillStyle = 'rgba(255,255,255,0.04)';
+          ctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
+          ctx.strokeStyle = isActive ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.07)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
+          if (isActive && CELL >= 22) {
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = Math.max(8, Math.floor(CELL * 0.32)) + 'px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(dx + ',' + dy, px + CELL / 2, py + CELL / 2);
+          }
+        }
+      }
+      const originPx = offsetX + half * CELL;
+      const originPy = offsetY + half * CELL;
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(originPx + CELL / 2, offsetY); ctx.lineTo(originPx + CELL / 2, offsetY + gridSize * CELL); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(offsetX, originPy + CELL / 2); ctx.lineTo(offsetX + gridSize * CELL, originPy + CELL / 2); ctx.stroke();
+      ctx.setLineDash([]);
+      if (directional) {
+        ctx.fillStyle = 'rgba(200,152,58,0.7)';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('\u25b2 facing up', W / 2, 3);
+      }
+      if (els.aoePatternTileCount) els.aoePatternTileCount.textContent = tileSet.size + ' tile' + (tileSet.size !== 1 ? 's' : '') + ' selected';
+    } catch(e) { console.warn('AoE canvas draw error:', e); }
+  }
+
+  function _aoeGetCellFromEvent(e) {
+    const canvas = els.aoePatternCanvas;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const gridSize = getAoeGridSize();
+    const half = Math.floor(gridSize / 2);
+    const CELL = Math.floor(Math.min(canvas.width, canvas.height) / gridSize);
+    const offsetX = Math.floor((canvas.width - CELL * gridSize) / 2);
+    const offsetY = Math.floor((canvas.height - CELL * gridSize) / 2);
+    const col = Math.floor((mx - offsetX) / CELL);
+    const row = Math.floor((my - offsetY) / CELL);
+    if (col < 0 || col >= gridSize || row < 0 || row >= gridSize) return null;
+    return { dx: col - half, dy: row - half };
+  }
+
+  function _aoeApplyCell(dx, dy, mode) {
+    const p = getSelectedAoePatternEntry(); if (!p) return;
+    const tiles = p.tiles || [];
+    const idx = tiles.findIndex(([x, y]) => x === dx && y === dy);
+    if (mode === 'add' && idx < 0) tiles.push([dx, dy]);
+    else if (mode === 'remove' && idx >= 0) tiles.splice(idx, 1);
+    else return;
+    p.tiles = tiles;
+    setAoePatternDirty(true);
+    renderAoePatternList();
+    drawAoePatternCanvas(p.tiles, p.directional);
+    els.aoePatternJsonPreview.textContent = JSON.stringify({ [state.selectedAoePatternKey]: p }, null, 2);
+  }
+
+  let _aoeDragging = false, _aoeDragMode = null;
+
+  function aoeCanvasMouseDown(e) {
+    const cell = _aoeGetCellFromEvent(e); if (!cell) return;
+    const p = getSelectedAoePatternEntry(); if (!p) return;
+    const tiles = p.tiles || [];
+    const exists = tiles.findIndex(([x, y]) => x === cell.dx && y === cell.dy) >= 0;
+    _aoeDragMode = exists ? 'remove' : 'add';
+    _aoeDragging = true;
+    _aoeApplyCell(cell.dx, cell.dy, _aoeDragMode);
+  }
+
+  function aoeCanvasMouseMove(e) {
+    if (!_aoeDragging || !_aoeDragMode) return;
+    const cell = _aoeGetCellFromEvent(e); if (!cell) return;
+    _aoeApplyCell(cell.dx, cell.dy, _aoeDragMode);
+  }
+
+  function buildCurrentAoePatternObject() {
+    const p = getSelectedAoePatternEntry();
+    return { name:els.aoePatternNameInput.value||'', directional:els.aoePatternDirectionalInput.checked, origin:els.aoePatternOriginInput.value||'caster', tiles: p ? (p.tiles || []) : [] };
+  }
+
+  function renderAoePatternList() {
+    const visibleKeys = getVisibleAoePatternKeys();
+    const allKeys = Object.keys(state.aoePatterns);
+    els.aoePatternEntryCount.textContent = String(allKeys.length);
+    els.aoePatternDirectionalCount.textContent = String(allKeys.filter(k=>state.aoePatterns[k]?.directional).length);
+    els.aoePatternList.innerHTML = '';
+    if (!visibleKeys.length) { const e=document.createElement('div'); e.className='subtle'; e.textContent='No matching patterns.'; els.aoePatternList.appendChild(e); return; }
+    for (const key of visibleKeys) {
+      const p = state.aoePatterns[key]||{};
+      const color = p.directional ? '#c8983a' : '#5a9cf5';
+      const btn = document.createElement('button');
+      btn.className = 'tile-list-item'+(key===state.selectedAoePatternKey?' active':'');
+      btn.type = 'button';
+      btn.innerHTML = `<span class="swatch" style="background:${color}"></span><span class="tile-text"><strong class="tile-name">${p.name||key}</strong><span class="tile-meta">${key} • ${p.directional?'directional':'fixed'} • ${p.origin} • ${(p.tiles||[]).length} tiles</span></span>`;
+      btn.addEventListener('click', ()=>{ state.selectedAoePatternKey=key; renderAoePatternPanel(); renderAoePatternList(); });
+      els.aoePatternList.appendChild(btn);
+    }
+  }
+
+  function renderAoePatternPanel() {
+    const p = getSelectedAoePatternEntry();
+    if (!p) { els.selectedAoePatternLabel.textContent='Nothing selected'; els.aoePatternEmptyState.classList.remove('hidden'); els.aoePatternForm.classList.add('hidden'); els.aoePatternJsonPreview.textContent=''; return; }
+    els.selectedAoePatternLabel.textContent = state.selectedAoePatternKey;
+    els.aoePatternEmptyState.classList.add('hidden'); els.aoePatternForm.classList.remove('hidden');
+    els.aoePatternIdInput.value = state.selectedAoePatternKey;
+    els.aoePatternNameInput.value = p.name||'';
+    els.aoePatternOriginInput.value = p.origin||'caster';
+    els.aoePatternDirectionalInput.checked = !!p.directional;
+
+    drawAoePatternCanvas(p.tiles||[], p.directional);
+    els.aoePatternJsonPreview.textContent = JSON.stringify({[state.selectedAoePatternKey]:p},null,2);
+  }
+
+  function syncSelectedAoePatternFromForm() {
+    const current = getSelectedAoePatternEntry(); if (!current) return;
+    const newKey = (els.aoePatternIdInput.value||'').trim()||state.selectedAoePatternKey;
+    if (newKey!==state.selectedAoePatternKey&&!state.aoePatterns[newKey]) { const m={}; Object.keys(state.aoePatterns).forEach(k=>{ m[k===state.selectedAoePatternKey?newKey:k]=state.aoePatterns[k]; }); state.aoePatterns=m; state.selectedAoePatternKey=newKey; }
+    state.aoePatterns[state.selectedAoePatternKey] = buildCurrentAoePatternObject();
+    setAoePatternDirty(true); renderAoePatternList();
+    const p = state.aoePatterns[state.selectedAoePatternKey];
+    drawAoePatternCanvas(p.tiles, p.directional);
+    els.aoePatternJsonPreview.textContent = JSON.stringify({[state.selectedAoePatternKey]:p},null,2);
+  }
+
+  function renderAoePatternDiagnostics(items=[],summary='No validation run yet') { els.aoePatternValidationSummary.textContent=summary; els.aoePatternDiagnosticsList.innerHTML=''; if(!items.length){els.aoePatternDiagnosticsList.className='diagnostics-list empty-diagnostics';els.aoePatternDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.aoePatternDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.aoePatternDiagnosticsList.appendChild(d);} }
+  function renderAoePatterns() { renderAoePatternList(); renderAoePatternPanel(); }
+
+  async function loadAoePatterns() { const r=await apiFetch('/api/aoe-patterns'); state.aoePatterns=r.aoePatterns||{}; const keys=Object.keys(state.aoePatterns); state.selectedAoePatternKey=keys.includes(state.selectedAoePatternKey)?state.selectedAoePatternKey:(keys[0]||null); setAoePatternDirty(false); try { renderAoePatterns(); } catch(e) { console.warn('AoE render error:', e); } renderAoePatternDiagnostics([{level:'info',title:'Loaded',message:r.path}],`Loaded ${keys.length} patterns`); }
+  async function saveAoePatterns() { const r=await apiFetch('/api/aoe-patterns',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({aoePatterns:state.aoePatterns})}); setAoePatternDirty(false); renderAoePatternDiagnostics([{level:'info',title:'Saved',message:r.path}],`Saved ${Object.keys(state.aoePatterns).length} patterns`); }
+
+  function validateAoePatterns() {
+    const messages=[]; const entries=Object.entries(state.aoePatterns);
+    const skillAoePatterns = new Set(Object.values(state.skills).map(s=>s.aoePattern).filter(Boolean));
+    if (!entries.length) messages.push({level:'warning',title:'Empty',message:'No AoE patterns defined.'});
+    for (const [key,p] of entries) {
+      if (!p.name) messages.push({level:'warning',title:`Missing name: ${key}`,message:'name should be non-empty.'});
+      if (!['caster','target'].includes(p.origin)) messages.push({level:'error',title:`Invalid origin: ${key}`,message:'origin must be "caster" or "target".'});
+      if (!Array.isArray(p.tiles)||!p.tiles.length) messages.push({level:'error',title:`No tiles: ${key}`,message:'tiles must be a non-empty array of [dx,dy] pairs.'});
+      else {
+        p.tiles.forEach((t,i) => { if (!Array.isArray(t)||t.length!==2||typeof t[0]!=='number'||typeof t[1]!=='number') messages.push({level:'error',title:`Bad tile: ${key}[${i}]`,message:'Each tile must be [dx, dy] numbers.'}); });
+      }
+      if (!skillAoePatterns.has(key)) messages.push({level:'info',title:`Unreferenced: ${key}`,message:'No skill references this aoePattern. May be intentional.'});
+    }
+    for (const patternId of skillAoePatterns) { if (!state.aoePatterns[patternId]) messages.push({level:'error',title:`Missing pattern: ${patternId}`,message:`A skill references aoePattern "${patternId}" which doesn't exist.`}); }
+    if (!messages.length) messages.push({level:'info',title:'Validation passed',message:'No problems.'});
+    const ec=messages.filter(m=>m.level==='error').length; const wc=messages.filter(m=>m.level==='warning').length;
+    renderAoePatternDiagnostics(messages, ec||wc?`${ec} error(s), ${wc} warning(s)`:'Validation passed');
+  }
+
+  function addAoePattern() { const k=ensureUniqueAoePatternKey('new_pattern'); state.aoePatterns[k]=JSON.parse(JSON.stringify(DEFAULT_NEW_AOE_PATTERN)); state.selectedAoePatternKey=k; setAoePatternDirty(true); renderAoePatterns(); }
+  function duplicateAoePattern() { const p=getSelectedAoePatternEntry(); if(!p) return; const k=ensureUniqueAoePatternKey(`${state.selectedAoePatternKey}_copy`); state.aoePatterns[k]=JSON.parse(JSON.stringify(p)); state.selectedAoePatternKey=k; setAoePatternDirty(true); renderAoePatterns(); }
+  function deleteAoePattern() { if(!getSelectedAoePatternEntry()) return; if(!window.confirm(`Delete "${state.selectedAoePatternKey}"?`)) return; delete state.aoePatterns[state.selectedAoePatternKey]; state.selectedAoePatternKey=Object.keys(state.aoePatterns)[0]||null; setAoePatternDirty(true); renderAoePatterns(); }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : (state.activeTab === 'recipes' ? loadRecipes() : loadPalette()))))))))))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : (state.activeTab === 'recipes' ? loadRecipes() : (state.activeTab === 'aoePatterns' ? loadAoePatterns() : loadPalette())))))))))))));
     els.saveButton.addEventListener('click', () => {
-      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes', recipes:'Recipes' };
+      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes', recipes:'Recipes', aoePatterns:'AoE Patterns' };
       const label = tabNames[state.activeTab] || state.activeTab;
       if (!window.confirm(`Save ${label} to disk?\n\nThis will overwrite the JSON file.`)) return;
       if (state.activeTab === 'items') saveItems();
@@ -2888,6 +3102,7 @@
       else if (state.activeTab === 'gatheringSkills') saveGatheringSkills();
       else if (state.activeTab === 'resourceNodes') saveResourceNodes();
       else if (state.activeTab === 'recipes') saveRecipes();
+      else if (state.activeTab === 'aoePatterns') saveAoePatterns();
       else savePalette();
     });
     els.reloadButton.addEventListener('click', loadPalette);
@@ -3046,6 +3261,8 @@
     els.skillRequiresWeaponInput.addEventListener('change', syncSelectedSkillFromForm);
     els.skillRequiresShieldInput.addEventListener('change', syncSelectedSkillFromForm);
     els.skillRequiresWeaponTypeInput.addEventListener('input', syncSelectedSkillFromForm);
+    els.skillIgnoreConcentrationInput.addEventListener('change', syncSelectedSkillFromForm);
+    ['skillCastTimeInput','skillChannelTicksInput','skillAoePatternInput','skillAoeParticleEffectInput'].forEach(id=>els[id].addEventListener('input', syncSelectedSkillFromForm));
 
     els.reloadGatheringSkillsButton.addEventListener('click', loadGatheringSkills);
     els.validateGatheringSkillsButton.addEventListener('click', validateGatheringSkills);
@@ -3080,6 +3297,21 @@
     ['recipeIdInput','recipeNameInput','recipeOutputIdInput','recipeRequiredLevelInput','recipeXpInput','recipeCraftTimeInput','recipeOutputQtyInput'].forEach(id=>els[id].addEventListener('input',syncSelectedRecipeFromForm));
     els.recipeSkillInput.addEventListener('change', syncSelectedRecipeFromForm);
 
+    els.reloadAoePatternsButton.addEventListener('click', loadAoePatterns);
+    els.validateAoePatternsButton.addEventListener('click', validateAoePatterns);
+    els.addAoePatternButton.addEventListener('click', addAoePattern);
+    els.duplicateAoePatternButton.addEventListener('click', duplicateAoePattern);
+    els.deleteAoePatternButton.addEventListener('click', deleteAoePattern);
+    els.aoePatternGridSizeInput.addEventListener("change", () => { const p=getSelectedAoePatternEntry(); if(p) drawAoePatternCanvas(p.tiles, p.directional); });
+    els.aoePatternClearButton.addEventListener("click", () => { const p=getSelectedAoePatternEntry(); if(!p) return; p.tiles=[]; setAoePatternDirty(true); renderAoePatternList(); drawAoePatternCanvas([], p.directional); els.aoePatternJsonPreview.textContent=JSON.stringify({[state.selectedAoePatternKey]:p},null,2); });
+    els.aoePatternCanvas.addEventListener("mousedown", aoeCanvasMouseDown);
+    els.aoePatternCanvas.addEventListener("mousemove", aoeCanvasMouseMove);
+    window.addEventListener("mouseup", () => { _aoeDragging=false; _aoeDragMode=null; });
+    els.aoePatternSearchInput.addEventListener('input', e=>{ state.aoePatternSearch=e.target.value||''; renderAoePatternList(); });
+    ['aoePatternIdInput','aoePatternNameInput'].forEach(id=>els[id].addEventListener('input', syncSelectedAoePatternFromForm));
+    els.aoePatternOriginInput.addEventListener('change', syncSelectedAoePatternFromForm);
+    els.aoePatternDirectionalInput.addEventListener('change', syncSelectedAoePatternFromForm);
+
     // SFX play buttons — single delegated listener covers all tabs
     document.addEventListener('click', e => {
       const btn = e.target.closest('.sfx-play-btn');
@@ -3091,7 +3323,7 @@
     });
 
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty || state.recipeDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty || state.recipeDirty || state.aoePatternDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -3112,7 +3344,8 @@
     renderGatheringSkills();
     renderResourceNodes();
     renderRecipes();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes(), loadRecipes()]); }
+    renderAoePatterns();
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes(), loadRecipes(), loadAoePatterns()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -3126,6 +3359,7 @@
       renderGatheringSkillDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderResourceNodeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderRecipeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderAoePatternDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 

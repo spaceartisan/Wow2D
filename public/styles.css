@@ -2186,6 +2186,15 @@ input, textarea {
   transition: width 0.1s linear;
 }
 
+.cast-bar-container.channeling .cast-bar-fill {
+  background: linear-gradient(90deg, #2f6eb9, #4390d4, #66b8ff);
+}
+
+.cast-bar-container.channeling .cast-bar-track {
+  border-color: #4390d4;
+  box-shadow: 0 0 8px rgba(67, 144, 212, 0.3);
+}
+
 /* ── gathering progress bar ───────────────────────────────── */
 
 .gather-bar-container {

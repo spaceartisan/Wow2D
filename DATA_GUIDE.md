@@ -549,16 +549,46 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 | `name` | string | Display name |
 | `description` | string | Tooltip text |
 | `type` | string | One of: `attack`, `heal`, `buff`, `debuff`, `support` |
-| `targeting` | string | One of: `enemy`, `self`, `aoe`, `aoe_ally` |
-| `range` | number\|null | Effective range in pixels. `null` = melee (uses weapon/player range). `0` = self-only. |
+| `targeting` | string | One of: `enemy`, `self`, `self_aoe`, `ground_aoe`, `directional` (see Targeting Modes below) |
+| `range` | number\|null | Effective range in pixels. `null` = melee (uses weapon/player range). `0` = self-only. For `ground_aoe`, this is the max placement distance. |
 | `cooldown` | number\|null | Seconds between uses. `null` = uses weapon attack cooldown (auto-attack). |
 | `manaCost` | number | Mana consumed per use |
+| `castTime` | number | *(optional)* Seconds to cast before the skill fires. Shows a gold "Casting:" bar. Interrupted by movement (unless `ignoreConcentration`). |
+| `channeled` | boolean | *(optional)* `true` = skill channels over time, firing tick effects at intervals. Shows a blue "Channeling:" bar that drains. Interrupted by movement/damage (unless `ignoreConcentration`). |
+| `channelTicks` | number | *(optional, channeled only)* Number of ticks. Can also use `hits` (attack) or `healTicks` (heal) to define tick count. |
+| `hitInterval` | number | *(optional, channeled only)* Seconds between channel ticks. Also used with `healInterval` for heal channels. |
+| `ignoreConcentration` | boolean | *(optional)* `true` = channel/cast cannot be interrupted by movement or incoming damage. Used by skills like Bladestorm. |
+| `aoePattern` | string | *(optional)* References a pattern key in `aoePatterns.json`. Required for `self_aoe`, `ground_aoe`, and `directional` targeting. |
+| `aoeParticleEffect` | string | *(optional)* Particle preset emitted on each AoE tile when the skill fires. |
 | `particle` | string\|null | Particle preset emitted on cast/self |
 | `sfx` | string\|null | SFX played on effect (hit/heal) |
 | `castSfx` | string\|null | *(optional)* SFX played on cast start |
 | `classes` | array | List of class strings that can use this skill (e.g. `["warrior", "mage"]`) |
 | `levelReq` | number | Minimum player level required |
+| `requiresWeapon` | boolean | *(optional)* `true` = requires any weapon equipped |
+| `requiresWeaponType` | string[] | *(optional)* Requires a specific weapon type (e.g. `["staff"]`) |
+| `requiresShield` | boolean | *(optional)* `true` = requires a shield equipped |
 | `icon` | string | Icon identifier for UI. Must match a sprite at `public/assets/sprites/skills/{icon}.png` (32×32 pixel-art). Used in the skills panel, hotbar, and drag ghost. |
+
+### Targeting modes
+
+| Mode | Description |
+|------|-------------|
+| `enemy` | Single enemy target (melee or ranged depending on `range`) |
+| `self` | Affects the caster only |
+| `self_aoe` | Centered on the caster. Uses `aoePattern` to determine affected tiles. |
+| `ground_aoe` | Player clicks a target tile within `range`. An AoE indicator preview is shown before confirming. Uses `aoePattern`. |
+| `directional` | Fires in the direction the player is facing. Uses `aoePattern` rotated to match facing direction (8 directions). |
+
+### Execution modes
+
+Skills have three mutually exclusive execution modes:
+
+| Mode | Condition | Behavior |
+|------|-----------|----------|
+| **Instant** | No `castTime`, not `channeled` | Fires immediately on use |
+| **Cast-time** | `castTime > 0` | Gold cast bar fills over `castTime` seconds, then the skill fires once. Interrupted by movement (default) or damage. |
+| **Channeled** | `channeled: true` | Blue cast bar drains over the channel duration. Fires tick effects at `hitInterval`/`healInterval` intervals. Interrupted by movement or damage (unless `ignoreConcentration: true`). |
 
 ### Type-specific fields
 
@@ -570,26 +600,22 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 | `damageType` | string | `physical`, `fire`, `frost`, `arcane`, `nature` |
 | `projectileSpeed` | number | *(optional)* Projectile speed in px/sec (ranged skills only) |
 | `hitParticle` | string | *(optional)* Particle emitted on target when hit |
-| `hits` | number | *(optional)* Number of hits for multi-hit skills (e.g. Arcane Missiles) |
-| `hitInterval` | number | *(optional)* Seconds between hits |
-| `channeled` | boolean | *(optional)* Whether the skill is channeled (interrupted by movement) |
-| `aoeRadius` | number | *(optional)* AoE radius for `targeting: "aoe"` |
+| `hits` | number | *(optional)* Number of hits for multi-hit/channeled skills (e.g. Arcane Missiles) |
+| `hitInterval` | number | *(optional)* Seconds between hits (used for channel tick rate) |
 | `debuff` | object | *(optional)* Debuff applied on hit (see Buff/Debuff below) |
 
 **heal:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `healAmount` | number | Base HP healed |
+| `healAmount` | number | Base HP healed (per tick if channeled) |
 | `healPerLevel` | number | *(optional)* Extra healing per player level above 1 |
-| `healTicks` | number | *(optional)* Number of HoT ticks |
-| `healInterval` | number | *(optional)* Seconds between HoT ticks |
-| `channeled` | boolean | *(optional)* Whether the heal is channeled |
+| `healTicks` | number | *(optional)* Number of heal ticks (defines channel tick count for channeled heals) |
+| `healInterval` | number | *(optional)* Seconds between heal ticks (channel tick rate) |
 
 **buff / support:**
 | Field | Type | Description |
 |-------|------|-------------|
 | `buff` | object | Buff object applied to self or allies |
-| `aoeRadius` | number | *(optional)* Radius for `targeting: "aoe_ally"` |
 
 ### Buff / Debuff object
 
@@ -605,7 +631,9 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 | `tickDamagePerLevel` | number | *(dot only)* Extra tick damage per level |
 | `tickInterval` | number | *(dot only)* Seconds between ticks |
 
-**Example:**
+**Examples:**
+
+Instant ranged attack with cast-time:
 ```json
 "fireball": {
   "id": "fireball",
@@ -614,6 +642,7 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
   "type": "attack",
   "targeting": "enemy",
   "range": 220,
+  "castTime": 1.5,
   "cooldown": 2.5,
   "manaCost": 18,
   "damage": 28,
@@ -626,7 +655,87 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
   "castSfx": "staff_swing",
   "classes": ["mage"],
   "levelReq": 1,
+  "requiresWeaponType": ["staff"],
   "icon": "fireball"
+}
+```
+
+Ground-targeted AoE with cast time:
+```json
+"flameStrike": {
+  "id": "flameStrike",
+  "name": "Flame Strike",
+  "description": "Call down a pillar of fire on target area, scorching all enemies within.",
+  "type": "attack",
+  "targeting": "ground_aoe",
+  "range": 200,
+  "aoePattern": "circle_small",
+  "aoeParticleEffect": "fire",
+  "castTime": 2.0,
+  "cooldown": 8.0,
+  "manaCost": 32,
+  "damage": 30,
+  "damagePerLevel": 6,
+  "damageType": "fire",
+  "particle": "fire",
+  "sfx": "magic_hit",
+  "castSfx": "staff_swing",
+  "classes": ["mage"],
+  "levelReq": 7,
+  "requiresWeaponType": ["staff"],
+  "icon": "flameStrike"
+}
+```
+
+Channeled AoE (uninterruptible):
+```json
+"bladestorm": {
+  "id": "bladestorm",
+  "name": "Bladestorm",
+  "description": "Become a whirlwind of steel, striking all nearby enemies repeatedly for 4 seconds.",
+  "type": "attack",
+  "targeting": "self_aoe",
+  "aoePattern": "circle_small",
+  "aoeParticleEffect": "hit_spark",
+  "channeled": true,
+  "channelTicks": 4,
+  "hitInterval": 1.0,
+  "ignoreConcentration": true,
+  "cooldown": 25.0,
+  "manaCost": 30,
+  "damage": 14,
+  "damagePerLevel": 3,
+  "damageType": "physical",
+  "particle": "hit_spark",
+  "sfx": "sword_swing",
+  "castSfx": "sword_swing",
+  "classes": ["warrior"],
+  "levelReq": 10,
+  "requiresWeapon": true,
+  "icon": "bladestorm"
+}
+```
+
+Channeled self-heal:
+```json
+"bandage": {
+  "id": "bandage",
+  "name": "Bandage",
+  "description": "Patch yourself up, slowly restoring health over time.",
+  "type": "heal",
+  "targeting": "self",
+  "cooldown": 20.0,
+  "manaCost": 0,
+  "healAmount": 10,
+  "healPerLevel": 3,
+  "healTicks": 5,
+  "healInterval": 1.0,
+  "channeled": true,
+  "particle": "heal",
+  "sfx": "heal",
+  "classes": ["warrior", "rogue"],
+  "levelReq": 3,
+  "icon": "bandage"
 }
 ```
 
@@ -634,8 +743,65 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 1. Add the entry to `skills.json` with a unique key
 2. Place a 32×32 icon at `public/assets/sprites/skills/{icon}.png`
 3. Specify `classes` and `levelReq` for availability
-4. The Skills panel and hotbar system will pick it up automatically
-5. Server validates class, level, cooldown, mana, and range before executing
+4. For AoE skills, choose a pattern from `aoePatterns.json` and set `aoePattern`
+5. For cast-time skills, set `castTime` (seconds)
+6. For channeled skills, set `channeled: true` plus `channelTicks`/`hits`/`healTicks` and `hitInterval`/`healInterval`
+7. The Skills panel and hotbar system will pick it up automatically
+8. Server validates class, level, cooldown, mana, range, weapon, and targeting before executing
+
+---
+
+## aoePatterns.json
+
+Top-level object keyed by pattern name. Defines tile offset patterns used by AoE skills (`self_aoe`, `ground_aoe`, `directional` targeting). Skills reference patterns via the `aoePattern` field. The client uses these for the AoE targeting indicator and the server uses them to resolve which tiles/enemies are hit.
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name |
+| `directional` | boolean | `true` = pattern is rotated to match the caster's facing direction (8 directions). `false` = pattern is used as-is. |
+| `origin` | string | `"caster"` = offsets relative to caster tile. `"target"` = offsets relative to a target tile. |
+| `tiles` | array | Array of `[dx, dy]` tile offsets from the origin. `[0, 0]` = the origin tile itself. |
+
+### Available patterns
+
+| Pattern | Name | Directional | Tiles | Description |
+|---------|------|-------------|-------|-------------|
+| `circle_small` | Small Circle | no | 9 | 3×3 area centered on origin |
+| `circle_medium` | Medium Circle | no | 21 | ~5×5 area centered on origin |
+| `circle_large` | Large Circle | no | 37 | ~7×7 area centered on origin |
+| `line_short` | Short Line | yes | 3 | 3 tiles forward from caster |
+| `line_long` | Long Line | yes | 5 | 5 tiles forward from caster |
+| `cone_narrow` | Narrow Cone | yes | 7 | Narrow cone, 3 tiles deep |
+| `cone_wide` | Wide Cone | yes | 13 | Wide cone, 3 tiles deep |
+| `cross` | Cross | no | 9 | Plus-shape, 2 tiles in each cardinal direction |
+| `ring` | Ring | no | 12 | Hollow ring around target (no center tile) |
+
+### Directional rotation
+
+Directional patterns are defined facing "up" (negative Y). The server and client rotate tile offsets to match the caster's 8-direction facing using `_rotateTile()`. For example, a `cone_narrow` facing right has its Y offsets mapped to X.
+
+### Example
+
+```json
+"cone_narrow": {
+  "name": "Narrow Cone",
+  "directional": true,
+  "origin": "caster",
+  "tiles": [
+    [0, -1],
+    [-1, -2], [0, -2], [1, -2],
+    [-1, -3], [0, -3], [1, -3]
+  ]
+}
+```
+
+**To add a pattern:**
+1. Add the entry to `aoePatterns.json` with a unique key
+2. Define tile offsets relative to origin — use `[0, 0]` for the center tile
+3. Set `directional: true` if the pattern should rotate with facing direction
+4. Reference the pattern key in a skill's `aoePattern` field
 
 ---
 
@@ -739,6 +905,7 @@ Top-level object keyed by status effect ID. Defines the display metadata (name, 
 | `sundered` | Sundered | debuff | sundered.png |
 | `weakened` | Weakened | debuff | weakened.png |
 | `poisoned` | Poisoned | debuff | poisoned.png |
+| `thunderclapped` | Thunderclapped | debuff | *(not yet in statusEffects.json — uses default)* |
 | `hot_bandage` | Bandage | buff | evasion.png |
 
 ### Tile-zone effects

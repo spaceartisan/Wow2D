@@ -62,7 +62,7 @@ export class Game {
     window.addEventListener("resize", this._resizeBound);
 
     // Load all data-driven JSON files in parallel
-    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes] = await Promise.all([
+    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns] = await Promise.all([
       fetch("/data/items.json").then(r => r.json()),
       fetch("/data/enemies.json").then(r => r.json()),
       fetch("/data/npcs.json").then(r => r.json()),
@@ -71,9 +71,10 @@ export class Game {
       fetch("/data/statusEffects.json").then(r => r.json()),
       fetch("/data/gatheringSkills.json").then(r => r.json()),
       fetch("/data/resourceNodes.json").then(r => r.json()),
-      fetch("/data/recipes.json").then(r => r.json())
+      fetch("/data/recipes.json").then(r => r.json()),
+      fetch("/data/aoePatterns.json").then(r => r.json())
     ]);
-    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes };
+    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns };
 
     // Load the starting map
     await this.world.loadMap("eldengrove");
@@ -313,8 +314,11 @@ export class Game {
     }
 
     if (this.input.wasPressed("escape")) {
+      // Cancel AoE targeting first
+      if (this.combat.aoeTargeting) {
+        this.combat.cancelAoeTargeting();
       // Cancel gathering first if active
-      if (this.gathering.active) {
+      } else if (this.gathering.active) {
         this.stopGathering();
       // Close any open panels first, otherwise toggle game menu
       } else if (this.ui.bankOpen) {
@@ -469,6 +473,7 @@ export class Game {
 
     this.world.drawTerrain(ctx, cam, this.canvas, this.sprites);
     this.world.drawObjects(ctx, cam, this.canvas, this.sprites);
+    this.combat.drawAoeIndicator(ctx, cam);
     this.entities.draw(ctx, cam, this.sprites);
     this.projectiles.draw(ctx, cam);
     this.particles.draw(ctx, cam);

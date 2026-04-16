@@ -1811,7 +1811,7 @@ export class UISystem {
 
   /* ── Cast Bar ───────────────────────────────────────── */
 
-  showCastBar(durationSec, label) {
+  showCastBar(durationSec, label, isChannel = false) {
     let container = document.getElementById("cast-bar-container");
     if (!container) {
       container = document.createElement("div");
@@ -1827,30 +1827,41 @@ export class UISystem {
     }
 
     container.classList.remove("hidden");
+    container.classList.toggle("channeling", !!isChannel);
     document.getElementById("cast-bar-label").textContent = label;
     const fill = document.getElementById("cast-bar-fill");
-    fill.style.width = "0%";
+    fill.style.width = isChannel ? "100%" : "0%";
 
     this._castStart = performance.now();
     this._castDuration = durationSec * 1000;
     this._castActive = true;
+    this._castChannel = !!isChannel;
 
-    // Cancel button: clicking the cast bar cancels
+    // Cancel button: clicking the cast bar cancels current cast
     container.onclick = () => {
-      if (this.game.network) this.game.network.sendCancelHearthstone();
+      if (this.game.network) this.game.network.sendCancelCast();
     };
   }
 
   hideCastBar() {
     this._castActive = false;
+    this._castChannel = false;
     const container = document.getElementById("cast-bar-container");
-    if (container) container.classList.add("hidden");
+    if (container) {
+      container.classList.add("hidden");
+      container.classList.remove("channeling");
+    }
   }
 
   updateCastBar() {
     if (!this._castActive) return;
     const elapsed = performance.now() - this._castStart;
-    const pct = Math.min(100, (elapsed / this._castDuration) * 100);
+    let pct;
+    if (this._castChannel) {
+      pct = Math.max(0, 100 - (elapsed / this._castDuration) * 100);
+    } else {
+      pct = Math.min(100, (elapsed / this._castDuration) * 100);
+    }
     const fill = document.getElementById("cast-bar-fill");
     if (fill) fill.style.width = `${pct}%`;
   }
