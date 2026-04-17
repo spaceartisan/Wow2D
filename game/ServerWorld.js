@@ -614,6 +614,12 @@ class ServerWorld {
       case "drop_item":
         this.handleDropItem(player, msg);
         break;
+      case "loot_open":
+        this.handleLootOpen(player, msg);
+        break;
+      case "loot_take":
+        this.handleLootTake(player, msg);
+        break;
       case "use_skill":
         this.handleUseSkill(player, msg);
         break;
@@ -2282,10 +2288,140 @@ class ServerWorld {
     }
 
     player.inventory[index] = null;
+
+    // Create world drop at player position
+    const drop = {
+      id: `d${dropIdCounter++}`,
+      x: player.x + randInt(-12, 12),
+      y: player.y + randInt(-12, 12),
+      gold: 0,
+      item: { ...item },
+      ownerId: null,
+      ownerUntil: 0,
+      expiresAt: Date.now() + 60000
+    };
+
+    const mapEntry = this.maps.get(player.mapId);
+    if (mapEntry) mapEntry.drops.push(drop);
+
     this.send(player.ws, {
       type: "drop_item_result", ok: true, index,
       inventory: [...player.inventory]
     });
+
+    this.broadcastToMap(player.mapId, {
+      type: "drop_spawned",
+      drop: { id: drop.id, x: drop.x, y: drop.y }
+    });
+  }
+
+  handleLootOpen(player, msg) {
+    if (player.dead) return;
+    const dropId = msg.dropId;
+    if (typeof dropId !== "string") return;
+
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+
+    const drop = mapEntry.drops.find(d => d.id === dropId);
+    if (!drop) {
+      this.send(player.ws, { type: "loot_open_result", ok: false, reason: "Drop not found." });
+      return;
+    }
+
+    if (dist(player.x, player.y, drop.x, drop.y) > 64) {
+      this.send(player.ws, { type: "loot_open_result", ok: false, reason: "Too far away." });
+      return;
+    }
+
+    const now = Date.now();
+    if (now < drop.ownerUntil && player.id !== drop.ownerId) {
+      this.send(player.ws, { type: "loot_open_result", ok: false, reason: "Someone else's loot." });
+      return;
+    }
+
+    player.lootingDropId = dropId;
+
+    this.send(player.ws, {
+      type: "loot_open_result",
+      ok: true,
+      dropId,
+      gold: drop.gold || 0,
+      item: drop.item || null
+    });
+  }
+
+  handleLootTake(player, msg) {
+    if (player.dead) return;
+    const dropId = msg.dropId;
+    const what = msg.what; // "gold", "item", "all"
+    if (typeof dropId !== "string") return;
+    if (!["gold", "item", "all"].includes(what)) return;
+
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return;
+
+    const drop = mapEntry.drops.find(d => d.id === dropId);
+    if (!drop) {
+      this.send(player.ws, { type: "loot_take_result", ok: false, reason: "Drop not found." });
+      return;
+    }
+
+    if (dist(player.x, player.y, drop.x, drop.y) > 64) {
+      this.send(player.ws, { type: "loot_take_result", ok: false, reason: "Too far away." });
+      return;
+    }
+
+    const now = Date.now();
+    if (now < drop.ownerUntil && player.id !== drop.ownerId) {
+      this.send(player.ws, { type: "loot_take_result", ok: false, reason: "Someone else's loot." });
+      return;
+    }
+
+    let takenGold = 0;
+    let takenItem = null;
+    let lootIndex = -1;
+
+    if (what === "gold" || what === "all") {
+      if (drop.gold > 0) {
+        takenGold = drop.gold;
+        player.gold = (player.gold || 0) + drop.gold;
+        drop.gold = 0;
+      }
+    }
+
+    if (what === "item" || what === "all") {
+      if (drop.item) {
+        const lootItem = { ...drop.item, qty: drop.item.qty || 1 };
+        lootIndex = this._addItemToSlots(player.inventory, lootItem);
+        if (lootIndex >= 0) {
+          takenItem = drop.item;
+          drop.item = null;
+        }
+      }
+    }
+
+    const dropEmpty = !drop.gold && !drop.item;
+
+    this.send(player.ws, {
+      type: "loot_take_result",
+      ok: true,
+      dropId,
+      takenGold,
+      takenItem,
+      lootIndex,
+      slotItem: lootIndex >= 0 ? player.inventory[lootIndex] : null,
+      remainingGold: drop.gold || 0,
+      remainingItem: drop.item || null,
+      dropEmpty,
+      inventory: [...player.inventory]
+    });
+
+    if (dropEmpty) {
+      mapEntry.drops = mapEntry.drops.filter(d => d.id !== dropId);
+      this.broadcastToMap(player.mapId, { type: "drop_removed", dropId });
+      if (player.lootingDropId === dropId) player.lootingDropId = null;
+    }
   }
 
   _completeCast(player) {
@@ -3218,6 +3354,7 @@ class ServerWorld {
   onPlayerDeath(player, now) {
     player.dead = true;
     player.deathUntil = now + 4200;
+    player.lootingDropId = null;
 
     // M7: Death gold penalty (server-authoritative)
     const goldLost = Math.min(player.gold || 0, 10);
@@ -3300,53 +3437,16 @@ class ServerWorld {
 
   updateDropPickups(mapEntry, mapId, now) {
     mapEntry.drops = mapEntry.drops.filter((drop) => {
-      if (now > drop.expiresAt) return false;
-
-      for (const [, player] of this.players) {
-        if (player.dead || player.mapId !== mapId) continue;
-        if (dist(player.x, player.y, drop.x, drop.y) > 42) continue;
-
-        if (now < drop.ownerUntil && player.id !== drop.ownerId) continue;
-
-        // Add gold to server state
-        if (drop.gold > 0) {
-          player.gold = (player.gold || 0) + drop.gold;
-        }
-
-        // Add item to server-side inventory (with stacking)
-        let lootIndex = -1;
-        if (drop.item) {
-          const lootItem = { ...drop.item, qty: drop.item.qty || 1 };
-          lootIndex = this._addItemToSlots(player.inventory, lootItem);
-          if (lootIndex === -1) {
-            // Item can't fit; only pick up gold, leave drop for item
-            if (drop.gold > 0) {
-              this.send(player.ws, {
-                type: "loot_pickup",
-                dropId: drop.id,
-                gold: drop.gold,
-                item: null,
-                index: -1
-              });
-              drop.gold = 0;
-            }
-            return true; // keep drop alive for item
+      if (now > drop.expiresAt) {
+        // Close loot window for anyone looting this drop
+        for (const [, player] of this.players) {
+          if (player.lootingDropId === drop.id) {
+            this.send(player.ws, { type: "loot_closed", dropId: drop.id });
+            player.lootingDropId = null;
           }
         }
-
-        this.send(player.ws, {
-          type: "loot_pickup",
-          dropId: drop.id,
-          gold: drop.gold,
-          item: drop.item,
-          index: lootIndex,
-          slotItem: lootIndex >= 0 ? player.inventory[lootIndex] : null
-        });
-
-        this.broadcastToMap(mapId, { type: "drop_removed", dropId: drop.id });
         return false;
       }
-
       return true;
     });
   }

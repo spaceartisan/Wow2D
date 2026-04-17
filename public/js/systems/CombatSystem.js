@@ -52,6 +52,13 @@ export class CombatSystem {
       return;
     }
 
+    // Right-click a drop to open loot window
+    const clickedDrop = this.game.entities.getDropAtWorld(worldX, worldY);
+    if (clickedDrop) {
+      if (this.game.network) this.game.network.sendLootOpen(clickedDrop.id);
+      return;
+    }
+
     const clickedEnemy = this.game.entities.getEnemyAtWorld(worldX, worldY);
     if (clickedEnemy) {
       this.targetEnemyId = clickedEnemy.id;

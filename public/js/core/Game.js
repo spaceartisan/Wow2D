@@ -62,7 +62,7 @@ export class Game {
     window.addEventListener("resize", this._resizeBound);
 
     // Load all data-driven JSON files in parallel
-    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns] = await Promise.all([
+    const [items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns, rarities] = await Promise.all([
       fetch("/data/items.json").then(r => r.json()),
       fetch("/data/enemies.json").then(r => r.json()),
       fetch("/data/npcs.json").then(r => r.json()),
@@ -72,9 +72,10 @@ export class Game {
       fetch("/data/gatheringSkills.json").then(r => r.json()),
       fetch("/data/resourceNodes.json").then(r => r.json()),
       fetch("/data/recipes.json").then(r => r.json()),
-      fetch("/data/aoePatterns.json").then(r => r.json())
+      fetch("/data/aoePatterns.json").then(r => r.json()),
+      fetch("/data/rarities.json").then(r => r.json())
     ]);
-    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns };
+    this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns, rarities };
 
     // Load the starting map
     await this.world.loadMap("eldengrove");
@@ -196,6 +197,13 @@ export class Game {
     }
     if (this.input.mouse.rightClicked) {
       this.combat.handleWorldRightClick(this.input.mouse.worldX, this.input.mouse.worldY);
+    }
+
+    // Close loot window on movement
+    if (this.ui._lootDropId &&
+        (this.input.isDown("w","arrowup") || this.input.isDown("a","arrowleft") ||
+         this.input.isDown("s","arrowdown") || this.input.isDown("d","arrowright"))) {
+      this.ui.closeLootWindow();
     }
 
     // Smooth remote entity positions toward latest server data at 60 fps

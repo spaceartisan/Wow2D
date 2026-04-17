@@ -231,6 +231,15 @@ export class EntitySystem {
     );
   }
 
+  getDropAtWorld(worldX, worldY) {
+    const clickableRadius = 20;
+    return (
+      this.drops.find(
+        (drop) => distance(worldX, worldY, drop.x, drop.y) <= clickableRadius
+      ) || null
+    );
+  }
+
   getClosestNpcInRange(range = 60) {
     const player = this.player;
     let closest = null;

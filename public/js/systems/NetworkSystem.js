@@ -249,6 +249,14 @@ export class NetworkSystem {
     this.send({ type: "drop_item", index });
   }
 
+  sendLootOpen(dropId) {
+    this.send({ type: "loot_open", dropId });
+  }
+
+  sendLootTake(dropId, what) {
+    this.send({ type: "loot_take", dropId, what });
+  }
+
   sendGather(nodeId) {
     this.send({ type: "gather", nodeId });
   }
@@ -416,6 +424,15 @@ export class NetworkSystem {
         break;
       case "drop_item_result":
         this.onDropItemResult(msg);
+        break;
+      case "loot_open_result":
+        this.onLootOpenResult(msg);
+        break;
+      case "loot_take_result":
+        this.onLootTakeResult(msg);
+        break;
+      case "loot_closed":
+        this.onLootClosed(msg);
         break;
       case "skill_result":
         this.onSkillResult(msg);
@@ -835,6 +852,7 @@ export class NetworkSystem {
     player.dead = true;
     player.deathUntil = performance.now() + 4200;
     // Gold penalty is now server-authoritative; don't modify locally
+    this.game.ui.closeLootWindow();
     this.game.ui.addMessage("You died.");
     this.game.audio.play("player_death");
     this.game.particles.emit("death", player.x, player.y);
@@ -1626,6 +1644,60 @@ export class NetworkSystem {
     this.game.ui._inventoryDirty = true;
     this.game.ui._hotbarDirty = true;
     this.game.ui.addMessage("Item dropped.");
+  }
+
+  onLootOpenResult(msg) {
+    if (!msg.ok) {
+      this.game.ui.addMessage(msg.reason || "Cannot loot that.");
+      return;
+    }
+    this.game.ui.openLootWindow(msg.dropId, msg.gold, msg.item);
+  }
+
+  onLootTakeResult(msg) {
+    if (!msg.ok) {
+      this.game.ui.addMessage(msg.reason || "Cannot take that.");
+      return;
+    }
+    const player = this.game.entities.player;
+
+    if (msg.takenGold > 0) {
+      player.gold += msg.takenGold;
+      this.game.ui.addMessage(`Loot: +${msg.takenGold} gold`);
+      this.game.audio.play("pickup");
+    }
+
+    if (msg.takenItem && msg.lootIndex >= 0) {
+      player.inventorySlots[msg.lootIndex] = msg.slotItem ? { ...msg.slotItem } : { ...msg.takenItem };
+      this.game.ui.addMessage(`Loot: ${msg.takenItem.name}`);
+      this.game.ui._inventoryDirty = true;
+      this.game.ui._hotbarDirty = true;
+    } else if (msg.takenItem === null && (msg.remainingItem)) {
+      // Item remained — inventory full
+      this.game.ui.addMessage("Inventory full.");
+    }
+
+    // Sync full inventory from server
+    if (msg.inventory) {
+      for (let i = 0; i < player.inventorySlots.length; i++) {
+        player.inventorySlots[i] = msg.inventory[i] || null;
+      }
+      this.game.ui._inventoryDirty = true;
+      this.game.ui._hotbarDirty = true;
+    }
+
+    if (msg.dropEmpty) {
+      this.game.ui.closeLootWindow();
+    } else {
+      // Update loot window with remaining contents
+      this.game.ui.updateLootWindow(msg.dropId, msg.remainingGold, msg.remainingItem);
+    }
+  }
+
+  onLootClosed(msg) {
+    if (this.game.ui._lootDropId === msg.dropId) {
+      this.game.ui.closeLootWindow();
+    }
   }
 
   onGatherResult(msg) {

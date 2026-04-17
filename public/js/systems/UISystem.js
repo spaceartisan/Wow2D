@@ -80,6 +80,11 @@ export class UISystem {
     this.activeChannel = "all"; // "all" | "world" | "whisper" | "system"
     this.maxChatMessages = 100;
 
+    /* ── Loot window state ── */
+    this._lootDropId = null;
+    this._lootGold = 0;
+    this._lootItem = null;
+
     /* ── DOM listener tracking (cleaned up in destroy()) ── */
     this._domHandlers = [];
 
@@ -131,6 +136,7 @@ export class UISystem {
     if (this.charSheetOpen) this.toggleCharSheet();
     if (this.skillsOpen) this.toggleSkills();
     if (this.professionsOpen) this.toggleProfessions();
+    this.closeLootWindow();
     this.el.gameMenuPanel.classList.add("hidden");
     this.el.targetPanel.classList.add("hidden");
   }
@@ -677,6 +683,9 @@ export class UISystem {
 
       slot.classList.add("has-item");
 
+      // Rarity color outline
+      this._applyRarity(slot, item.rarity || this.game.data?.items?.[item.id]?.rarity);
+
       // Icon
       const icon = sprites && sprites.get(`icons/${item.icon || item.id}`);
       if (icon) {
@@ -740,6 +749,15 @@ export class UISystem {
     if (skillDef.range) tip += `\nRange: ${skillDef.range}`;
     if (skillDef.description) tip += `\n${skillDef.description}`;
     return tip;
+  }
+
+  _applyRarity(el, rarity) {
+    if (!rarity || rarity === "common") return;
+    const def = this.game.data?.rarities?.[rarity];
+    if (!def) return;
+    el.dataset.rarity = rarity;
+    el.style.setProperty("--rarity-color", def.color);
+    el.style.setProperty("--rarity-glow", def.glow);
   }
 
   _itemTooltipText(item) {
@@ -812,6 +830,9 @@ export class UISystem {
       labelEl.textContent = label;
 
       if (item) {
+        // Rarity color outline
+        this._applyRarity(row, item.rarity || this.game.data?.items?.[item.id]?.rarity);
+
         const icon = sprites && sprites.get(`icons/${item.icon || item.id}`);
         if (icon) {
           const img = document.createElement("img");
@@ -1039,6 +1060,9 @@ export class UISystem {
 
       slot.classList.add("has-item");
 
+      // Rarity color outline
+      this._applyRarity(slot, item.rarity || this.game.data?.items?.[item.id]?.rarity);
+
       const icon = sprites && sprites.get(`icons/${item.icon || item.id}`);
       if (icon) {
         const img = document.createElement("img");
@@ -1078,6 +1102,114 @@ export class UISystem {
 
       this.el.bankGrid.append(slot);
     });
+  }
+
+  /* ── Loot Window ──────────────────────────────────────── */
+
+  openLootWindow(dropId, gold, item) {
+    this._lootDropId = dropId;
+    this._lootGold = gold || 0;
+    this._lootItem = item || null;
+
+    let panel = document.getElementById("loot-panel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "loot-panel";
+      panel.className = "hud-card";
+      panel.innerHTML = `
+        <div class="panel-header">
+          <span>Loot</span>
+          <button class="panel-close" id="loot-close-btn">X</button>
+        </div>
+        <div id="loot-contents"></div>
+        <button id="loot-all-btn" class="loot-all-btn">Loot All</button>
+      `;
+      document.getElementById("hud").appendChild(panel);
+      document.getElementById("loot-close-btn").addEventListener("click", () => this.closeLootWindow());
+      document.getElementById("loot-all-btn").addEventListener("click", () => {
+        if (this._lootDropId && this.game.network) {
+          this.game.network.sendLootTake(this._lootDropId, "all");
+        }
+      });
+      if (this.dragManager) this.dragManager.makeDraggable(panel);
+    }
+    panel.classList.remove("hidden");
+    this.renderLootWindow();
+  }
+
+  closeLootWindow() {
+    this._lootDropId = null;
+    this._lootGold = 0;
+    this._lootItem = null;
+    const panel = document.getElementById("loot-panel");
+    if (panel) panel.classList.add("hidden");
+  }
+
+  updateLootWindow(dropId, gold, item) {
+    if (this._lootDropId !== dropId) return;
+    this._lootGold = gold || 0;
+    this._lootItem = item || null;
+    this.renderLootWindow();
+  }
+
+  renderLootWindow() {
+    const contents = document.getElementById("loot-contents");
+    if (!contents) return;
+    contents.textContent = "";
+    const sprites = this.game.sprites;
+
+    if (this._lootGold > 0) {
+      const goldRow = document.createElement("div");
+      goldRow.className = "loot-slot loot-gold-slot";
+      goldRow.innerHTML = `<span class="loot-gold-icon">&#x1FA99;</span> <span>${this._lootGold} Gold</span>`;
+      goldRow.style.cursor = "pointer";
+      goldRow.title = `Click to take ${this._lootGold} gold`;
+      goldRow.addEventListener("click", () => {
+        if (this._lootDropId && this.game.network) {
+          this.game.network.sendLootTake(this._lootDropId, "gold");
+        }
+      });
+      contents.append(goldRow);
+    }
+
+    if (this._lootItem) {
+      const item = this._lootItem;
+      const itemRow = document.createElement("div");
+      itemRow.className = "loot-slot";
+
+      this._applyRarity(itemRow, item.rarity);
+
+      const icon = sprites && sprites.get(`icons/${item.icon || item.id}`);
+      if (icon) {
+        const img = document.createElement("img");
+        img.src = icon.src;
+        img.className = "item-icon";
+        img.width = 28;
+        img.height = 28;
+        itemRow.append(img);
+      }
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "loot-item-name";
+      nameSpan.textContent = item.name + (item.qty > 1 ? ` (x${item.qty})` : "");
+      itemRow.append(nameSpan);
+
+      itemRow.style.cursor = "pointer";
+      itemRow.title = this._itemTooltipText(item) + "\nClick to take";
+      itemRow.addEventListener("click", () => {
+        if (this._lootDropId && this.game.network) {
+          this.game.network.sendLootTake(this._lootDropId, "item");
+        }
+      });
+      contents.append(itemRow);
+    }
+
+    if (!this._lootGold && !this._lootItem) {
+      const emptyMsg = document.createElement("div");
+      emptyMsg.className = "loot-empty";
+      emptyMsg.textContent = "Empty";
+      contents.append(emptyMsg);
+    }
   }
 
   /* ── Hotbar ─────────────────────────────────────────── */
