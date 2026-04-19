@@ -18,14 +18,37 @@
       "not_started": {
         "text": "The Timber Wolves have grown bold, threatening travelers on the forest road. We need someone brave enough to thin their numbers.",
         "options": [
+          { "label": "Why are the wolves attacking?", "next": "wolf_lore" },
           { "label": "Accept Quest", "action": "accept" },
+          { "label": "Not now", "action": "close" }
+        ]
+      },
+      "wolf_lore": {
+        "text": "They weren't always this aggressive. The Timber Wolves kept to the deep forest for generations, living off deer and hare. Something has driven them from their territory — the old hunters say they seem frightened, desperate. Whatever the cause, the travelers on our road are paying the price.",
+        "options": [
+          { "label": "What could have scared them?", "next": "wolf_cause" },
+          { "label": "I'll deal with them", "action": "accept" },
+          { "label": "Not now", "action": "close" }
+        ]
+      },
+      "wolf_cause": {
+        "text": "I wish I knew. The Darkwood has always been wild, but something deeper seems to be stirring. Old Thorne says he's heard sounds at night that no natural beast makes. For now, all we can do is protect our people. Five wolves culled should ease the pressure on the road.",
+        "options": [
+          { "label": "I'll take care of it", "action": "accept" },
           { "label": "Not now", "action": "close" }
         ]
       },
       "active": {
         "text": "Wolves slain {progress}. Keep at it, the road must be safe.",
         "options": [
+          { "label": "Any advice for hunting them?", "next": "wolf_advice" },
           { "label": "I'll get it done", "action": "close" }
+        ]
+      },
+      "wolf_advice": {
+        "text": "They hunt in pairs near the forest edge, mostly along the road. They're fastest in the open, so try to catch them near the trees where they have less room to maneuver. And watch your flanks — if you see one wolf, there's usually another nearby.",
+        "options": [
+          { "label": "Thanks for the tip", "action": "close" }
         ]
       },
       "ready_to_turn_in": {
@@ -35,8 +58,17 @@
         ]
       },
       "completed": {
-        "text": "The road is safer thanks to you.",
-        "options": []
+        "text": "The road is safer thanks to you. Though I fear the wolves were only the beginning of our troubles.",
+        "options": [
+          { "label": "What do you mean?", "next": "foreshadow" },
+          { "label": "Farewell", "action": "close" }
+        ]
+      },
+      "foreshadow": {
+        "text": "The wolves fled deeper territory. The boars are destroying crops — they never did that before. And Brenn's scouts report bandit activity where there was none. It's as if the whole forest is being pushed outward, away from something. I don't know what, but I suspect we'll find out soon enough.",
+        "options": [
+          { "label": "Farewell", "action": "close" }
+        ]
       }
     }
   },
@@ -59,7 +91,23 @@
       "not_started": {
         "text": "You proved yourself against the wolves. Now I need your help with a bigger problem. Wild boars from the Darkwood are destroying our crops and injuring farmers.",
         "options": [
+          { "label": "What's driving the boars out?", "next": "boar_lore" },
           { "label": "I'll handle it", "action": "accept" },
+          { "label": "Maybe later", "action": "close" }
+        ]
+      },
+      "boar_lore": {
+        "text": "The boars have always been in the Darkwood, but they kept their distance. Now they charge right through our fence lines at night, trampling crops and goring anyone who gets in their way. The farmers think someone — or something — is driving them toward us. It's the same pattern as the wolves.",
+        "options": [
+          { "label": "A pattern?", "next": "boar_pattern" },
+          { "label": "I'll hunt them down", "action": "accept" },
+          { "label": "Maybe later", "action": "close" }
+        ]
+      },
+      "boar_pattern": {
+        "text": "First the wolves, now the boars — both pushed from deeper territory toward our village. Whatever is in the heart of the Darkwood, it's clearing the forest of everything that lives there. The boars are bigger and meaner than the wolves, but they're just as scared. Four of them culled should protect the farms, at least for now.",
+        "options": [
+          { "label": "Count on me", "action": "accept" },
           { "label": "Maybe later", "action": "close" }
         ]
       },
@@ -76,8 +124,10 @@
         ]
       },
       "completed": {
-        "text": "The crops are safe. You've been a great help to Eldengrove.",
-        "options": []
+        "text": "The crops are safe. You've been a great help to Eldengrove. But I fear whatever drove those beasts toward us is still out there.",
+        "options": [
+          { "label": "Farewell", "action": "close" }
+        ]
       }
     }
   },
@@ -100,6 +150,22 @@
       "not_started": {
         "text": "Our scouts report bandit activity deep in the Darkwood. They're watching our trade routes. Find them and put an end to their reconnaissance.",
         "options": [
+          { "label": "What do we know about them?", "next": "bandit_intel" },
+          { "label": "Consider it done", "action": "accept" },
+          { "label": "Not right now", "action": "close" }
+        ]
+      },
+      "bandit_intel": {
+        "text": "Three scouts at least, operating in the southern Darkwood. They move at dusk, stay hidden during the day. We captured one last week — he had a burned brand on his arm, a broken crown symbol. He wouldn't tell us anything. Whoever commands these bandits, they inspire loyalty through fear.",
+        "options": [
+          { "label": "A broken crown?", "next": "bandit_symbol" },
+          { "label": "I'll find them", "action": "accept" },
+          { "label": "Not right now", "action": "close" }
+        ]
+      },
+      "bandit_symbol": {
+        "text": "It's not one I recognize from any current banner. Elder Rowan thinks it might be tied to the old kingdoms — the ones that fell during the Sundering. If someone is rallying people under that symbol, it means they have ambitions beyond petty theft. Eliminate the scouts and we buy ourselves time to figure out who's behind this.",
+        "options": [
           { "label": "Consider it done", "action": "accept" },
           { "label": "Not right now", "action": "close" }
         ]
@@ -107,7 +173,14 @@
       "active": {
         "text": "Bandits eliminated {progress}. Every one less is a safer road.",
         "options": [
+          { "label": "Where should I look?", "next": "bandit_location" },
           { "label": "I'll find the rest", "action": "close" }
+        ]
+      },
+      "bandit_location": {
+        "text": "They favor the treeline along the southern road, where the canopy is thickest. Look for camps with cold fire pits — they never light fires during the day to avoid detection. If you spot one, the others won't be far.",
+        "options": [
+          { "label": "Good to know", "action": "close" }
         ]
       },
       "ready_to_turn_in": {
@@ -117,8 +190,17 @@
         ]
       },
       "completed": {
-        "text": "The roads are quiet for now, but stay vigilant.",
-        "options": []
+        "text": "The roads are quiet for now, but stay vigilant. I have a feeling we haven't seen the last of whoever sent those scouts.",
+        "options": [
+          { "label": "What will you do next?", "next": "next_steps" },
+          { "label": "Farewell", "action": "close" }
+        ]
+      },
+      "next_steps": {
+        "text": "Double the patrols, fortify the road checkpoints, and send word to the Crown that we need reinforcements. If there's really an organized force gathering in the Darkwood, a dozen guards won't hold them. But for now, thanks to you, we have breathing room.",
+        "options": [
+          { "label": "Farewell", "action": "close" }
+        ]
       }
     }
   }

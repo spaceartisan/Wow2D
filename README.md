@@ -116,6 +116,7 @@ http://localhost:3000
 - Target-then-engage combat: left-click to select a target, right-click or hotbar attack to engage auto-attack with chase
 - Server-authoritative hit resolution
 - Multiple enemy types with aggro range, chase AI, leashing, and wander behavior (floor-aware: enemies only aggro players on the same floor)
+- Variable enemy sizes — enemies can span 1×1, 2×2, or 3×3 tiles via `tileSize` field, with automatic radius, AoE overlap, projectile hit, and minimap scaling
 - XP and leveling with stat scaling (HP, mana, damage per level)
 - Data-driven loot tables with gold and item drops
 - Data-driven combat effects: weapons, enemies, and consumables define their own particle effects and SFX via JSON
@@ -155,7 +156,7 @@ http://localhost:3000
 - Bank system — 48-slot storage accessed via Banker NPC, with drag-and-drop deposit/withdraw
 - Equipment panel with 9 slots (mainHand, offHand, armor, helmet, pants, boots, ring1, ring2, amulet) — click to unequip
 - Quest tracker, quest log, character sheet, and skills panel
-- NPC dialog system with quest accept/turn-in flow
+- Branching NPC dialog system — multi-node dialog trees with world lore discovery, quest accept/turn-in flow, and conditional options (quest state, level gates)
 - NPC auto-close — dialog, shop, bank, and crafting panels close automatically when the player walks away from the NPC
 - Floor indicator when inside multi-story buildings
 - Label visibility toggles in the game menu (Escape): show/hide floating names for players, NPCs, resource nodes, waystones, portals, buildings, and the floor indicator (all off by default). Quest markers (`!`/`?`) above NPCs are always visible regardless of toggle.

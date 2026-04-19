@@ -59,6 +59,18 @@ export class CombatSystem {
       return;
     }
 
+    // Right-click a player to show context menu
+    const clickedPlayer = this.game.entities.getPlayerAtWorld(worldX, worldY);
+    if (clickedPlayer) {
+      this.targetPlayerId = clickedPlayer.id;
+      this.targetEnemyId = null;
+      this.engaged = false;
+      const sx = this.game.input.mouse.clientX || 0;
+      const sy = this.game.input.mouse.clientY || 0;
+      this.game.ui.showPlayerContextMenu(sx, sy, clickedPlayer);
+      return;
+    }
+
     const clickedEnemy = this.game.entities.getEnemyAtWorld(worldX, worldY);
     if (clickedEnemy) {
       this.targetEnemyId = clickedEnemy.id;

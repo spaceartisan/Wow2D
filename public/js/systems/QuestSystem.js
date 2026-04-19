@@ -108,25 +108,124 @@ export class QuestSystem {
         const def = this.questDefs[qid];
         const dialog = def?.dialog?.completed;
         if (dialog) {
-          const actions = [];
-          if (npc.shop && npc.shop.length > 0) {
-            actions.push({
-              label: "Browse Wares",
-              callback: () => {
-                this.game.ui.closeNpcDialog();
-                this.game.ui.openShop(npc.id, npc.shop);
-              },
-              closesDialog: false
-            });
-          }
-          this.game.ui.showNpcDialog(npc.name, dialog.text, actions);
+          this._showDialogNode(npc, dialog, def.dialog, { questId: qid, questDef: def, questState: state });
           return;
         }
       }
     }
 
-    // Non-quest NPC dialog (or vendor/banker with no quests)
+    // Non-quest NPC: use dialogTree if present, otherwise defaultDialog
+    this._showNpcDefaultDialog(npc);
+  }
+
+  /* ── Branching dialog helpers ────────────────────────────── */
+
+  /**
+   * Show a dialog node (from NPC dialogTree or quest dialog map).
+   * @param {Object} npc       - The NPC object
+   * @param {Object} node      - { text, options[] }
+   * @param {Object} nodeMap   - The full map of nodeId → node (for branching via `next`)
+   * @param {Object} [ctx]     - Optional context: { questId, questDef, questState }
+   */
+  _showDialogNode(npc, node, nodeMap, ctx) {
+    let text = node.text || "";
+    if (ctx?.questState) {
+      text = this._substituteProgress(text, ctx.questDef, ctx.questState);
+    }
+
     const actions = [];
+
+    for (const opt of (node.options || [])) {
+      // Check conditions
+      if (opt.condition && !this._checkCondition(opt.condition)) continue;
+
+      actions.push({
+        label: opt.label,
+        callback: () => {
+          // Handle quest actions first
+          if (opt.action) {
+            this._handleDialogAction(opt.action, ctx?.questId, ctx?.questDef, ctx?.questState, npc);
+          }
+          // Handle NPC service actions
+          if (opt.action === "open_shop") {
+            this.game.ui.closeNpcDialog();
+            this.game.ui.openShop(npc.id, npc.shop);
+            return;
+          }
+          if (opt.action === "open_bank") {
+            this.game.ui.closeNpcDialog();
+            this.game.ui.openBank();
+            return;
+          }
+          if (opt.action === "open_crafting") {
+            this.game.ui.closeNpcDialog();
+            this.game.ui.openCraftingStation(npc.craftingSkill);
+            return;
+          }
+          // Branch to next node
+          if (opt.next && nodeMap?.[opt.next]) {
+            this._showDialogNode(npc, nodeMap[opt.next], nodeMap, ctx);
+            return;
+          }
+          // "close" or no next — close dialog
+        },
+        closesDialog: !opt.next && opt.action !== "open_shop" && opt.action !== "open_bank" && opt.action !== "open_crafting"
+      });
+    }
+
+    // Append NPC service buttons if this is a root/leaf node with no explicit service actions
+    const hasServiceAction = (node.options || []).some(o =>
+      o.action === "open_shop" || o.action === "open_bank" || o.action === "open_crafting"
+    );
+    if (!hasServiceAction) {
+      this._appendServiceActions(npc, actions);
+    }
+
+    this.game.ui.showNpcDialog(npc.name, text, actions);
+  }
+
+  /**
+   * Check whether a dialog option condition is met.
+   * condition: { questComplete: "id", questActive: "id", minLevel: n }
+   */
+  _checkCondition(cond) {
+    if (cond.questComplete) {
+      if (this.quests[cond.questComplete]?.state !== "completed") return false;
+    }
+    if (cond.questActive) {
+      const s = this.quests[cond.questActive]?.state;
+      if (s !== "active" && s !== "ready_to_turn_in") return false;
+    }
+    if (cond.questNotStarted) {
+      const s = this.quests[cond.questNotStarted]?.state;
+      if (s && s !== "not_started") return false;
+    }
+    if (cond.minLevel) {
+      if ((this.game.entities?.player?.level || 1) < cond.minLevel) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Show the NPC's default dialog (dialogTree or plain defaultDialog).
+   */
+  _showNpcDefaultDialog(npc) {
+    const tree = npc.dialogTree;
+    if (tree && tree.root) {
+      this._showDialogNode(npc, tree.root, tree, null);
+      return;
+    }
+
+    // Legacy fallback: plain defaultDialog with auto service buttons
+    const actions = [];
+    this._appendServiceActions(npc, actions);
+    this.game.ui.showNpcDialog(npc.name, npc.dialog || npc.defaultDialog || "...", actions);
+  }
+
+  /**
+   * Append shop / bank / crafting buttons to an actions array.
+   */
+  _appendServiceActions(npc, actions) {
     if (npc.shop && npc.shop.length > 0) {
       actions.push({
         label: "Browse Wares",
@@ -159,7 +258,6 @@ export class QuestSystem {
         closesDialog: false
       });
     }
-    this.game.ui.showNpcDialog(npc.name, npc.dialog || "...", actions);
   }
 
   _showQuestDialog(npc, questId, questState) {
@@ -170,19 +268,8 @@ export class QuestSystem {
     const dialogDef = def.dialog?.[state];
     if (!dialogDef) return;
 
-    // Build dialog text with progress substitutions
-    let text = dialogDef.text || "";
-    if (questState) {
-      text = this._substituteProgress(text, def, questState);
-    }
-
-    // Build action buttons
-    const actions = (dialogDef.options || []).map(opt => ({
-      label: opt.label,
-      callback: () => this._handleDialogAction(opt.action, questId, def, questState, npc)
-    }));
-
-    this.game.ui.showNpcDialog(npc.name, text, actions);
+    // Use the branching dialog system — quest dialog nodes live in def.dialog
+    this._showDialogNode(npc, dialogDef, def.dialog, { questId, questDef: def, questState });
   }
 
   _substituteProgress(text, def, questState) {

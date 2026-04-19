@@ -326,7 +326,7 @@ class ServerWorld {
 
   /* ── player management ──────────────────────────────── */
 
-  addPlayer(ws, charData) {
+  addPlayer(ws, charData, username) {
     const id = `p${nextPlayerId++}`;
 
     // Restore saved map/position, or fall back to default spawn
@@ -363,6 +363,7 @@ class ServerWorld {
     const state = {
       id,
       ws,
+      username: username || null,
       mapId,
       charId: charData.id || null,
       name: String(charData.name || "Unknown").slice(0, 16),
@@ -634,6 +635,30 @@ class ServerWorld {
         break;
       case "respawn":
         // client signals it's ready to respawn
+        break;
+      case "friend_request":
+        this.handleFriendRequest(player, msg);
+        break;
+      case "friend_accept":
+        this.handleFriendAccept(player, msg);
+        break;
+      case "friend_reject":
+        this.handleFriendReject(player, msg);
+        break;
+      case "friend_remove":
+        this.handleFriendRemove(player, msg);
+        break;
+      case "friend_list":
+        this.handleFriendList(player);
+        break;
+      case "block_player":
+        this.handleBlockPlayer(player, msg);
+        break;
+      case "unblock_player":
+        this.handleUnblockPlayer(player, msg);
+        break;
+      case "block_list":
+        this.handleBlockList(player);
         break;
       default:
         break;
@@ -1092,9 +1117,7 @@ class ServerWorld {
         for (const e of mapEntry.enemies) {
           if (e.dead) continue;
           if ((e.floor || 0) !== (player.floor || 0)) continue;
-          const eTx = Math.floor(e.x / ts);
-          const eTy = Math.floor(e.y / ts);
-          if (!affectedTiles.has(tileKey(eTx, eTy))) continue;
+          if (!this._enemyOverlapsTiles(e, ts, affectedTiles)) continue;
 
           const takenMult = this._getEnemyDamageTakenMult(e);
           const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
@@ -1362,6 +1385,18 @@ class ServerWorld {
           channel: "system",
           from: "System",
           text: "You can't whisper yourself."
+        });
+        return;
+      }
+
+      // Block check – either direction
+      const database = require("./database");
+      if (database.isBlocked(player.username, target.username) || database.isBlocked(target.username, player.username)) {
+        this.send(player.ws, {
+          type: "chat",
+          channel: "system",
+          from: "System",
+          text: "Unable to send message to that player."
         });
         return;
       }
@@ -2598,9 +2633,7 @@ class ServerWorld {
         for (const e of mapEntry.enemies) {
           if (e.dead) continue;
           if ((e.floor || 0) !== (player.floor || 0)) continue;
-          const eTx = Math.floor(e.x / ts);
-          const eTy = Math.floor(e.y / ts);
-          if (!affectedTiles.has(tileKey(eTx, eTy))) continue;
+          if (!this._enemyOverlapsTiles(e, ts, affectedTiles)) continue;
 
           const takenMult = this._getEnemyDamageTakenMult(e);
           const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
@@ -2843,7 +2876,11 @@ class ServerWorld {
       const positions = spawn.positions || [];
       const floor = spawn.floor || 0;
       for (const [tx, ty] of positions) {
-        const e = this.makeEnemy(type, tx * tileSize + tileSize / 2, ty * tileSize + tileSize / 2, floor);
+        const t = ENEMY_TYPES[type];
+        const ets = (t && t.tileSize) || 1;
+        const cx = tx * tileSize + (ets * tileSize) / 2;
+        const cy = ty * tileSize + (ets * tileSize) / 2;
+        const e = this.makeEnemy(type, cx, cy, floor);
         if (e) enemies.push(e);
       }
     }
@@ -2865,7 +2902,8 @@ class ServerWorld {
       spawnX: x,
       spawnY: y,
       floor,
-      radius: t.radius || 15,
+      tileSize: t.tileSize || 1,
+      radius: t.radius || (((t.tileSize || 1) * 48) / 2),
       hp: t.maxHp,
       maxHp: t.maxHp,
       damage: t.damage,
@@ -2958,8 +2996,9 @@ class ServerWorld {
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
       const step = proj.speed * dt;
 
-      // Hit check (before move) — threshold slightly larger than client
-      if (d <= 16 || step >= d) {
+      // Hit check (before move) — threshold uses enemy radius
+      const hitDist = (enemy.radius || 24) + 4;
+      if (d <= hitDist || step >= d) {
         this._resolveProjectileHit(proj, enemy, mapEntry);
         continue;
       }
@@ -3099,6 +3138,182 @@ class ServerWorld {
     for (const [, p] of this.players) {
       this._savePlayer(p);
     }
+  }
+
+  /* ── friends system ─────────────────────────────────── */
+
+  _findPlayerByUsername(username) {
+    for (const [, p] of this.players) {
+      if (p.username === username) return p;
+    }
+    return null;
+  }
+
+  _buildFriendEntry(f) {
+    // Enrich with online status + character info
+    const online = this._findPlayerByUsername(f.friendUsername);
+    return {
+      username: f.friendUsername,
+      status: f.status,
+      direction: f.direction,
+      online: !!online,
+      charName: online ? online.name : null,
+      charClass: online ? online.charClass : null,
+      charLevel: online ? online.level : null
+    };
+  }
+
+  handleFriendRequest(player, msg) {
+    if (!player.username) return;
+    const targetName = String(msg.target || "").trim();
+    if (!targetName) return;
+
+    const database = require("./database");
+    const result = database.sendFriendRequest(player.username, targetName);
+
+    if (result.error) {
+      this.send(player.ws, { type: "friend_result", error: result.error });
+      return;
+    }
+
+    if (result.autoAccepted) {
+      // Notify both players
+      this.send(player.ws, { type: "friend_result", ok: true, message: "Friend request accepted!" });
+      this.handleFriendList(player);
+      const targetPlayer = this._findPlayerByUsername(result.friendUsername);
+      if (targetPlayer) this.handleFriendList(targetPlayer);
+    } else {
+      this.send(player.ws, { type: "friend_result", ok: true, message: `Friend request sent to ${targetName}.` });
+      // Notify target if online
+      const targetPlayer = this._findPlayerByUsername(result.friendUsername);
+      if (targetPlayer) {
+        this.send(targetPlayer.ws, {
+          type: "friend_request_received",
+          from: player.name,
+          fromUsername: player.username
+        });
+        this.handleFriendList(targetPlayer);
+      }
+    }
+  }
+
+  handleFriendAccept(player, msg) {
+    if (!player.username) return;
+    const fromUsername = String(msg.fromUsername || "").trim();
+    if (!fromUsername) return;
+
+    const database = require("./database");
+    const result = database.acceptFriendRequest(player.username, fromUsername);
+
+    if (result.error) {
+      this.send(player.ws, { type: "friend_result", error: result.error });
+      return;
+    }
+
+    this.send(player.ws, { type: "friend_result", ok: true, message: "Friend request accepted!" });
+    this.handleFriendList(player);
+
+    // Notify the requester if online
+    const requester = this._findPlayerByUsername(fromUsername);
+    if (requester) {
+      this.send(requester.ws, { type: "friend_result", ok: true, message: `${player.name} accepted your friend request!` });
+      this.handleFriendList(requester);
+    }
+  }
+
+  handleFriendReject(player, msg) {
+    if (!player.username) return;
+    const fromUsername = String(msg.fromUsername || "").trim();
+    if (!fromUsername) return;
+
+    const database = require("./database");
+    const result = database.rejectFriendRequest(player.username, fromUsername);
+
+    if (result.error) {
+      this.send(player.ws, { type: "friend_result", error: result.error });
+      return;
+    }
+
+    this.send(player.ws, { type: "friend_result", ok: true, message: "Friend request rejected." });
+    this.handleFriendList(player);
+  }
+
+  handleFriendRemove(player, msg) {
+    if (!player.username) return;
+    const friendUsername = String(msg.friendUsername || "").trim();
+    if (!friendUsername) return;
+
+    const database = require("./database");
+    const result = database.removeFriend(player.username, friendUsername);
+
+    if (result.error) {
+      this.send(player.ws, { type: "friend_result", error: result.error });
+      return;
+    }
+
+    this.send(player.ws, { type: "friend_result", ok: true, message: "Friend removed." });
+    this.handleFriendList(player);
+
+    // Update the other player's list if online
+    const other = this._findPlayerByUsername(friendUsername);
+    if (other) this.handleFriendList(other);
+  }
+
+  handleFriendList(player) {
+    if (!player.username) return;
+    const database = require("./database");
+    const friends = database.getFriendsList(player.username);
+    const list = friends.map(f => this._buildFriendEntry(f));
+    this.send(player.ws, { type: "friend_list", friends: list });
+  }
+
+  /* ── block handlers ───────────────────────────────── */
+
+  handleBlockPlayer(player, msg) {
+    if (!player.username) return;
+    const targetName = String(msg.target || "").trim();
+    if (!targetName) return;
+
+    const database = require("./database");
+    const result = database.blockPlayer(player.username, targetName);
+
+    if (result.error) {
+      this.send(player.ws, { type: "block_result", error: result.error });
+      return;
+    }
+
+    this.send(player.ws, { type: "block_result", ok: true, message: `${targetName} has been blocked.` });
+    // Refresh both lists since blocking removes friends
+    this.handleFriendList(player);
+    this.handleBlockList(player);
+
+    // Update the other player's friend list if online (friend was removed)
+    const other = this._findPlayerByUsername(result.blockedUsername);
+    if (other) this.handleFriendList(other);
+  }
+
+  handleUnblockPlayer(player, msg) {
+    if (!player.username) return;
+    const blockedUsername = String(msg.blockedUsername || "").trim();
+    if (!blockedUsername) return;
+
+    const database = require("./database");
+    const result = database.unblockPlayer(player.username, blockedUsername);
+
+    if (result.error) {
+      this.send(player.ws, { type: "block_result", error: result.error });
+      return;
+    }
+
+    this.send(player.ws, { type: "block_result", ok: true, message: "Player unblocked." });
+    this.handleBlockList(player);
+  }
+
+  handleBlockList(player) {
+    if (!player.username) return;
+    const database = require("./database");
+    const blocked = database.getBlockedList(player.username);
+    this.send(player.ws, { type: "block_list", blocked });
   }
 
   _savePlayer(p) {
@@ -3256,6 +3471,25 @@ class ServerWorld {
     if (!collision.isBlocked(nx, enemy.y, enemy.radius, floor)) enemy.x = nx;
     const ny = enemy.y + vy * dt;
     if (!collision.isBlocked(enemy.x, ny, enemy.radius, floor)) enemy.y = ny;
+  }
+
+  /** Returns true if any tile the enemy occupies is in the given tile set. */
+  _enemyOverlapsTiles(enemy, ts, tileSet) {
+    const ets = enemy.tileSize || 1;
+    if (ets <= 1) {
+      return tileSet.has(tileKey(Math.floor(enemy.x / ts), Math.floor(enemy.y / ts)));
+    }
+    const halfPx = (ets * ts) / 2;
+    const minTx = Math.floor((enemy.x - halfPx) / ts);
+    const minTy = Math.floor((enemy.y - halfPx) / ts);
+    const maxTx = Math.floor((enemy.x + halfPx - 1) / ts);
+    const maxTy = Math.floor((enemy.y + halfPx - 1) / ts);
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      for (let ty = minTy; ty <= maxTy; ty++) {
+        if (tileSet.has(tileKey(tx, ty))) return true;
+      }
+    }
+    return false;
   }
 
   // ── buff / debuff stat helpers ─────────────────────────
@@ -3695,6 +3929,7 @@ class ServerWorld {
       dead: e.dead,
       color: e.color,
       radius: e.radius,
+      tileSize: e.tileSize || 1,
       level: e.level || 1,
       floor: e.floor || 0,
       debuffs: (e.activeDebuffs || []).map(d => ({

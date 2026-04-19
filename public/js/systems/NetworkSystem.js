@@ -325,6 +325,42 @@ export class NetworkSystem {
     this.send({ type: "split_stack", container, index, qty });
   }
 
+  /* ── friends ── */
+
+  sendFriendRequest(target) {
+    this.send({ type: "friend_request", target });
+  }
+
+  sendFriendAccept(fromUsername) {
+    this.send({ type: "friend_accept", fromUsername });
+  }
+
+  sendFriendReject(fromUsername) {
+    this.send({ type: "friend_reject", fromUsername });
+  }
+
+  sendFriendRemove(friendUsername) {
+    this.send({ type: "friend_remove", friendUsername });
+  }
+
+  sendFriendListRequest() {
+    this.send({ type: "friend_list" });
+  }
+
+  /* ── blocked players ── */
+
+  sendBlockPlayer(target) {
+    this.send({ type: "block_player", target });
+  }
+
+  sendUnblockPlayer(blockedUsername) {
+    this.send({ type: "unblock_player", blockedUsername });
+  }
+
+  sendBlockListRequest() {
+    this.send({ type: "block_list" });
+  }
+
   /* ── message dispatcher ────────────────────────────── */
 
   onMessage(msg) {
@@ -485,6 +521,21 @@ export class NetworkSystem {
         this.game.ui.addMessage(`[System] ${msg.reason}`);
         // Auto-logout after being kicked
         setTimeout(() => { if (this.game.logout) this.game.logout(); }, 2000);
+        break;
+      case "friend_list":
+        this.onFriendList(msg);
+        break;
+      case "friend_result":
+        this.onFriendResult(msg);
+        break;
+      case "friend_request_received":
+        this.onFriendRequestReceived(msg);
+        break;
+      case "block_list":
+        this.onBlockList(msg);
+        break;
+      case "block_result":
+        this.onBlockResult(msg);
         break;
       default:
         break;
@@ -1778,6 +1829,45 @@ export class NetworkSystem {
     this.game.audio.play("pickup");
     const parts = (msg.gained || []).map(g => `${g.qty}x ${g.name}`).join(", ");
     this.game.ui.addMessage(`Dismantled ${msg.dismantledName} into ${parts}.`);
+  }
+
+  /* ── friend handlers ─────────────────────────────────── */
+
+  onFriendList(msg) {
+    this.game.ui._friendsList = msg.friends || [];
+    this.game.ui._friendsDirty = true;
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "friends") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onFriendResult(msg) {
+    if (msg.error) {
+      this.game.ui.addMessage(`[Friends] ${msg.error}`, "system");
+    } else if (msg.message) {
+      this.game.ui.addMessage(`[Friends] ${msg.message}`, "system");
+    }
+  }
+
+  onFriendRequestReceived(msg) {
+    this.game.ui.addMessage(`[Friends] ${msg.from} sent you a friend request!`, "system");
+    // Auto-refresh friends list
+    this.sendFriendListRequest();
+  }
+
+  onBlockList(msg) {
+    this.game.ui._blockedList = msg.blocked || [];
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "blocked") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onBlockResult(msg) {
+    if (msg.error) {
+      this.game.ui.addMessage(`[Social] ${msg.error}`, "system");
+    } else if (msg.message) {
+      this.game.ui.addMessage(`[Social] ${msg.message}`, "system");
+    }
   }
 
   /* ═══════════════════════════════════════════════════════

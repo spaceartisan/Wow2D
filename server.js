@@ -170,7 +170,7 @@ const startServer = (port) => {
             charRecord = msg.charData || {};
           }
 
-          playerId = world.addPlayer(ws, charRecord);
+          playerId = world.addPlayer(ws, charRecord, username);
           activeAccounts.set(username, playerId);
           return;
         }

@@ -251,6 +251,10 @@ export class Game {
       this.ui.toggleProfessions();
     }
 
+    if (this.input.wasPressed("o")) {
+      this.ui.toggleSocial();
+    }
+
     if (this.input.wasPressed("m")) {
       this.minimap.toggle();
     }

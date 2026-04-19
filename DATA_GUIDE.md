@@ -25,6 +25,7 @@ Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `publi
 | `attackCooldown` | number | Seconds between attacks |
 | `hitParticle` | string | *(optional)* Particle preset emitted when this enemy hits the player (default `"player_hit"`) |
 | `hitSfx` | string | *(optional)* SFX played when this enemy hits the player (default `"player_hit"`) |
+| `tileSize` | number | *(optional)* Enemy footprint in tiles: `1` (default, 48×48), `2` (96×96), or `3` (144×144). Radius, AoE overlap, projectile hit box, and minimap dot scale automatically. |
 | `loot` | array | Drop table (see below) |
 
 **Loot entries:**
@@ -218,6 +219,7 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 | `color` | string | Hex color fallback |
 | `type` | string | `"npc"`, `"quest_giver"`, `"vendor"`, `"banker"`, `"gathering"`, or `"crafting_station"` |
 | `defaultDialog` | string | Greeting text when no quest/shop action |
+| `dialogTree` | object | *(optional)* Branching dialog tree for world lore / conversation (see below) |
 | `questIds` | string[] | Quest IDs this NPC offers (quest_giver only) |
 | `shop` | string[] | Item IDs this NPC sells (vendor only) |
 
@@ -290,6 +292,65 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
    - `tx`/`ty` are tile coordinates
    - `floor` is optional (default 0 for ground floor, 1+ for upper floors)
 
+### Branching Dialog Trees (dialogTree)
+
+NPCs can have a `dialogTree` — a node-based branching conversation system for world lore, backstory, and NPC personality. If present, the dialog tree is shown when the player talks to the NPC and no quest dialog takes priority.
+
+The `dialogTree` is an object keyed by node ID. The `root` node is the entry point. Each node has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Dialog text shown to the player |
+| `options` | array | Clickable response buttons |
+
+**Option fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `label` | string | Button text |
+| `next` | string | *(optional)* Node ID to branch to (keeps dialog open) |
+| `action` | string | *(optional)* Action to perform: `"close"`, `"open_shop"`, `"open_bank"`, `"open_crafting"` |
+| `condition` | object | *(optional)* Show this option only when condition is met (see Conditions) |
+
+If an option has neither `next` nor `action`, clicking it closes the dialog.
+
+**Conditions** — an option's `condition` object can have any combination of:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `questComplete` | string | Quest ID must be in "completed" state |
+| `questActive` | string | Quest ID must be "active" or "ready_to_turn_in" |
+| `questNotStarted` | string | Quest ID must not be started yet (or doesn't exist) |
+| `minLevel` | number | Player level must be ≥ this value |
+
+**Example:**
+```json
+"dialogTree": {
+  "root": {
+    "text": "Welcome, traveler. What brings you to me?",
+    "options": [
+      { "label": "Tell me about this village", "next": "about_village" },
+      { "label": "What dangers lurk nearby?", "next": "about_dangers" },
+      { "label": "Farewell", "action": "close" }
+    ]
+  },
+  "about_village": {
+    "text": "Our village has stood for three centuries, sheltered by the ancient trees...",
+    "options": [
+      { "label": "Tell me about the trees", "next": "about_trees" },
+      { "label": "Back", "next": "root" }
+    ]
+  },
+  "about_dangers": {
+    "text": "Wolves have grown bold, and bandits lurk in the Darkwood.",
+    "options": [
+      { "label": "I heard rumors of something deeper", "next": "deeper_threat", "condition": { "questComplete": "wolf_cull" } },
+      { "label": "Back", "next": "root" }
+    ]
+  }
+}
+```
+
 ---
 
 ## quests.json
@@ -334,51 +395,67 @@ Top-level object keyed by quest ID. Quests are offered by NPCs listed in their `
 | `ready_to_turn_in` | All objectives met, waiting to turn in |
 | `completed` | Already turned in |
 
-Each dialog state has `text` (string) and `options` (array of `{ "label": string, "action": string }`).
+Each dialog state has `text` (string) and `options` (array of option objects).
 
-Valid actions: `"accept"`, `"complete"`, `"close"`
+**Option fields:**
 
-**Example:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `label` | string | Button text |
+| `action` | string | *(optional)* `"accept"`, `"complete"`, or `"close"` |
+| `next` | string | *(optional)* Key of another node in the same quest's `dialog` map — branches to that node without closing the dialog |
+| `condition` | object | *(optional)* Same condition system as NPC dialogTree (see above) |
+
+**Branching quest dialogs:** In addition to the four required state keys, a quest's `dialog` map can contain extra keyed nodes for branching conversations. Options in any state can use `"next": "node_key"` to branch into these extra nodes. This allows players to ask questions, get lore, or receive tactical advice before accepting/completing.
+
+**Example with branching:**
 ```json
-"wolf_cull": {
-  "id": "wolf_cull",
-  "name": "The Wolf Cull",
-  "giver": "elder_rowan",
-  "description": "Elder Rowan needs help thinning the wolf population.",
-  "level": 1,
-  "prerequisiteQuests": [],
-  "objectives": [
-    { "type": "kill", "target": "wolf", "count": 5, "label": "Slay 5 Timber Wolves" }
-  ],
-  "rewards": {
-    "xp": 150,
-    "gold": 38,
-    "items": ["noviceBlade", "minorHealingPotion"]
+"dialog": {
+  "not_started": {
+    "text": "Wolves have been terrorizing the trade road...",
+    "options": [
+      { "label": "I'll handle it.", "action": "accept" },
+      { "label": "Why are the wolves so aggressive?", "next": "wolf_lore" },
+      { "label": "Not now.", "action": "close" }
+    ]
   },
-  "dialog": {
-    "not_started": {
-      "text": "Wolves have been...",
-      "options": [
-        { "label": "I'll handle it.", "action": "accept" },
-        { "label": "Not now.", "action": "close" }
-      ]
-    },
-    "active": {
-      "text": "How goes the hunt? ({progress})",
-      "options": [
-        { "label": "Still working on it.", "action": "close" }
-      ]
-    },
-    "ready_to_turn_in": {
-      "text": "The wolves are thinned! Thank you.",
-      "options": [
-        { "label": "Glad to help.", "action": "complete" }
-      ]
-    },
-    "completed": {
-      "text": "The village is safer thanks to you.",
-      "options": []
-    }
+  "wolf_lore": {
+    "text": "Something deeper in the forest is driving them out. They're not hunting — they're fleeing.",
+    "options": [
+      { "label": "I'll help.", "action": "accept" },
+      { "label": "Back", "next": "not_started" }
+    ]
+  },
+  "active": {
+    "text": "How goes the hunt? ({progress})",
+    "options": [
+      { "label": "Any advice?", "next": "wolf_advice" },
+      { "label": "Still working on it.", "action": "close" }
+    ]
+  },
+  "wolf_advice": {
+    "text": "They gather near the forest edge at dusk. Start there.",
+    "options": [
+      { "label": "Thanks.", "action": "close" }
+    ]
+  },
+  "ready_to_turn_in": {
+    "text": "The wolves are thinned! Thank you.",
+    "options": [
+      { "label": "Glad to help.", "action": "complete" }
+    ]
+  },
+  "completed": {
+    "text": "The village is safer thanks to you.",
+    "options": [
+      { "label": "Has anything else changed?", "next": "foreshadow" }
+    ]
+  },
+  "foreshadow": {
+    "text": "The wolves are gone, but the deeper forest still feels... wrong.",
+    "options": [
+      { "label": "I'll keep my eyes open.", "action": "close" }
+    ]
   }
 }
 ```

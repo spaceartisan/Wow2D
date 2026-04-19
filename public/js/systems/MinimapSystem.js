@@ -157,8 +157,9 @@ export class MinimapSystem {
       const dx = (etx - sx) * scale;
       const dy = (ety - sy) * scale;
       if (dx < 0 || dy < 0 || dx >= this.miniSize || dy >= this.miniSize) continue;
+      const dotSize = 1 + ((e.tileSize || 1) - 1) * 2;
       mCtx.fillStyle = "#ff3333";
-      mCtx.fillRect(dx - 1, dy - 1, 3, 3);
+      mCtx.fillRect(dx - dotSize, dy - dotSize, 1 + dotSize * 2, 1 + dotSize * 2);
     }
 
     // ── Draw other players (cyan dots) ──

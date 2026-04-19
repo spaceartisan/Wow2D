@@ -38,6 +38,8 @@ export class InputSystem {
       } else if (event.button === 2) {
         this.mouse.rightClicked = true;
       }
+      this.mouse.clientX = event.clientX;
+      this.mouse.clientY = event.clientY;
     };
 
     this._onContextMenu = (event) => {

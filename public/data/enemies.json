@@ -22,6 +22,29 @@
       { "itemId": "minorHealingPotion", "chance": 0.10 }
     ]
   },
+  "wolf2": {
+    "name": "Timber Wolf2",
+    "tileSize": 2,
+    "maxHp": 60,
+    "damage": 9,
+    "speed": 105,
+    "xp": 20,
+    "goldMin": 2,
+    "goldMax": 5,
+    "respawnSeconds": 9,
+    "color": "#9c8a74",
+    "aggroRange": 210,
+    "attackRange": 34,
+    "attackCooldown": 1.35,
+    "hitParticle": "bite",
+    "hitSfx": "bite_hit",
+    "loot": [
+      { "itemId": "wolfPelt", "chance": 0.52 },
+      { "itemId": "wolfFang", "chance": 0.30 },
+      { "itemId": "wolftoothNecklace", "chance": 0.06 },
+      { "itemId": "minorHealingPotion", "chance": 0.10 }
+    ]
+  },
   "boar": {
     "name": "Wild Boar",
     "maxHp": 74,

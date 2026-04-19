@@ -80,6 +80,8 @@ export class EntitySystem {
         y: placement.ty * tileSize + tileSize / 2,
         color: def.color,
         dialog: def.defaultDialog,
+        defaultDialog: def.defaultDialog,
+        dialogTree: def.dialogTree || null,
         questIds: def.questIds || [],
         type: def.type || "npc",
         shop: def.shop || null,
@@ -540,6 +542,7 @@ export class EntitySystem {
 
       const x = Math.round(enemy.x - camera.x);
       const y = Math.round(enemy.y - camera.y);
+      const r = enemy.radius || 24;
 
       const img = sprites && sprites.get(`entities/${enemy.type}`);
       if (img) {
@@ -547,7 +550,7 @@ export class EntitySystem {
       } else {
         ctx.fillStyle = enemy.color;
         ctx.beginPath();
-        ctx.arc(x, y, enemy.radius || 15, 0, Math.PI * 2);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -555,7 +558,7 @@ export class EntitySystem {
         ctx.strokeStyle = "#f5df8e";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(x, y, (enemy.radius || 15) + 4, 0, Math.PI * 2);
+        ctx.arc(x, y, r + 4, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
@@ -654,7 +657,7 @@ export class EntitySystem {
       if (enemy.dead || (enemy.floor || 0) !== currentFloor) continue;
       const x = Math.round(enemy.x - camera.x);
       const y = Math.round(enemy.y - camera.y);
-      const r = enemy.radius || 15;
+      const r = enemy.radius || 24;
       if (Math.abs(mx - x) < r + 4 && Math.abs(my - y) < r + 4) {
         ctx.fillStyle = "#e8c8c8";
         ctx.font = "11px Trebuchet MS";

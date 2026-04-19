@@ -40,6 +40,8 @@ export class UISystem {
       skillsBody: document.getElementById("skills-body"),
       professionsPanel: document.getElementById("professions-panel"),
       professionsBody: document.getElementById("professions-body"),
+      socialPanel: document.getElementById("social-panel"),
+      socialBody: document.getElementById("social-body"),
       bankPanel: document.getElementById("bank-panel"),
       bankGrid: document.getElementById("bank-grid"),
       actionBar: document.getElementById("action-bar"),
@@ -54,6 +56,9 @@ export class UISystem {
     this.charSheetOpen = false;
     this.skillsOpen = false;
     this.professionsOpen = false;
+    this.socialOpen = false;
+    this._socialTab = "friends";
+    this._blockedList = [];
     this.shopOpen = false;
     this.bankOpen = false;
     this.craftingOpen = false;
@@ -84,6 +89,10 @@ export class UISystem {
     this._lootDropId = null;
     this._lootGold = 0;
     this._lootItem = null;
+
+    /* ── Friends state ── */
+    this._friendsList = [];
+    this._friendsDirty = false;
 
     /* ── DOM listener tracking (cleaned up in destroy()) ── */
     this._domHandlers = [];
@@ -136,6 +145,7 @@ export class UISystem {
     if (this.charSheetOpen) this.toggleCharSheet();
     if (this.skillsOpen) this.toggleSkills();
     if (this.professionsOpen) this.toggleProfessions();
+    if (this.socialOpen) this.toggleSocial();
     this.closeLootWindow();
     this.el.gameMenuPanel.classList.add("hidden");
     this.el.targetPanel.classList.add("hidden");
@@ -153,6 +163,7 @@ export class UISystem {
       "char-sheet-panel",
       "skills-panel",
       "professions-panel",
+      "social-panel",
       "npc-dialog-panel",
       "bank-panel"
     ];
@@ -234,6 +245,8 @@ export class UISystem {
           this.toggleSkills();
         } else if (action === "professions") {
           this.toggleProfessions();
+        } else if (action === "social") {
+          this.toggleSocial();
         }
       });
     });
@@ -250,6 +263,7 @@ export class UISystem {
         if (target === "char-sheet") this.toggleCharSheet();
         if (target === "skills") this.toggleSkills();
         if (target === "professions") this.toggleProfessions();
+        if (target === "social") this.toggleSocial();
         if (target === "bank") this.closeBank();
       });
     });
@@ -2389,6 +2403,62 @@ export class UISystem {
     if (fill) fill.style.width = `${pct}%`;
   }
 
+  /* ── Player context menu (right-click)  ───────────── */
+
+  showPlayerContextMenu(x, y, player) {
+    this._closeContextMenu();
+
+    const menu = document.createElement("div");
+    menu.className = "item-context-menu player-context-menu";
+
+    const header = document.createElement("div");
+    header.className = "player-ctx-header";
+    header.textContent = player.name;
+    menu.append(header);
+
+    const addOption = (label, callback) => {
+      const opt = document.createElement("div");
+      opt.className = "item-ctx-option";
+      opt.textContent = label;
+      opt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._closeContextMenu();
+        callback();
+      });
+      menu.append(opt);
+    };
+
+    addOption("Whisper", () => {
+      this.startWhisperTo(player.name);
+    });
+
+    addOption("Add Friend", () => {
+      this.game.network?.sendFriendRequest(player.name);
+    });
+
+    addOption("Block", () => {
+      this.game.network?.sendBlockPlayer(player.name);
+    });
+
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    document.body.append(menu);
+
+    // Clamp to viewport
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 4}px`;
+    if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 4}px`;
+
+    this._ctxMenu = menu;
+  }
+
+  startWhisperTo(name) {
+    if (this.chatInput) {
+      this.chatInput.value = `/w ${name} `;
+      this.chatInput.focus();
+    }
+  }
+
   /* ── Professions panel ─────────────────────────────── */
 
   toggleProfessions() {
@@ -2445,6 +2515,306 @@ export class UISystem {
 
       card.append(header, desc, barWrap, label);
       body.append(card);
+    }
+  }
+
+  /* ── Social Panel (Friends + Blocked) ─────────────── */
+
+  toggleSocial() {
+    this.socialOpen = !this.socialOpen;
+    this.el.socialPanel.classList.toggle("hidden", !this.socialOpen);
+    if (this.socialOpen) {
+      this.game.network?.sendFriendListRequest();
+      this.game.network?.sendBlockListRequest();
+      this.renderSocialContent();
+    }
+  }
+
+  renderSocialContent() {
+    const body = this.el.socialBody;
+    body.textContent = "";
+
+    /* ── Tab bar ── */
+    const tabs = document.createElement("div");
+    tabs.className = "social-tabs";
+
+    const friendsTab = document.createElement("button");
+    friendsTab.className = `social-tab ${this._socialTab === "friends" ? "active" : ""}`;
+    friendsTab.textContent = "Friends";
+    friendsTab.addEventListener("click", () => {
+      this._socialTab = "friends";
+      this.renderSocialContent();
+    });
+
+    const blockedTab = document.createElement("button");
+    blockedTab.className = `social-tab ${this._socialTab === "blocked" ? "active" : ""}`;
+    blockedTab.textContent = "Blocked";
+    blockedTab.addEventListener("click", () => {
+      this._socialTab = "blocked";
+      this.renderSocialContent();
+    });
+
+    tabs.append(friendsTab, blockedTab);
+    body.append(tabs);
+
+    if (this._socialTab === "friends") {
+      this._renderFriendsTab(body);
+    } else {
+      this._renderBlockedTab(body);
+    }
+  }
+
+  _renderFriendsTab(body) {
+    /* ── Add friend input ── */
+    const addRow = document.createElement("div");
+    addRow.className = "friends-add-row";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "friends-add-input";
+    input.placeholder = "Character name...";
+    input.maxLength = 16;
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    input.addEventListener("keyup", (e) => e.stopPropagation());
+    input.addEventListener("keypress", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        const name = input.value.trim();
+        if (name) {
+          this.game.network?.sendFriendRequest(name);
+          input.value = "";
+        }
+      }
+    });
+
+    const addBtn = document.createElement("button");
+    addBtn.className = "friends-add-btn";
+    addBtn.textContent = "Add";
+    addBtn.addEventListener("click", () => {
+      const name = input.value.trim();
+      if (name) {
+        this.game.network?.sendFriendRequest(name);
+        input.value = "";
+      }
+    });
+
+    addRow.append(input, addBtn);
+    body.append(addRow);
+
+    /* ── Categorize friends ── */
+    const friends = this._friendsList || [];
+    const accepted = friends.filter(f => f.status === "accepted");
+    const pendingIn = friends.filter(f => f.status === "pending" && f.direction === "received");
+    const pendingSent = friends.filter(f => f.status === "pending" && f.direction === "sent");
+
+    /* ── Pending incoming requests ── */
+    if (pendingIn.length > 0) {
+      const header = document.createElement("div");
+      header.className = "friends-section-header";
+      header.textContent = `Pending Requests (${pendingIn.length})`;
+      body.append(header);
+
+      for (const f of pendingIn) {
+        const row = document.createElement("div");
+        row.className = "friend-row friend-pending";
+
+        const name = document.createElement("span");
+        name.className = "friend-name";
+        name.textContent = f.username;
+
+        const actions = document.createElement("span");
+        actions.className = "friend-actions";
+
+        const acceptBtn = document.createElement("button");
+        acceptBtn.className = "friend-btn friend-accept-btn";
+        acceptBtn.textContent = "✓";
+        acceptBtn.title = "Accept";
+        acceptBtn.addEventListener("click", () => {
+          this.game.network?.sendFriendAccept(f.username);
+        });
+
+        const rejectBtn = document.createElement("button");
+        rejectBtn.className = "friend-btn friend-reject-btn";
+        rejectBtn.textContent = "✕";
+        rejectBtn.title = "Reject";
+        rejectBtn.addEventListener("click", () => {
+          this.game.network?.sendFriendReject(f.username);
+        });
+
+        actions.append(acceptBtn, rejectBtn);
+        row.append(name, actions);
+        body.append(row);
+      }
+    }
+
+    /* ── Accepted friends ── */
+    const onlineFriends = accepted.filter(f => f.online).sort((a, b) => a.charName?.localeCompare(b.charName));
+    const offlineFriends = accepted.filter(f => !f.online).sort((a, b) => a.username.localeCompare(b.username));
+
+    if (accepted.length > 0 || pendingIn.length === 0) {
+      const header = document.createElement("div");
+      header.className = "friends-section-header";
+      header.textContent = `Friends (${onlineFriends.length}/${accepted.length} online)`;
+      body.append(header);
+    }
+
+    for (const f of [...onlineFriends, ...offlineFriends]) {
+      const row = document.createElement("div");
+      row.className = `friend-row ${f.online ? "friend-online" : "friend-offline"}`;
+
+      const statusDot = document.createElement("span");
+      statusDot.className = `friend-status-dot ${f.online ? "online" : "offline"}`;
+
+      const info = document.createElement("span");
+      info.className = "friend-info";
+
+      const charName = document.createElement("span");
+      charName.className = "friend-name";
+      charName.textContent = f.online && f.charName ? f.charName : f.username;
+
+      info.append(charName);
+
+      if (f.online && f.charName) {
+        const detail = document.createElement("span");
+        detail.className = "friend-detail";
+        detail.textContent = ` Lv.${f.charLevel} ${(f.charClass || "").charAt(0).toUpperCase() + (f.charClass || "").slice(1)}`;
+        info.append(detail);
+      }
+
+      const actions = document.createElement("span");
+      actions.className = "friend-actions";
+
+      if (f.online && f.charName) {
+        const whisperBtn = document.createElement("button");
+        whisperBtn.className = "friend-btn friend-whisper-btn";
+        whisperBtn.textContent = "💬";
+        whisperBtn.title = "Whisper";
+        whisperBtn.addEventListener("click", () => {
+          this.startWhisperTo(f.charName);
+        });
+        actions.append(whisperBtn);
+      }
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "friend-btn friend-remove-btn";
+      removeBtn.textContent = "✕";
+      removeBtn.title = "Remove friend";
+      removeBtn.addEventListener("click", () => {
+        this.game.network?.sendFriendRemove(f.username);
+      });
+
+      actions.append(removeBtn);
+      row.append(statusDot, info, actions);
+      body.append(row);
+    }
+
+    /* ── Pending sent ── */
+    if (pendingSent.length > 0) {
+      const header = document.createElement("div");
+      header.className = "friends-section-header";
+      header.textContent = `Sent Requests (${pendingSent.length})`;
+      body.append(header);
+
+      for (const f of pendingSent) {
+        const row = document.createElement("div");
+        row.className = "friend-row friend-pending-sent";
+
+        const name = document.createElement("span");
+        name.className = "friend-name";
+        name.textContent = f.username;
+
+        const label = document.createElement("span");
+        label.className = "friend-pending-label";
+        label.textContent = "Pending...";
+
+        row.append(name, label);
+        body.append(row);
+      }
+    }
+
+    if (friends.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "friends-empty";
+      empty.textContent = "No friends yet. Add one above!";
+      body.append(empty);
+    }
+  }
+
+  _renderBlockedTab(body) {
+    /* ── Block player input ── */
+    const addRow = document.createElement("div");
+    addRow.className = "friends-add-row";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "friends-add-input";
+    input.placeholder = "Character name...";
+    input.maxLength = 16;
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    input.addEventListener("keyup", (e) => e.stopPropagation());
+    input.addEventListener("keypress", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        const name = input.value.trim();
+        if (name) {
+          this.game.network?.sendBlockPlayer(name);
+          input.value = "";
+        }
+      }
+    });
+
+    const blockBtn = document.createElement("button");
+    blockBtn.className = "friends-add-btn";
+    blockBtn.textContent = "Block";
+    blockBtn.addEventListener("click", () => {
+      const name = input.value.trim();
+      if (name) {
+        this.game.network?.sendBlockPlayer(name);
+        input.value = "";
+      }
+    });
+
+    addRow.append(input, blockBtn);
+    body.append(addRow);
+
+    /* ── Blocked list ── */
+    const blocked = this._blockedList || [];
+
+    if (blocked.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "friends-empty";
+      empty.textContent = "No blocked players.";
+      body.append(empty);
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "friends-section-header";
+    header.textContent = `Blocked (${blocked.length})`;
+    body.append(header);
+
+    for (const b of blocked) {
+      const row = document.createElement("div");
+      row.className = "friend-row blocked-row";
+
+      const name = document.createElement("span");
+      name.className = "friend-name";
+      name.textContent = b.blockedUsername;
+
+      const actions = document.createElement("span");
+      actions.className = "friend-actions";
+
+      const unblockBtn = document.createElement("button");
+      unblockBtn.className = "friend-btn friend-reject-btn";
+      unblockBtn.textContent = "✕";
+      unblockBtn.title = "Unblock";
+      unblockBtn.addEventListener("click", () => {
+        this.game.network?.sendUnblockPlayer(b.blockedUsername);
+      });
+
+      actions.append(unblockBtn);
+      row.append(name, actions);
+      body.append(row);
     }
   }
 }

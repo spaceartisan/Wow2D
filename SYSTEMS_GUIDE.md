@@ -34,8 +34,9 @@ All values are sourced directly from the codebase. If something below disagrees 
 25. [Gathering System](#25-gathering-system)
 26. [Crafting System](#26-crafting-system)
 27. [Label Toggles & Hover Names](#27-label-toggles--hover-names)
-28. [End-to-End Flow Examples](#28-end-to-end-flow-examples)
-29. [Glossary](#29-glossary)
+28. [Branching Dialog System](#28-branching-dialog-system)
+29. [End-to-End Flow Examples](#29-end-to-end-flow-examples)
+30. [Glossary](#30-glossary)
 
 ---
 
@@ -1320,13 +1321,69 @@ The client's `onCombatVisual()` handler branches on `projectileHit`, `selfTarget
 
 ---
 
-## 28. End-to-End Flow Examples
+## 28. Branching Dialog System
+
+**File:** `public/js/systems/QuestSystem.js`
+
+NPCs and quests support a node-based branching dialog system. The core engine is `_showDialogNode(npc, node, nodeMap, ctx)`.
+
+### Dialog priority (interactWithNPC)
+
+When a player interacts with an NPC, `QuestSystem.interactWithNPC()` checks in priority order:
+1. **Ready-to-turn-in quests** — shows quest turn-in dialog
+2. **Active quests** — shows quest progress dialog
+3. **New available quests** — shows quest offer dialog
+4. **Completed quests** — shows post-completion dialog (from quest `dialog.completed`)
+5. **NPC default dialog** — `_showNpcDefaultDialog()` checks for `npc.dialogTree.root` first, falls back to legacy `defaultDialog` string
+
+### Dialog nodes
+
+Each node is an object with `text` (string) and `options` (array). Options can:
+- **Branch:** `"next": "nodeId"` — navigates to another node in the same node map, keeping the dialog open
+- **Act:** `"action": "accept"` / `"complete"` / `"close"` — performs a quest action or closes the dialog
+- **Open service:** `"action": "open_shop"` / `"open_bank"` / `"open_crafting"` — closes dialog and opens the NPC's service panel
+- **Condition-gate:** `"condition": { ... }` — hides the option unless all conditions pass
+
+### Condition evaluation (_checkCondition)
+
+| Key | Check |
+|-----|-------|
+| `questComplete` | Quest state === "completed" |
+| `questActive` | Quest state === "active" or "ready_to_turn_in" |
+| `questNotStarted` | Quest state is missing or "not_started" |
+| `minLevel` | Player level ≥ value |
+
+All keys are AND-combined — every specified key must pass.
+
+### Service button auto-append (_appendServiceActions)
+
+If a dialog node's options don't already include a service action (`open_shop`, `open_bank`, `open_crafting`), `_appendServiceActions()` checks the NPC's type and appends the appropriate button:
+- Vendors (have `shop[]`) → "Browse Wares"
+- Bankers (`type: "banker"`) → "Open Bank"
+- Crafting stations (`type: "crafting_station"`) → "Open {skill name}"
+
+### Text substitution
+
+Quest dialog text supports `{progress}` — replaced with the player's current kill count for active quest objectives.
+
+### NPC dialogTree vs quest dialog
+
+| Source | Node map | When used |
+|--------|----------|-----------|
+| `npc.dialogTree` | keyed by node ID, entry point is `root` | Default NPC conversation (no quest dialog active) |
+| `quest.dialog` | keyed by state (`not_started`, `active`, etc.) + extra branching nodes | Quest-specific conversation |
+
+Quest dialog takes priority. Both use the same `_showDialogNode()` engine.
+
+---
+
+## 29. End-to-End Flow Examples
 
 Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 28a. Melee Attack
+### 29a. Melee Attack
 
 ```
 1. Player clicks enemy                      [client — CombatSystem.handleWorldClick]
@@ -1361,7 +1418,7 @@ Step-by-step traces of common game actions from input to pixels on screen.
 
 ---
 
-### 28b. Ranged Attack (Bow)
+### 29b. Ranged Attack (Bow)
 
 ```
 1. Player clicks enemy                      [client]
@@ -1404,7 +1461,7 @@ Key difference from melee: **damage is deferred**. The server's invisible projec
 
 ---
 
-### 28c. Player Death and Respawn
+### 29c. Player Death and Respawn
 
 ```
 1. Enemy attacks player in updateEnemyAi()  [server]
@@ -1444,7 +1501,7 @@ The `respawn` client→server message is a no-op. Respawn is entirely timer-driv
 
 ---
 
-### 28d. Equipping an Item
+### 29d. Equipping an Item
 
 ```
 1. Player clicks weapon in inventory        [client — UISystem]
@@ -1484,7 +1541,7 @@ The client's optimistic swap gives instant UI feedback. The server response over
 
 ---
 
-### 28e. Map Change via Portal
+### 29e. Map Change via Portal
 
 ```
 1. checkPortals() detects overlap           [client — Game.update, every frame]
@@ -1521,7 +1578,7 @@ The client loads map data *first*, then tells the server. If the server rejects 
 
 ---
 
-### 28f. Buying from a Shop
+### 29f. Buying from a Shop
 
 ```
 1. Player clicks "Buy" in shop UI           [client — UISystem]
@@ -1720,7 +1777,7 @@ When a player changes floors via stairs, their position is snapped to the center
 
 ---
 
-### 28g. Using a Consumable (Health Potion)
+### 29g. Using a Consumable (Health Potion)
 
 ```
 1. Player clicks potion in inventory/hotbar [client — UISystem]
@@ -1744,7 +1801,7 @@ When a player changes floors via stairs, their position is snapped to the center
 
 ---
 
-## 29. Glossary
+## 30. Glossary
 
 | Term | Definition |
 |------|-----------|

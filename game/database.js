@@ -50,6 +50,21 @@ db.exec(`
     created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
     expires_at  INTEGER NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS friends (
+    username        TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
+    friend_username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    created_at      INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+    PRIMARY KEY (username, friend_username)
+  );
+
+  CREATE TABLE IF NOT EXISTS blocked_players (
+    username         TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
+    blocked_username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
+    created_at       INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+    PRIMARY KEY (username, blocked_username)
+  );
 `);
 
 /* ── add progression columns if missing (safe migration) ──── */
@@ -104,6 +119,20 @@ const stmts = {
   deleteSession:  db.prepare("DELETE FROM sessions WHERE token = ?"),
   deleteUserSessions: db.prepare("DELETE FROM sessions WHERE username = ?"),
   cleanExpiredSessions: db.prepare("DELETE FROM sessions WHERE expires_at <= ?"),
+
+  /* friends */
+  insertFriend:       db.prepare("INSERT OR IGNORE INTO friends (username, friend_username, status) VALUES (?, ?, ?)"),
+  getFriend:          db.prepare("SELECT * FROM friends WHERE username = ? AND friend_username = ?"),
+  updateFriendStatus: db.prepare("UPDATE friends SET status = ? WHERE username = ? AND friend_username = ?"),
+  deleteFriend:       db.prepare("DELETE FROM friends WHERE username = ? AND friend_username = ?"),
+  getFriendsList:     db.prepare("SELECT * FROM friends WHERE username = ? OR friend_username = ?"),
+  findAccountByCharName: db.prepare("SELECT DISTINCT a.username FROM accounts a JOIN characters c ON c.username = a.username WHERE c.name = ? COLLATE NOCASE LIMIT 1"),
+
+  /* blocked players */
+  insertBlock:    db.prepare("INSERT OR IGNORE INTO blocked_players (username, blocked_username) VALUES (?, ?)"),
+  deleteBlock:    db.prepare("DELETE FROM blocked_players WHERE username = ? AND blocked_username = ?"),
+  getBlock:       db.prepare("SELECT * FROM blocked_players WHERE username = ? AND blocked_username = ?"),
+  getBlockedList: db.prepare("SELECT * FROM blocked_players WHERE username = ?"),
 };
 
 /* ── helpers ──────────────────────────────────────────── */
@@ -271,6 +300,118 @@ function cleanExpiredSessions() {
   stmts.cleanExpiredSessions.run(Date.now());
 }
 
+/* ── friends API ──────────────────────────────────────── */
+
+function sendFriendRequest(username, targetCharName) {
+  // Look up account by character name
+  const row = stmts.findAccountByCharName.get(targetCharName);
+  if (!row) return { error: "Player not found." };
+  const friendUsername = row.username;
+  if (friendUsername === username) return { error: "You cannot add yourself." };
+
+  // Check if either party has blocked the other
+  if (stmts.getBlock.get(username, friendUsername)) return { error: "You have blocked that player." };
+  if (stmts.getBlock.get(friendUsername, username)) return { error: "Unable to send friend request." };
+
+  // Check if any relationship already exists (in either direction)
+  const existing = stmts.getFriend.get(username, friendUsername);
+  const reverse = stmts.getFriend.get(friendUsername, username);
+  if (existing || reverse) {
+    if ((existing && existing.status === "accepted") || (reverse && reverse.status === "accepted")) {
+      return { error: "Already friends." };
+    }
+    if (existing && existing.status === "pending") {
+      return { error: "Friend request already sent." };
+    }
+    if (reverse && reverse.status === "pending") {
+      // They already sent us a request — auto-accept
+      stmts.updateFriendStatus.run("accepted", friendUsername, username);
+      return { ok: true, autoAccepted: true, friendUsername };
+    }
+  }
+
+  stmts.insertFriend.run(username, friendUsername, "pending");
+  return { ok: true, friendUsername };
+}
+
+function acceptFriendRequest(username, fromUsername) {
+  const row = stmts.getFriend.get(fromUsername, username);
+  if (!row || row.status !== "pending") return { error: "No pending request from that player." };
+  stmts.updateFriendStatus.run("accepted", fromUsername, username);
+  return { ok: true };
+}
+
+function rejectFriendRequest(username, fromUsername) {
+  const row = stmts.getFriend.get(fromUsername, username);
+  if (!row || row.status !== "pending") return { error: "No pending request from that player." };
+  stmts.deleteFriend.run(fromUsername, username);
+  return { ok: true };
+}
+
+function removeFriend(username, friendUsername) {
+  // Could be stored in either direction
+  const a = stmts.getFriend.get(username, friendUsername);
+  const b = stmts.getFriend.get(friendUsername, username);
+  if (a) stmts.deleteFriend.run(username, friendUsername);
+  if (b) stmts.deleteFriend.run(friendUsername, username);
+  if (!a && !b) return { error: "Not on your friends list." };
+  return { ok: true };
+}
+
+function getFriendsList(username) {
+  const rows = stmts.getFriendsList.all(username, username);
+  // Normalize: return each relationship from the perspective of `username`
+  return rows.map(r => {
+    const isRequester = r.username === username;
+    return {
+      friendUsername: isRequester ? r.friend_username : r.username,
+      status: r.status,
+      direction: isRequester ? "sent" : "received"
+    };
+  });
+}
+
+/* ── blocked players API ─────────────────────────────── */
+
+function blockPlayer(username, targetCharName) {
+  const row = stmts.findAccountByCharName.get(targetCharName);
+  if (!row) return { error: "Player not found." };
+  const blockedUsername = row.username;
+  if (blockedUsername === username) return { error: "You cannot block yourself." };
+
+  const existing = stmts.getBlock.get(username, blockedUsername);
+  if (existing) return { error: "Player already blocked." };
+
+  // Remove any friend relationship in either direction
+  stmts.deleteFriend.run(username, blockedUsername);
+  stmts.deleteFriend.run(blockedUsername, username);
+
+  stmts.insertBlock.run(username, blockedUsername);
+  return { ok: true, blockedUsername };
+}
+
+function unblockPlayer(username, blockedUsername) {
+  const existing = stmts.getBlock.get(username, blockedUsername);
+  if (!existing) return { error: "Player is not blocked." };
+  stmts.deleteBlock.run(username, blockedUsername);
+  return { ok: true };
+}
+
+function isBlocked(username, byUsername) {
+  return !!stmts.getBlock.get(byUsername, username);
+}
+
+function getBlockedList(username) {
+  return stmts.getBlockedList.all(username).map(r => ({
+    blockedUsername: r.blocked_username,
+    createdAt: r.created_at
+  }));
+}
+
+function getCharactersByUsername(username) {
+  return stmts.getCharacters.all(username);
+}
+
 /* ── migration: import old accounts.json if it exists ─── */
 
 function migrateFromJson() {
@@ -316,5 +457,15 @@ module.exports = {
   deleteCharacter,
   loadCharacter,
   saveCharacterProgress,
-  cleanExpiredSessions
+  cleanExpiredSessions,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  removeFriend,
+  getFriendsList,
+  getCharactersByUsername,
+  blockPlayer,
+  unblockPlayer,
+  isBlocked,
+  getBlockedList
 };

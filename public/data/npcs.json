@@ -5,7 +5,82 @@
     "color": "#d4b17c",
     "type": "quest_giver",
     "defaultDialog": "The forest road must stay open for trade.",
-    "questIds": ["wolf_cull", "boar_menace"]
+    "questIds": ["wolf_cull", "boar_menace"],
+    "dialogTree": {
+      "root": {
+        "text": "The forest road must stay open for trade. What brings you to me?",
+        "options": [
+          { "label": "Tell me about Eldengrove", "next": "about_eldengrove" },
+          { "label": "Who are you?", "next": "about_self" },
+          { "label": "What dangers lurk in the forest?", "next": "about_dangers" },
+          { "label": "Farewell", "action": "close" }
+        ]
+      },
+      "about_eldengrove": {
+        "text": "Eldengrove has stood for over three centuries, sheltered by the ancient Eldentrees. Our ancestors planted the first saplings here after fleeing the Sundering — a great war that shattered the old kingdoms. The trees grew tall and strong, and the village grew with them.",
+        "options": [
+          { "label": "What was the Sundering?", "next": "the_sundering" },
+          { "label": "Tell me about the Eldentrees", "next": "eldentrees" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "the_sundering": {
+        "text": "Ages ago, the great kingdoms warred over a source of primal magic called the Wellspring. Their greed tore the land apart. Mountains split, rivers changed course, and entire cities vanished overnight. The survivors scattered to the edges of the world. We are the descendants of those who found refuge here.",
+        "options": [
+          { "label": "Does the Wellspring still exist?", "next": "wellspring" },
+          { "label": "Back", "next": "about_eldengrove" }
+        ]
+      },
+      "wellspring": {
+        "text": "Some say the Wellspring was destroyed in the cataclysm. Others whisper that it merely sleeps, hidden deep beneath the roots of the world. I've heard strange stories from travelers — ruins glowing with old magic, beasts twisted by unnatural power. Perhaps the Wellspring stirs again.",
+        "options": [
+          { "label": "That sounds dangerous", "next": "about_dangers" },
+          { "label": "Back", "next": "about_eldengrove" }
+        ]
+      },
+      "eldentrees": {
+        "text": "The Eldentrees are ancient beyond reckoning. Their bark is harder than iron, and their roots drink deep from hidden springs. The grove's healers say the trees carry a faint resonance — a hum of the old magic. Whether that's true or just folklore, the trees have kept us safe. Nothing dark has ever breached the grove while they stand.",
+        "options": [
+          { "label": "Could the trees be connected to the Wellspring?", "next": "wellspring" },
+          { "label": "Back", "next": "about_eldengrove" }
+        ]
+      },
+      "about_self": {
+        "text": "I am the keeper of Eldengrove, as my father was before me, and his mother before him. My duty is to the people here — settling disputes, organizing the guard, and making sure the roads stay open. It's thankless work, but someone must do it.",
+        "options": [
+          { "label": "Tell me about Captain Brenn", "next": "about_brenn" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "about_brenn": {
+        "text": "Brenn is captain of Eldengrove's guard. Good steel and a sharp mind, that one. He's been worried about bandit activity in the Darkwood — says they're scouting our trade routes. I trust his judgment. If he asks for your help, I'd listen.",
+        "options": [
+          { "label": "What is the Darkwood?", "next": "about_darkwood" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "about_dangers": {
+        "text": "The wolves have been bolder than usual, straying from the deep woods to threaten the road. The boars are worse — smashing fences, destroying crops. And beyond them, in the Darkwood, Captain Brenn reports bandit activity. Something is pushing the wildlife out of its territory, and I don't like it one bit.",
+        "options": [
+          { "label": "What is the Darkwood?", "next": "about_darkwood" },
+          { "label": "Why are the animals so aggressive?", "next": "animal_aggression" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "about_darkwood": {
+        "text": "The Darkwood is the dense forest to the south and east. Sunlight barely reaches the forest floor there. It's always been wild country — wolves, boars, and the occasional bandit camp. But lately travelers speak of stranger things: unnatural sounds at night, trees that seem to move when you're not looking. I'd advise caution if you venture there.",
+        "options": [
+          { "label": "Back", "next": "about_dangers" }
+        ]
+      },
+      "animal_aggression": {
+        "text": "That's the question, isn't it? The old-timers say the Eldentrees used to keep the wildlife calm — some kind of natural harmony. But something has changed. The animals seem frightened, like they're fleeing from something deeper in the forest. Whatever it is, it hasn't shown itself yet.",
+        "options": [
+          { "label": "Could it be related to the Wellspring?", "next": "wellspring" },
+          { "label": "Back", "next": "about_dangers" }
+        ]
+      }
+    }
   },
   "captain_brenn": {
     "id": "captain_brenn",
@@ -13,7 +88,71 @@
     "color": "#7a9ecf",
     "type": "quest_giver",
     "defaultDialog": "Bandits watch these woods. Keep your steel close.",
-    "questIds": ["bandit_scouts"]
+    "questIds": ["bandit_scouts"],
+    "dialogTree": {
+      "root": {
+        "text": "Bandits watch these woods. Keep your steel close. What do you need?",
+        "options": [
+          { "label": "What's the situation with the bandits?", "next": "bandit_situation" },
+          { "label": "Tell me about the guard", "next": "about_guard" },
+          { "label": "Any news from outside Eldengrove?", "next": "outside_news" },
+          { "label": "Farewell", "action": "close" }
+        ]
+      },
+      "bandit_situation": {
+        "text": "We've spotted scouts along the trade road — small groups, watching from the treeline. They're not attacking caravans yet, but they're mapping our routes. That means someone is planning something bigger. I've sent word to the nearest garrison, but help is weeks away.",
+        "options": [
+          { "label": "Who leads them?", "next": "bandit_leader" },
+          { "label": "Where are they coming from?", "next": "bandit_origin" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "bandit_leader": {
+        "text": "We don't know for certain. The scouts we've captured won't talk — they're more afraid of their leader than they are of my blade. One of them had a marking on his arm, a burned brand shaped like a broken crown. I've never seen the symbol before, but it speaks of organization. This isn't some ragtag band of thieves.",
+        "options": [
+          { "label": "A broken crown... interesting", "next": "broken_crown" },
+          { "label": "Back", "next": "bandit_situation" }
+        ]
+      },
+      "broken_crown": {
+        "text": "Aye, I've been asking around about it. Old Rowan mentioned it might be tied to the Sundering — the symbol of one of the fallen kingdoms. If someone is flying that banner again, it means trouble far beyond a few stolen caravans.",
+        "options": [
+          { "label": "Back", "next": "bandit_situation" }
+        ]
+      },
+      "bandit_origin": {
+        "text": "They've been coming from the deep Darkwood, beyond the boar territory. There are old ruins there — crumbling towers and overgrown walls from before the Sundering. Perfect hideout for anyone who doesn't want to be found.",
+        "options": [
+          { "label": "Have you explored those ruins?", "next": "ruins" },
+          { "label": "Back", "next": "bandit_situation" }
+        ]
+      },
+      "ruins": {
+        "text": "I sent a patrol once. Two good soldiers. They came back pale-faced, saying the ruins felt wrong — like the stones were watching them. Could be superstition, could be something real. Either way, I don't have the men to investigate properly. Not with the bandits to worry about too.",
+        "options": [
+          { "label": "Back", "next": "bandit_situation" }
+        ]
+      },
+      "about_guard": {
+        "text": "Eldengrove's guard is small — a dozen soldiers at best. The Elder keeps asking the Crown for reinforcements, but we're a backwater village in their eyes. We make do with what we have. Every blade helps, if you're offering.",
+        "options": [
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "outside_news": {
+        "text": "A merchant caravan passed through last week. They spoke of unrest in the northern cities — strange lights in the sky, earthquakes where there shouldn't be any. The world's getting stranger, friend. Whatever's happening, I don't think it's limited to our little patch of forest.",
+        "options": [
+          { "label": "Strange lights?", "next": "strange_lights" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "strange_lights": {
+        "text": "Green and gold, the merchant said. Like pillars of light shooting up from the ground in the far north. He thought it was aurora, but he's traveled the north for twenty years and never seen the like. I don't know what to make of it. But between that, the bandits, and the wild beasts... something is stirring.",
+        "options": [
+          { "label": "Back", "next": "root" }
+        ]
+      }
+    }
   },
   "innkeeper_lora": {
     "id": "innkeeper_lora",
@@ -22,7 +161,51 @@
     "type": "vendor",
     "defaultDialog": "Rest a while. Need supplies? I keep a stock of potions and remedies.",
     "questIds": [],
-    "shop": ["minorHealingPotion", "healingPotion", "greaterHealingPotion", "minorManaPotion", "manaPotion", "antidote", "arrowBundle"]
+    "shop": ["minorHealingPotion", "healingPotion", "greaterHealingPotion", "minorManaPotion", "manaPotion", "antidote", "arrowBundle"],
+    "dialogTree": {
+      "root": {
+        "text": "Welcome, traveler! Rest a while. I keep a good stock of potions if you need them.",
+        "options": [
+          { "label": "Browse Wares", "action": "open_shop" },
+          { "label": "What's the news around here?", "next": "local_news" },
+          { "label": "Tell me about the inn", "next": "about_inn" },
+          { "label": "Goodbye", "action": "close" }
+        ]
+      },
+      "local_news": {
+        "text": "Travelers have been scarce lately — the wolves on the road scare off all but the bravest merchants. I've heard Elder Rowan is looking for someone to deal with them. Captain Brenn is always muttering about bandits too. Strange times.",
+        "options": [
+          { "label": "Anyone interesting passed through?", "next": "travelers" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "travelers": {
+        "text": "A hooded scholar stopped here a fortnight ago. Ordered nothing but water and spent the whole evening scribbling in a journal. Asked me about the Eldentrees — how old they were, whether they ever glowed. Odd questions. Left before dawn without a word.",
+        "options": [
+          { "label": "Glowing trees?", "next": "glowing_trees" },
+          { "label": "Back", "next": "local_news" }
+        ]
+      },
+      "glowing_trees": {
+        "text": "My grandmother used to tell stories about that. On certain nights, the oldest Eldentrees would shimmer with a faint golden light. She said it was the will of the forest — keeping the darkness out. I haven't seen it myself, but after that scholar's questions, I wonder if there's truth to the old tales.",
+        "options": [
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "about_inn": {
+        "text": "The Silver Stump has been in my family for three generations. It's not much, but it's warm, dry, and the ale is honest. Most of Eldengrove gathers here in the evenings. You learn a lot tending bar — who's fighting, who's in love, who's got secrets. If you need to know something about this village, I'm a good person to ask.",
+        "options": [
+          { "label": "Any village secrets?", "next": "secrets" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "secrets": {
+        "text": "Ha! A good barkeep never tells... well, not for free. But I'll give you this one: Banker Tomas used to be an adventurer himself, years ago. Came to Eldengrove with a chest of gold and a limp he won't explain. If you ever want a story about the old days, buy him an ale.",
+        "options": [
+          { "label": "Back", "next": "root" }
+        ]
+      }
+    }
   },
   "blacksmith_kael": {
     "id": "blacksmith_kael",
@@ -39,7 +222,44 @@
     "color": "#8cb87a",
     "type": "banker",
     "defaultDialog": "Your valuables are safe with me. Need to make a deposit?",
-    "questIds": []
+    "questIds": [],
+    "dialogTree": {
+      "root": {
+        "text": "Your valuables are safe with me. What can I do for you?",
+        "options": [
+          { "label": "Open Bank", "action": "open_bank" },
+          { "label": "I heard you were an adventurer once", "next": "past_life" },
+          { "label": "Goodbye", "action": "close" }
+        ]
+      },
+      "past_life": {
+        "text": "Lora's been talking, has she? ...Aye, it's true. I spent fifteen years on the road — dungeon delves, monster hunts, the whole lot. Made a fortune and nearly lost my life more times than I care to count. The limp is a souvenir from a cave troll in the Ashpeak Mountains.",
+        "options": [
+          { "label": "Why did you stop?", "next": "why_stopped" },
+          { "label": "Tell me about Ashpeak", "next": "ashpeak" },
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "why_stopped": {
+        "text": "Found something worth more than gold — peace. After the troll nearly took my leg, I spent a month healing in a village not unlike this one. Watched the sun set over green fields, listened to children laugh. Decided right then that my adventuring days were over. Came here, built the bank, and never looked back. Well... almost never.",
+        "options": [
+          { "label": "Almost never?", "next": "almost_never" },
+          { "label": "Back", "next": "past_life" }
+        ]
+      },
+      "almost_never": {
+        "text": "Some nights the old itch comes back. When I hear about ruins in the Darkwood, or old magic stirring... part of me wants to pick up a sword again. But these hands are better suited to counting coins now. Besides, the world always has new adventurers. Like you.",
+        "options": [
+          { "label": "Back", "next": "root" }
+        ]
+      },
+      "ashpeak": {
+        "text": "The Ashpeak Mountains lie far to the north — volcanic peaks wreathed in smoke. The dwarves mine there, deeper than anyone else dares. I went looking for a legendary weapon — the Emberbrand. Never found it, but I found the troll. Or rather, it found me. Lost two companions in that delve. I still think about them.",
+        "options": [
+          { "label": "Back", "next": "past_life" }
+        ]
+      }
+    }
   },
   "miner_gruff": {
     "id": "miner_gruff",
