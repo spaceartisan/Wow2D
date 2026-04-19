@@ -1,9 +1,22 @@
 /* ════════════════════════════════════════════════════════════
-   AZERFALL – Admin Panel Client
+   AZERFALL ENGINE – Admin Panel Client
    ════════════════════════════════════════════════════════════ */
 
 let adminKey = "";
 let questDefs = {};   // quest id → { name, ... } from quests.json
+
+/* ── Theme: load game name from theme.json ─────────────────── */
+(async () => {
+  try {
+    const theme = await fetch("/data/theme.json").then(r => r.json());
+    const name = theme.gameName || "Game";
+    document.title = `${name} Admin`;
+    const h1 = document.querySelector("#login-overlay h1");
+    if (h1) h1.textContent = `${name} Admin`;
+    const logo = document.querySelector(".logo");
+    if (logo) logo.innerHTML = `${name}<br><span>Admin Panel</span>`;
+  } catch (_) { /* keep defaults */ }
+})();
 
 /* ── API helper ────────────────────────────────────────────── */
 

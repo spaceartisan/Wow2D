@@ -1,0 +1,56 @@
+{
+  "gameName": "Azerfall",
+  "gameSubtitle": "Top-Down MMO",
+  "tagline": "A frontier of old roads and deep woods",
+  "welcomeMessage": "Welcome to Azerfall, a frontier of old roads and deep woods.",
+  "defaultMap": "eldengrove",
+  "charSelectTitle": "Choose Your Champion",
+  "createCharTitle": "Create Character",
+  "versionText": "v1.0 — Local Prototype",
+  "logoGlyph": "assets/icons/logo.png",
+
+  "ui": {
+    "fontFamily": "\"Trebuchet MS\", \"Segoe UI\", sans-serif",
+    "fontSize": "15px",
+    "borderRadius": "6px",
+
+    "colors": {
+      "bgDark": "#0c0e0a",
+      "panelBg": "rgba(18, 15, 9, 0.92)",
+      "panelBgSolid": "#1a160d",
+      "panelBorder": "#8c7449",
+      "panelBorderDim": "#5c4d30",
+      "accentGold": "#d4a943",
+      "accentGoldBright": "#ffd866",
+      "textMain": "#e7d7b2",
+      "textMuted": "#9e9279",
+      "textBright": "#fff5e0",
+      "hp": "#9f2423",
+      "hpGrad": "#6a1414",
+      "mana": "#2a5f96",
+      "manaGrad": "#1a3f68",
+      "xp": "#b98d2f",
+      "xpGrad": "#74561f",
+      "enemy": "#852020",
+      "btnBg": "linear-gradient(180deg, #584020 0%, #3a2810 100%)",
+      "btnBorder": "#9e7d4a",
+      "btnHover": "brightness(1.2)",
+      "danger": "#a83030",
+      "success": "#3f8a3f"
+    },
+
+    "login": {
+      "containerBorderRadius": "10px",
+      "containerPadding": "36px 32px 24px",
+      "titleFontSize": "38px",
+      "taglineFontSize": "13px",
+      "inputFontSize": "15px",
+      "inputBorderRadius": "6px",
+      "inputPadding": "10px 12px",
+      "buttonFontSize": "14px",
+      "buttonBorderRadius": "6px",
+      "buttonPadding": "10px 18px",
+      "backdropGradient": "radial-gradient(ellipse at 30% 20%, rgba(44, 56, 38, 0.6) 0%, transparent 55%), radial-gradient(ellipse at 70% 70%, rgba(28, 40, 24, 0.5) 0%, transparent 55%), linear-gradient(170deg, #151a12 0%, #0a0d08 50%, #0c100b 100%)"
+    }
+  }
+}

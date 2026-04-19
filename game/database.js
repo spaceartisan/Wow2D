@@ -288,7 +288,7 @@ function saveCharacterProgress(charId, data) {
     bank,
     hotbar,
     gatheringSkills,
-    data.mapId || "eldengrove",
+    data.mapId || "eldengrove",  // fallback; runtime default from theme.json
     data.posX ?? -1,
     data.posY ?? -1,
     data.floor ?? 0,

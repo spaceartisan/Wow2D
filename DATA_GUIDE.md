@@ -1175,6 +1175,87 @@ Top-level object keyed by node type ID. Defines harvestable resource nodes place
 
 ---
 
+## theme.json
+
+Central branding and theming configuration. Loaded by the server at startup (for console output and default-map resolution) and by the client via `config.js` (`applyTheme()`). Controls the game name, default map, all UI colors, font, border radius, and login/character-select screen text.
+
+### Top-level fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gameName` | string | Game title shown on the login screen, page title, admin panel, and server console |
+| `gameSubtitle` | string | Appended to the page `<title>` (e.g. `"Top-Down MMO"`) |
+| `tagline` | string | Italic subtitle below the logo on the login screen |
+| `welcomeMessage` | string | First chat message shown when a player enters the world |
+| `defaultMap` | string | Map ID new/returning players load into (e.g. `"eldengrove"`) |
+| `charSelectTitle` | string | Heading on the character-select screen (e.g. `"Choose Your Champion"`) |
+| `createCharTitle` | string | Heading on the character-creation panel (e.g. `"Create Character"`) |
+| `versionText` | string | Footer text on the login screen |
+| `logoGlyph` | string | Path to the logo image shown above the game title (relative to `public/`) |
+
+### ui
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ui.fontFamily` | string | CSS `font-family` applied to `<body>` |
+| `ui.fontSize` | string | Base font size (CSS value) |
+| `ui.borderRadius` | string | Global `--radius` CSS variable for all rounded corners |
+
+### ui.colors
+
+Maps to CSS custom properties on `:root`. All values are CSS color strings.
+
+| Field | CSS Variable | Default |
+|-------|-------------|---------|
+| `bgDark` | `--bg-dark` | `#0c0e0a` |
+| `panelBg` | `--panel-bg` | `rgba(18, 15, 9, 0.92)` |
+| `panelBgSolid` | `--panel-bg-solid` | `#1a160d` |
+| `panelBorder` | `--panel-border` | `#8c7449` |
+| `panelBorderDim` | `--panel-border-dim` | `#5c4d30` |
+| `accentGold` | `--accent-gold` | `#d4a943` |
+| `accentGoldBright` | `--accent-gold-bright` | `#ffd866` |
+| `textMain` | `--text-main` | `#e7d7b2` |
+| `textMuted` | `--text-muted` | `#9e9279` |
+| `textBright` | `--text-bright` | `#fff5e0` |
+| `hp` | `--hp` | `#9f2423` |
+| `hpGrad` | `--hp-grad` | `#6a1414` |
+| `mana` | `--mana` | `#2a5f96` |
+| `manaGrad` | `--mana-grad` | `#1a3f68` |
+| `xp` | `--xp` | `#b98d2f` |
+| `xpGrad` | `--xp-grad` | `#74561f` |
+| `enemy` | `--enemy` | `#852020` |
+| `btnBg` | `--btn-bg` | `linear-gradient(...)` |
+| `btnBorder` | `--btn-border` | `#9e7d4a` |
+| `btnHover` | `--btn-hover` | `brightness(1.2)` |
+| `danger` | `--danger` | `#a83030` |
+| `success` | `--success` | `#3f8a3f` |
+
+### ui.login
+
+Login-screen-specific styling overrides.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `containerBorderRadius` | string | Border radius of the login box |
+| `containerPadding` | string | CSS padding of the login box |
+| `titleFontSize` | string | Font size of the game-name `<h1>` |
+| `taglineFontSize` | string | Font size of the tagline |
+| `inputFontSize` | string | Font size of login/register inputs |
+| `inputBorderRadius` | string | Border radius of inputs |
+| `inputPadding` | string | CSS padding of inputs |
+| `buttonFontSize` | string | Font size of form buttons |
+| `buttonBorderRadius` | string | Border radius of form buttons |
+| `buttonPadding` | string | CSS padding of form buttons |
+| `backdropGradient` | string | CSS `background` value for the full-screen backdrop |
+
+**Notes:**
+- Changing `gameName` updates the login screen, page title, server console log, admin panel title, and the welcome chat message (if `welcomeMessage` also references the name)
+- `defaultMap` must be a valid map ID that exists in `public/data/maps/`
+- `logoGlyph` is a path relative to `public/` (e.g. `"assets/icons/logo.png"`)
+- All `ui.login` fields are optional; omitted fields keep the CSS defaults
+
+---
+
 ## party.json
 
 Configuration for the party system. Loaded by the server at startup as `PARTY_CONFIG`.

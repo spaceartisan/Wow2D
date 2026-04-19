@@ -1,5 +1,8 @@
 import { ScreenManager } from "./screens/ScreenManager.js";
 import { Game } from "./core/Game.js";
+import { applyTheme } from "./config.js";
+
+applyTheme();
 
 const screenManager = new ScreenManager();
 let activeGame = null;

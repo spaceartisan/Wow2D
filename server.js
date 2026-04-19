@@ -1,9 +1,12 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const readline = require("readline");
 const { WebSocketServer } = require("ws");
 const { ServerWorld } = require("./game/ServerWorld");
 const database = require("./game/database");
+
+const THEME = JSON.parse(fs.readFileSync(path.join(__dirname, "public", "data", "theme.json"), "utf8"));
 
 const app = express();
 const DEFAULT_PORT = Number(process.env.PORT) || 3000;
@@ -108,7 +111,7 @@ app.post("/api/characters/delete", (req, res) => {
 
 const startServer = (port) => {
   const server = app.listen(port, () => {
-    console.log(`Azerfall running at http://localhost:${port}`);
+    console.log(`${THEME.gameName || "Game"} running at http://localhost:${port}`);
 
     /* ── WebSocket server ─────────────────────────────── */
 
@@ -324,7 +327,7 @@ const startServer = (port) => {
       row.bank = JSON.parse(row.bank || "[]");
       row.hotbar = JSON.parse(row.hotbar || "[]");
       row.gatheringSkills = JSON.parse(row.gathering_skills || "{}");
-      row.mapId = row.map_id || "eldengrove";
+      row.mapId = row.map_id || THEME.defaultMap || "eldengrove";
       row.posX = row.pos_x;
       row.posY = row.pos_y;
       delete row.gathering_skills;
@@ -343,7 +346,7 @@ const startServer = (port) => {
           row.hearthstone = p.hearthstone || null;
           row.quests = p.quests || {};
           row.gatheringSkills = p.gatheringSkills || {};
-          row.mapId = p.mapId || "eldengrove";
+          row.mapId = p.mapId || THEME.defaultMap || "eldengrove";
           row.posX = Math.round(p.x);
           row.posY = Math.round(p.y);
           row.floor = p.floor || 0;

@@ -22,6 +22,7 @@ const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatherin
 const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
 const AOE_PATTERNS = JSON.parse(fs.readFileSync(path.join(dataDir, "aoePatterns.json"), "utf8"));
 const PARTY_CONFIG = JSON.parse(fs.readFileSync(path.join(dataDir, "party.json"), "utf8"));
+const THEME = JSON.parse(fs.readFileSync(path.join(dataDir, "theme.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
 const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
@@ -291,7 +292,7 @@ class ServerWorld {
       this.maps.set(mapId, { _mapId: mapId, data, collision, enemies, drops: [], projectiles: [], resourceNodes });
     }
 
-    this.defaultMapId = "eldengrove";
+    this.defaultMapId = THEME.defaultMap || "eldengrove";
     this.players = new Map();   // playerId → PlayerState
     this._nextPartyId = 1;
     this.parties = new Map();   // partyId → { id, leader, members: Set<playerId>, pendingInvites: Map<targetId, targetName> }

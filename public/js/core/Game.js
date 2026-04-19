@@ -11,6 +11,9 @@ import { MinimapSystem } from "../systems/MinimapSystem.js";
 import { ParticleSystem } from "../systems/ParticleSystem.js";
 import { ProjectileSystem } from "../systems/ProjectileSystem.js";
 import { clamp } from "../utils.js";
+import { THEME } from "../config.js";
+
+const DEFAULT_MAP = THEME.defaultMap || "eldengrove";
 
 export class Game {
   constructor(canvas, charData, credentials) {
@@ -78,7 +81,7 @@ export class Game {
     this.data = { items, enemies, npcs, quests, skills, statusEffects, gatheringSkills, resourceNodeDefs, recipes, aoePatterns, rarities };
 
     // Load the starting map
-    await this.world.loadMap("eldengrove");
+    await this.world.loadMap(DEFAULT_MAP);
 
     // Preload all sprite PNGs
     await this.sprites.load(
@@ -120,7 +123,7 @@ export class Game {
     });
     this.network.connect();
 
-    this.ui.addMessage("Welcome to Azerfall, a frontier of old roads and deep woods.");
+    this.ui.addMessage(THEME.welcomeMessage || "Welcome!");
     this.ui.addMessage("WASD to move. Click an enemy to target. E to interact.");
     this.ui.addMessage("I inventory, C equipment, L quest log, P character, K skills, G professions.");
     this.ui.addMessage("1 attack, 2 heal, 3-0 hotbar. Drag items to hotbar/bank. Enter to chat.");
