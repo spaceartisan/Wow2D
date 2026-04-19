@@ -163,8 +163,24 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `move` | `x, y, floor` | Move to position (validated: max 80px/msg, collision checked) |
 | `attack` | `enemyId` | Attack an enemy (range + cooldown validated) |
 | `heal` | — | Use Minor Heal (22 mana, 5.3s cooldown) |
-| `chat` | `text` | Send chat. `/w Name msg` for whisper. Max 200 chars |
+| `chat` | `text` | Send chat. `/w Name msg` for whisper, `/p msg` for party chat. Max 200 chars |
 | `map_change` | `mapId, x, y` | Enter a portal (proximity validated) |
+| `party_create` | — | Create a new party (you become leader) |
+| `party_invite` | `targetName` | Invite a player to your party (leader only) |
+| `party_accept` | `fromId` | Accept a pending party invite |
+| `party_decline` | `fromId` | Decline a pending party invite |
+| `party_leave` | — | Leave your current party |
+| `party_kick` | `targetId` | Kick a member from the party (leader only) |
+| `party_rescind` | `targetId` | Cancel a pending outgoing invite (leader only) |
+| `party_list` | — | Request current party member list |
+| `friend_request` | `targetName` | Send a friend request |
+| `friend_accept` | `fromName` | Accept a friend request |
+| `friend_reject` | `fromName` | Reject a friend request |
+| `friend_remove` | `targetName` | Remove a friend |
+| `friend_list` | — | Request current friends/blocked list |
+| `block_player` | `targetName` | Block a player |
+| `unblock_player` | `targetName` | Unblock a player |
+| `block_list` | — | Request current block list |
 | `use_item` | `index` | Use consumable at inventory index |
 | `sell_item` | `index` | Sell item (must be near vendor NPC) |
 | `buy_item` | `npcId, itemId` | Buy from vendor (proximity + gold validated) |
@@ -176,11 +192,15 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `quest_state_update` | `questId, state` | Sync quest accept/progress (can't set "completed") |
 | `use_hearthstone` | — | Begin hearthstone cast |
 | `cancel_hearthstone` | — | Cancel active hearthstone cast |
+| `cancel_cast` | — | Cancel any active cast (generic) |
 | `attune_hearthstone` | `statueId` | Attune to a waystone (proximity validated) |
 | `bank_deposit` | `invIndex` | Deposit item to bank (must be near banker) |
 | `bank_withdraw` | `bankIndex` | Withdraw item from bank (must be near banker) |
 | `hotbar_update` | `hotbar` (10-slot array) | Save hotbar layout |
 | `swap_items` | `from, to, fromIndex, toIndex` | Swap/stack between `"inventory"` and/or `"bank"` |
+| `split_stack` | `container, index, qty` | Split a stack in `"inventory"` or `"bank"` into an empty slot |
+| `loot_open` | `dropId` | Open a loot drop (proximity validated, ownership checked) |
+| `loot_take` | `dropId, what` | Take from an open drop (`"gold"`, `"item"`, or `"all"`) |
 | `gather` | `nodeId` | Harvest a resource node (range, tool, skill level, cooldown validated) |
 | `craft` | `recipeId` | Craft an item at a crafting station (proximity, skill level, materials validated) |
 | `dismantle_item` | `index` | Dismantle an equipment item into materials (must be near vendor NPC) |
@@ -193,7 +213,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `auth_error` | Bad token | `error` |
 | `kicked` | Duplicate login | `reason` |
 | `welcome` | Join success | `playerId, mapId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana, gatheringSkills, resourceNodes, x, y, floor` |
-| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, gold, level, xp, xpToLevel, damage }` — enemies and players include `floor` field |
+| `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], resourceNodes[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, ackSeq, gold, level, xp, xpToLevel, damage, buffs[] }` — enemies and players include `floor` field |
 | `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead, floor }` |
 | `player_left` | Player leaves map | `playerId` |
 | `map_changed` | Portal transition | `mapId, enemies, players, drops` |
@@ -217,6 +237,9 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `bank_result` | Bank action | `ok, reason?, action, invIndex, bankIndex, inventory, bank` |
 | `hotbar_result` | Hotbar saved | `ok, hotbar` |
 | `swap_result` | Item swap | `ok, reason?, inventory, bank` |
+| `split_stack_result` | Stack split | `ok, reason?, inventory, bank` |
+| `loot_open_result` | Loot window | `ok, reason?, dropId, gold, item` |
+| `loot_take_result` | Loot taken | `ok, reason?, dropId, takenGold, takenItem, lootIndex, slotItem, remainingGold, remainingItem, dropEmpty, inventory` |
 | `gather_result` | Gather attempt | `success, reason?, itemId?, itemName?, inventory?, gatheringSkills?, skillId?, xpGained?, leveledUp?, newLevel?` |
 | `craft_result` | Craft attempt | `success, reason?, recipeId?, outputItem?, inventory?, gatheringSkills?, xpGained?, leveledUp?, newLevel?` |
 | `dismantle_item_result` | Dismantle attempt | `ok, reason?, inventory?, dismantledName?, gained?` |
@@ -229,6 +252,16 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `you_respawned` | Auto-respawn | `x, y, hp, maxHp, mana, maxMana` |
 | `combat_visual` | Combat effect | Polymorphic: melee/skill hit, self-target, enemy attack, projectile hit (broadcast to map, excludes source) |
 | `projectile_spawn` | Ranged launch | `attackerId, sx, sy, targetEnemyId, speed, weaponId?, skillId?, damageType?` (broadcast) |
+| `party_result` | Party action result | `ok?, error?, message?` |
+| `party_invite_received` | Incoming invite | `fromId, from` (inviter's name) |
+| `party_update` | Party state changed | `partyId, leader, members[], pendingInvites[]` |
+| `party_disbanded` | Party dissolved | — |
+| `party_invite_rescinded` | Invite cancelled | `fromId` |
+| `quest_kill_credit` | Party quest share | `enemyType` (increment kill objective progress) |
+| `friend_list` | Friends data | `friends[], pendingReceived[], pendingSent[], blocked[]` |
+| `friend_update` | Friend list changed | Same fields as `friend_list` |
+| `friend_request_received` | Incoming request | `from` (sender name) |
+| `block_list` | Block list data | `blocked[]` |
 
 ---
 
@@ -255,6 +288,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   mana: 80, maxMana: 108,      // maxMana = class.maxMana + (level-1)*class.manaPerLevel + sum(equipped stats.maxMana)
   baseDamage: 38,              // class.damage + (level-1)*class.damagePerLevel
   damage: 43,                  // baseDamage + sum(all equipped stats.attack)
+  partyId: null | 1,           // Party ID (null if not in a party)
   attackRange: 52,
   attackCooldown: 0.82,        // seconds
   lastAttackAt: 0,             // timestamp
@@ -295,6 +329,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
     startedAt: 1712345670000,
     duration: 8000             // ms
   },
+  lootingDropId: null | "d1",   // Currently open loot drop ID
   activeBuffs: [                // Active buff/debuff effects
     { id: "battleShout", stat: "damage", modifier: 0.2, byPct: true, expiresAt: 1712345700000 }
   ],
@@ -317,7 +352,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
 
 ## Map System
 
-Maps loaded at startup: `eldengrove`, `darkwood`, `southmere`, `moonfall_cavern`
+Maps loaded at startup: `eldengrove`, `darkwood`, `moonfall_cavern`, `southmere`, `stonegate`, `titanreach`, `magical_tower`
 
 Stored in `world.maps` — a `Map<mapId, MapEntry>`:
 
@@ -327,7 +362,9 @@ Stored in `world.maps` — a `Map<mapId, MapEntry>`:
   data: { ... },       // Raw map JSON (terrain, portals, npcs, enemySpawns, etc.)
   collision: CollisionMap,
   enemies: [...],      // Live enemy instances
-  drops: [...]         // Active loot drops
+  drops: [],           // Active loot drops
+  projectiles: [],     // Active server-side projectiles
+  resourceNodes: [...]  // Gatherable resource nodes (mining, logging, fishing, etc.)
 }
 ```
 
@@ -390,13 +427,14 @@ Every ~16.67ms the server runs:
 | 2 | `updateEnemyAi` | Per-map: aggro, chase, attack, leash, wander |
 | 3 | `updateEnemyRespawns` | Respawn dead enemies when timer expires |
 | 4 | `updateDropPickups` | Auto-pickup loot within 42px; expire old drops |
-| 5 | `updatePlayerDeaths` | Respawn dead players after 4.2s |
-| 6 | `updatePlayerRegen` | Regen: +7 mana/s, +1.8 hp/s |
-| 7 | `updatePlayerCasts` | Complete hearthstone casts when duration elapsed |
-| 8 | `updateBuffsAndDebuffs` | Expire buffs/debuffs; tick DoTs on enemies |
-| 9 | `updateTileModifiers` | Apply zone buffs/debuffs/DoTs/HoTs to players on modifier tiles |
-| 10 | `broadcastWorldState` | Send `"state"` message to all players |
-| 11 | Auto-save (every 60s) | `_autoSaveAll()` → `database.saveCharacterProgress()` for each player |
+| 5 | `updateResourceNodeRespawns` | Per-map: respawn depleted resource nodes when timer expires |
+| 6 | `updatePlayerDeaths` | Respawn dead players after 4.2s |
+| 7 | `updatePlayerRegen` | Regen: +7 mana/s, +1.8 hp/s |
+| 8 | `updatePlayerCasts` | Complete hearthstone casts when duration elapsed |
+| 9 | `updateBuffsAndDebuffs` | Expire buffs/debuffs; tick DoTs on enemies |
+| 10 | `updateTileModifiers` | Apply zone buffs/debuffs/DoTs/HoTs to players on modifier tiles |
+| 11 | `broadcastWorldState` | Send `"state"` message to all players |
+| 12 | Auto-save (every 60s) | `_autoSaveAll()` → `database.saveCharacterProgress()` for each player |
 
 ---
 
@@ -432,6 +470,103 @@ map_id, pos_x, pos_y, floor
 - Enemy state (all enemies reset on server restart)
 - Loot drops on the ground
 - Active casts
+- Party state (parties are in-memory only)
+- Friend requests (friends list is persisted, pending requests are in-memory)
+
+---
+
+## Party System
+
+Parties are managed entirely in-memory on the server via `world.parties` — a `Map<partyId, Party>`.
+
+### Party Object
+
+```js
+{
+  id: 1,                                  // Auto-incrementing party ID
+  leader: "p1",                           // Player ID of the leader
+  members: Set(["p1", "p2"]),             // Player IDs of all members (including leader)
+  pendingInvites: Map([                    // Outstanding invites (target → name)
+    ["p3", "Kael"]
+  ])
+}
+```
+
+### Party Lifecycle
+
+1. **Create** — A player sends `party_create`. A solo party is created with them as leader. Must not already be in a party.
+2. **Invite** — The leader sends `party_invite` with a target player name. The target must not already be in a party. The invite is tracked in `party.pendingInvites` and the leader's UI updates to show pending invites.
+3. **Accept** — Target sends `party_accept`. They join the existing party, are removed from `pendingInvites`, and all members receive a `party_update`.
+4. **Decline** — Target sends `party_decline`. The invite is removed from `pendingInvites` and the leader is notified.
+5. **Rescind** — Leader sends `party_rescind` to cancel an outgoing invite. The target receives `party_invite_rescinded`.
+6. **Leave** — A member sends `party_leave`. They are removed. If only the leader remains, the party stays active (leader can still invite). If no one remains, the party is deleted. If the leader leaves, the next member is promoted.
+7. **Kick** — Leader sends `party_kick` to remove a member.
+
+### Party XP Sharing
+
+Configured via `public/data/party.json` → `xpShare`:
+
+```json
+{
+  "enabled": true,
+  "rangeTiles": 50,
+  "levelDiff": 4,
+  "splitMode": "equal"
+}
+```
+
+When a party member kills an enemy, `_grantPartyXp()` finds eligible members:
+- **Same map** as the killer
+- **Within range** (`rangeTiles × 16` pixels)
+- **Within level difference** (`±levelDiff` levels of the killer)
+
+XP is split equally among all eligible members (minimum 1 XP each). Non-killers receive a system chat notification.
+
+### Party Quest Kill Sharing
+
+Configured via `public/data/party.json` → `questShareKills`:
+
+```json
+{
+  "enabled": true,
+  "rangeTiles": 50,
+  "levelDiff": 4
+}
+```
+
+When a party member kills an enemy, `_shareQuestKillCredit()` checks all other eligible members (same criteria as XP sharing). If a member has an active quest with a `kill` objective matching the enemy type, they receive a `quest_kill_credit` message and their client increments the quest counter.
+
+**Only `kill` objectives are shared.** All other quest types (collect, talk, craft) must be completed individually. Quest completion XP is never shared.
+
+---
+
+## Social / Friends System
+
+Friends are persisted in the database. Online status is tracked in-memory.
+
+### Friend-Related Messages
+
+| Direction | type | Fields | Description |
+|-----------|------|--------|-------------|
+| C→S | `friend_request` | `targetName` | Send friend request |
+| C→S | `friend_accept` | `fromName` | Accept pending request |
+| C→S | `friend_reject` | `fromName` | Reject pending request |
+| C→S | `friend_remove` | `targetName` | Remove a friend |
+| C→S | `friend_list` | — | Request friends list |
+| C→S | `block_player` | `targetName` | Block a player (auto-removes from friends) |
+| C→S | `unblock_player` | `targetName` | Unblock a player |
+| C→S | `block_list` | — | Request block list |
+| S→C | `friend_list` | `friends[], pendingReceived[], pendingSent[], blocked[]` | Full list on login |
+| S→C | `friend_update` | Same as above | After any change |
+| S→C | `friend_request_received` | `from` | Incoming friend request notification |
+
+### Right-Click Context Menu
+
+Right-clicking another player in the game world opens a context menu with:
+- **Whisper** — Start a `/w` whisper to the player
+- **Invite to Party** — Send a party invite (only when you are in a party as leader)
+- **Add Friend** — Send a friend request
+- **Block** — Block the player
 
 ---
 
@@ -872,10 +1007,13 @@ SELECT name, level, gold FROM characters ORDER BY gold DESC LIMIT 10;
 | `darkwood` | 80×80 tiles | Harder forest zone |
 | `southmere` | 128×128 tiles | Additional overworld zone |
 | `moonfall_cavern` | 96×96 tiles | Cave/dungeon zone |
+| `stonegate` | 128×128 tiles | Overworld zone |
+| `titanreach` | 500×500 tiles | Large overworld zone |
+| `magical_tower` | 80×80 tiles | Tower/dungeon zone |
 
 Map JSON files: `public/data/maps/{mapId}.json`
 
-Each map contains: `terrain`, `palette`, `portals`, `enemySpawns`, `npcs`, `safeZones`, `trees`, `buildings`, `statues`, `extraBlocked`, `particles`, `tileModifiers`
+Each map contains: `terrain`, `palette`, `portals`, `enemySpawns`, `npcs`, `safeZones`, `trees`, `buildings`, `statues`, `extraBlocked`, `particles`, `tileModifiers`, `resourceNodes`
 
 ### Portal Format
 ```json

@@ -35,8 +35,10 @@ All values are sourced directly from the codebase. If something below disagrees 
 26. [Crafting System](#26-crafting-system)
 27. [Label Toggles & Hover Names](#27-label-toggles--hover-names)
 28. [Branching Dialog System](#28-branching-dialog-system)
-29. [End-to-End Flow Examples](#29-end-to-end-flow-examples)
-30. [Glossary](#30-glossary)
+29. [Party System](#29-party-system)
+30. [Social / Friends System](#30-social--friends-system)
+31. [End-to-End Flow Examples](#31-end-to-end-flow-examples)
+32. [Glossary](#32-glossary)
 
 ---
 
@@ -1377,7 +1379,131 @@ Quest dialog takes priority. Both use the same `_showDialogNode()` engine.
 
 ---
 
-## 29. End-to-End Flow Examples
+## 29. Party System
+
+**Files:** `game/ServerWorld.js` (server), `public/js/systems/NetworkSystem.js` (client net), `public/js/systems/UISystem.js` (client UI)
+
+Parties are fully server-authoritative. All party state is in-memory (`world.parties` Map).
+
+### Configuration
+
+`public/data/party.json` — loaded at server startup as `PARTY_CONFIG`:
+
+```json
+{
+  "maxSize": 5,
+  "xpShare": {
+    "enabled": true,
+    "rangeTiles": 50,
+    "levelDiff": 4,
+    "splitMode": "equal"
+  },
+  "questShareKills": {
+    "enabled": true,
+    "rangeTiles": 50,
+    "levelDiff": 4
+  }
+}
+```
+
+### Party Lifecycle
+
+| Step | Client → Server | Server Logic | Server → Client |
+|------|----------------|--------------|----------------|
+| Create | `party_create` | Creates party with sender as sole member/leader | `party_result` + `party_update` |
+| Invite | `party_invite` (targetName) | Validates: sender is leader, target exists, target not in a party | `party_invite_received` to target, `party_update` to leader (shows pending) |
+| Accept | `party_accept` (fromId) | Adds acceptor to party, removes from pendingInvites | `party_update` to all members |
+| Decline | `party_decline` (fromId) | Removes from pendingInvites | `party_update` to leader |
+| Rescind | `party_rescind` (targetId) | Leader cancels outgoing invite | `party_invite_rescinded` to target, `party_update` to leader |
+| Leave | `party_leave` | Removes member; promotes new leader if leader left; party persists with 1 member (leader) | `party_disbanded` to leaver, `party_update` to remaining |
+| Kick | `party_kick` (targetId) | Leader-only; removes target | `party_disbanded` to kicked, `party_update` to remaining |
+
+### Party XP Sharing
+
+**Method:** `_grantPartyXp(killer, totalXp)`
+
+On enemy kill, if the killer is in a party and `xpShare.enabled` is true:
+
+1. Collect eligible members:
+   - Same `mapId` as killer
+   - Within `rangeTiles × 16` pixels (tile size = 16px)
+   - Level difference ≤ `levelDiff`
+2. If ≤1 eligible, killer gets 100%
+3. Otherwise, split: `share = floor(totalXp / eligible.length)` (minimum 1)
+4. Each eligible member gets `_grantXp(member, share)`
+5. Non-killers receive a system chat notification
+
+### Party Quest Kill Sharing
+
+**Method:** `_shareQuestKillCredit(killer, enemyType)`
+
+Called after each enemy kill. Uses `questShareKills` config (same range/level criteria).
+
+For each eligible party member (excluding the killer):
+- Checks if they have an active quest with a `kill` objective for `enemyType`
+- Sends `quest_kill_credit` message → client calls `quests.onEnemyKilled(enemyType)` to increment progress
+
+**Only kill objectives are shared.** Collect, talk, craft objectives are individual.
+
+### Client UI (Social Window → Party Tab)
+
+**UISystem** `_renderPartyTab(body)`:
+
+| State | Displayed |
+|-------|-----------|
+| Not in party, no invite | "Create Party" button + empty message |
+| Not in party, pending invite | Accept/Decline row + "Create Party" button |
+| In party as leader | Invite input + pending invites (with rescind ✕) + member list (with kick ✕) + leave button |
+| In party as non-leader | Member list + leave button |
+
+### Party Frames
+
+WoW-style mini party frames appear below the player card (top-left). Updated via `updatePartyFrames()` in UISystem, pulling live HP from `remotePlayers` entity data.
+
+### Party Chat
+
+Chat channel `party` — prefix messages with `/p`. Styled with blue text (`.msg-party` CSS class). Party chat tab in the chat window.
+
+---
+
+## 30. Social / Friends System
+
+**Files:** `game/ServerWorld.js` (server), `public/js/systems/NetworkSystem.js` (client net), `public/js/systems/UISystem.js` (client UI)
+
+### Friends
+
+Persisted in the database. Online status tracked in-memory.
+
+| Action | Message | Notes |
+|--------|---------|-------|
+| Add friend | `friend_add` | Sends request; target sees `friend_request_received` |
+| Accept | `friend_accept` | Both players' lists updated |
+| Reject | `friend_reject` | Request removed |
+| Remove | `friend_remove` | Mutual removal |
+| Block | `friend_block` | Auto-removes from friends; blocked player can't send requests |
+| Unblock | `friend_unblock` | Removes from block list |
+
+### Social Window
+
+Opened via the social icon (two-person group icon) in the HUD. Has three tabs:
+
+| Tab | Content |
+|-----|---------|
+| **Friends** | Online/offline friends list with whisper buttons; add friend input; pending incoming requests (accept/reject); pending outgoing requests |
+| **Party** | Party management (see §29) |
+| **Blocked** | Blocked players list with unblock buttons |
+
+### Right-Click Context Menu
+
+Right-clicking another player in the world shows: Whisper, Invite to Party, Add Friend, Block.
+
+### Whisper
+
+Chat command `/w PlayerName message`. Whisper tab in the chat window. Styled with pink/magenta text.
+
+---
+
+## 31. End-to-End Flow Examples
 
 Step-by-step traces of common game actions from input to pixels on screen.
 
@@ -1801,7 +1927,7 @@ When a player changes floors via stairs, their position is snapped to the center
 
 ---
 
-## 30. Glossary
+## 32. Glossary
 
 | Term | Definition |
 |------|-----------|

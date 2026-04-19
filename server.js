@@ -254,6 +254,19 @@ const startServer = (port) => {
             const sp = m.data.spawnPoint || [0, 0];
             return [id, { tx: sp[0], ty: sp[1] }];
           })
+        ),
+        mapInfo: Object.fromEntries(
+          Array.from(world.maps.entries()).map(([id, m]) => {
+            const nodes = m.resourceNodes || [];
+            const activeNodes = nodes.filter(n => n.active).length;
+            return [id, {
+              width: m.data.width || 0,
+              height: m.data.height || 0,
+              enemyCount: m.enemies.length,
+              resourceNodeCount: nodes.length,
+              activeResourceNodes: activeNodes
+            }];
+          })
         )
       });
     });
@@ -301,7 +314,7 @@ const startServer = (port) => {
     app.get("/admin/api/characters/:id", adminAuth, (req, res) => {
       const charId = Number(req.params.id);
       const row = database.db.prepare(
-        "SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, username, created_at AS createdAt FROM characters WHERE id = ?"
+        "SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor, username, created_at AS createdAt FROM characters WHERE id = ?"
       ).get(charId);
       if (!row) return res.status(404).json({ error: "Character not found" });
       row.inventory = JSON.parse(row.inventory || "[]");
@@ -310,6 +323,14 @@ const startServer = (port) => {
       row.hearthstone = JSON.parse(row.hearthstone || "null");
       row.bank = JSON.parse(row.bank || "[]");
       row.hotbar = JSON.parse(row.hotbar || "[]");
+      row.gatheringSkills = JSON.parse(row.gathering_skills || "{}");
+      row.mapId = row.map_id || "eldengrove";
+      row.posX = row.pos_x;
+      row.posY = row.pos_y;
+      delete row.gathering_skills;
+      delete row.map_id;
+      delete row.pos_x;
+      delete row.pos_y;
       // Override with live in-memory state for online players
       for (const [pid, p] of world.players) {
         if (p.charId === charId) {
@@ -321,6 +342,11 @@ const startServer = (port) => {
           row.hotbar = p.hotbar || [];
           row.hearthstone = p.hearthstone || null;
           row.quests = p.quests || {};
+          row.gatheringSkills = p.gatheringSkills || {};
+          row.mapId = p.mapId || "eldengrove";
+          row.posX = Math.round(p.x);
+          row.posY = Math.round(p.y);
+          row.floor = p.floor || 0;
           break;
         }
       }

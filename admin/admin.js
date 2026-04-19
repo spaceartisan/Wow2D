@@ -3,6 +3,7 @@
    ════════════════════════════════════════════════════════════ */
 
 let adminKey = "";
+let questDefs = {};   // quest id → { name, ... } from quests.json
 
 /* ── API helper ────────────────────────────────────────────── */
 
@@ -71,6 +72,8 @@ async function attemptLogin() {
   if (!adminKey) return;
   try {
     await api("GET", "/admin/api/stats");
+    // Load quest definitions for human-readable names
+    try { questDefs = await (await fetch("/data/quests.json")).json(); } catch (_) {}
     document.getElementById("login-overlay").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
     loadDashboard();
@@ -409,12 +412,25 @@ async function viewCharacterDetail(charId) {
       .map(([slot, item]) => `<strong>${capitalize(slot)}:</strong> ${esc(item.name || item.id)}`)
       .join("<br>") || "None";
 
+    const stateLabels = { active: "In Progress", ready_to_turn_in: "Ready to Turn In", completed: "Completed" };
     const questList = Object.entries(c.quests)
-      .map(([qid, state]) => `${esc(qid)}: ${esc(state.status || "unknown")}`)
+      .map(([qid, st]) => {
+        const name = (questDefs[qid] && questDefs[qid].name) || qid;
+        const label = stateLabels[st.state] || st.state || "Unknown";
+        return `<strong>${esc(name)}</strong>: ${esc(label)}`;
+      })
       .join("<br>") || "None";
 
     const invCount = c.inventory.filter(i => i !== null).length;
     const bankCount = c.bank.filter(i => i !== null).length;
+
+    // Gathering skills
+    const gs = c.gatheringSkills || {};
+    const skillNames = ["mining", "logging", "fishing", "smelting", "milling", "cooking"];
+    const gatheringRows = skillNames
+      .filter(s => gs[s])
+      .map(s => `<strong>${capitalize(s)}:</strong> Lv ${gs[s].level || 1} (${gs[s].xp || 0} XP)`)
+      .join("<br>") || "None";
 
     // Waystone options
     const hsOptions = waystones.map(w =>
@@ -430,6 +446,8 @@ async function viewCharacterDetail(charId) {
         <span class="field-label">Gold</span><span class="field-value">${c.gold}</span>
         <span class="field-label">HP</span><span class="field-value">${c.hp}</span>
         <span class="field-label">Mana</span><span class="field-value">${c.mana}</span>
+        <span class="field-label">Map</span><span class="field-value">${formatMapName(c.mapId || "unknown")}</span>
+        <span class="field-label">Position</span><span class="field-value">${c.posX ?? "—"}, ${c.posY ?? "—"} (floor ${c.floor || 0})</span>
         <span class="field-label">Account</span><span class="field-value">${esc(c.username)}</span>
         <span class="field-label">Created</span><span class="field-value">${formatDate(c.createdAt)}</span>
       </div>
@@ -459,6 +477,9 @@ async function viewCharacterDetail(charId) {
       <div class="slot-grid" id="bank-grid-${charId}">
         ${renderSlotGrid(c.bank, 48, charId, "bank")}
       </div>
+
+      <h4 style="color:var(--gold);margin:16px 0 8px">Gathering Skills</h4>
+      <div style="font-size:13px">${gatheringRows}</div>
 
       <h4 style="color:var(--gold);margin:16px 0 8px">Quests</h4>
       <div style="font-size:13px">${questList}</div>
@@ -695,11 +716,15 @@ async function loadMaps() {
     const mapsList = document.getElementById("maps-list");
     mapsList.innerHTML = data.maps.map(mapId => {
       const pop = data.mapPopulation[mapId] || 0;
+      const info = (data.mapInfo && data.mapInfo[mapId]) || {};
       return `
         <div class="map-card">
           <h4>${formatMapName(mapId)}</h4>
           <div class="map-stat">ID: ${mapId}</div>
+          <div class="map-stat">Size: ${info.width || "?"}×${info.height || "?"} tiles</div>
           <div class="map-stat">Players: ${pop}</div>
+          <div class="map-stat">Enemies: ${info.enemyCount ?? "?"}</div>
+          <div class="map-stat">Resource Nodes: ${info.activeResourceNodes ?? "?"}/${info.resourceNodeCount ?? "?"} active</div>
           <button class="btn-sm" onclick="viewMapEnemies('${esc(mapId)}')">View Enemies</button>
           <button class="btn-sm btn-success" onclick="respawnEnemies('${esc(mapId)}')">Respawn Dead</button>
         </div>`;

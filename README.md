@@ -64,6 +64,7 @@ http://localhost:3000
 | `L` | Toggle quest log |
 | `P` | Toggle character sheet |
 | `K` | Toggle skills panel |
+| `O` | Toggle social window (friends, party, blocked) |
 | `M` | Toggle full world map |
 | `Enter` | Focus chat input |
 | `Escape` | Close panels / game menu |
@@ -71,6 +72,7 @@ http://localhost:3000
 ### Chat Commands
 
 - `/w PlayerName message` — whisper to a player
+- `/p message` — send a message to your party
 
 ## Gameplay
 
@@ -135,7 +137,15 @@ http://localhost:3000
 - Server-authoritative combat, loot, and position validation
 - Multi-map support: each map independently tracks enemies, drops, and players
 - Per-map broadcasting — players only see entities on their current map
-- Chat system with world chat and whisper support
+- Chat system with world chat, whisper, and party chat
+- Party system with invite/accept/decline/kick/leave and leader management
+  - Party XP sharing — split evenly among nearby same-level members (configurable via `party.json`)
+  - Party quest kill sharing — kill objectives shared among eligible party members
+  - WoW-style party frames below player card with live HP bars
+  - Party chat channel (`/p`) with blue-styled messages
+- Social window (O key) with Friends, Party, and Blocked tabs
+  - Friends list with online/offline status, whisper buttons, add/remove/block
+  - Right-click context menu on other players: Whisper, Invite to Party, Add Friend, Block
 - Duplicate login detection (kicks old session)
 - Heartbeat-based dead connection cleanup
 
@@ -194,6 +204,8 @@ public/
     items.json                 Item definitions (weapons, armor, shields, helmets, pants, boots, rings, amulets, quivers, consumables, junk)
     npcs.json                  NPC definitions
     quests.json                Quest definitions
+    party.json                 Party system configuration (XP sharing, quest kill sharing, range, level diff)
+    rarities.json              Item rarity tier colors and glow effects
     maps/                      Generated map JSON files
   js/
     config.js                  Client config (loads playerBase.json)

@@ -15,6 +15,7 @@ Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `publi
 | `damage` | number | Attack damage |
 | `speed` | number | Movement speed (pixels/sec) |
 | `xp` | number | XP awarded on kill |
+| `level` | number | Enemy level (displayed on target card; used for party XP sharing level-diff check) |
 | `goldMin` | number | Minimum gold drop |
 | `goldMax` | number | Maximum gold drop |
 | `respawnSeconds` | number | Seconds until respawn |
@@ -1171,6 +1172,68 @@ Top-level object keyed by node type ID. Defines harvestable resource nodes place
 3. Ensure the `gatherItem` exists in `items.json` (type `material`)
 4. Ensure a tool with the matching `toolType` and sufficient `toolTier` exists in `items.json`
 5. Place the node on maps in the map JSON's `resourceNodes` array (see MAP_GUIDE.md)
+
+---
+
+## party.json
+
+Configuration for the party system. Loaded by the server at startup as `PARTY_CONFIG`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `maxSize` | number | Maximum party members (default `5`) |
+| `xpShare.enabled` | boolean | Whether XP sharing is active |
+| `xpShare.rangeTiles` | number | Max distance in tiles for XP sharing eligibility |
+| `xpShare.levelDiff` | number | Max level difference (±) for XP sharing eligibility |
+| `xpShare.splitMode` | string | How to divide XP: `"equal"` (evenly among eligible) |
+| `questShareKills.enabled` | boolean | Whether kill-objective quest progress is shared |
+| `questShareKills.rangeTiles` | number | Max distance in tiles for quest kill sharing |
+| `questShareKills.levelDiff` | number | Max level difference (±) for quest kill sharing |
+
+**Example:**
+```json
+{
+  "maxSize": 5,
+  "xpShare": {
+    "enabled": true,
+    "rangeTiles": 50,
+    "levelDiff": 4,
+    "splitMode": "equal"
+  },
+  "questShareKills": {
+    "enabled": true,
+    "rangeTiles": 50,
+    "levelDiff": 4
+  }
+}
+```
+
+**Notes:**
+- Distances are in tiles (each tile = 16 pixels on the server)
+- Only `kill` quest objectives are shared; collect/talk/craft remain individual
+- Quest completion XP is never shared through the party system
+
+---
+
+## rarities.json
+
+Defines item rarity tiers and their display colors. Items reference a rarity by name (e.g. `"rarity": "rare"`). The client uses these for name coloring and inventory slot glow effects.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `color` | string | Hex color for the item name text |
+| `glow` | string | RGBA color for the inventory slot glow (use alpha `0` for no glow) |
+
+**Example:**
+```json
+{
+  "common":    { "color": "#9d9d9d", "glow": "rgba(157, 157, 157, 0)" },
+  "uncommon":  { "color": "#1eff00", "glow": "rgba(30, 255, 0, 0.15)" },
+  "rare":      { "color": "#0070dd", "glow": "rgba(0, 112, 221, 0.15)" },
+  "epic":      { "color": "#a335ee", "glow": "rgba(163, 53, 238, 0.15)" },
+  "legendary": { "color": "#ff8000", "glow": "rgba(255, 128, 0, 0.2)" }
+}
+```
 
 ---
 
