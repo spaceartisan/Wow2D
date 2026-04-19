@@ -363,6 +363,10 @@ export class NetworkSystem {
 
   /* ── party ── */
 
+  sendPartyCreate() {
+    this.send({ type: "party_create" });
+  }
+
   sendPartyInvite(target) {
     this.send({ type: "party_invite", target });
   }
@@ -381,6 +385,10 @@ export class NetworkSystem {
 
   sendPartyKick(targetId) {
     this.send({ type: "party_kick", targetId });
+  }
+
+  sendPartyRescind(targetId) {
+    this.send({ type: "party_rescind", targetId });
   }
 
   sendPartyListRequest() {
@@ -402,6 +410,9 @@ export class NetworkSystem {
         break;
       case "enemy_killed":
         this.onEnemyKilled(msg);
+        break;
+      case "quest_kill_credit":
+        this.onQuestKillCredit(msg);
         break;
       case "player_damaged":
         this.onPlayerDamaged(msg);
@@ -574,6 +585,9 @@ export class NetworkSystem {
         break;
       case "party_disbanded":
         this.onPartyDisbanded(msg);
+        break;
+      case "party_invite_rescinded":
+        this.onPartyInviteRescinded();
         break;
       default:
         break;
@@ -920,6 +934,11 @@ export class NetworkSystem {
     this.game.audio.play("enemy_death");
     const dead = this.game.entities.enemies.find(e => e.id === msg.enemyId);
     if (dead) this.game.particles.emit("death", dead.x, dead.y);
+  }
+
+  /** Party member killed a qualifying enemy — increment our quest progress only */
+  onQuestKillCredit(msg) {
+    this.game.quests.onEnemyKilled(msg.enemyType);
   }
 
   onPlayerDamaged(msg) {
@@ -1915,6 +1934,7 @@ export class NetworkSystem {
   onPartyUpdate(msg) {
     this.game.ui._partyMembers = msg.members || [];
     this.game.ui._partyId = msg.partyId;
+    this.game.ui._partyPendingInvites = msg.pendingInvites || [];
     if (this.game.ui.socialOpen && this.game.ui._socialTab === "party") {
       this.game.ui.renderSocialContent();
     }
@@ -1940,6 +1960,15 @@ export class NetworkSystem {
     this.game.ui._partyMembers = [];
     this.game.ui._partyId = null;
     this.game.ui._pendingPartyInvite = null;
+    this.game.ui._partyPendingInvites = [];
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "party") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onPartyInviteRescinded() {
+    this.game.ui._pendingPartyInvite = null;
+    this.game.ui.addChatMessage("system", "[Party] The party invite has been rescinded.");
     if (this.game.ui.socialOpen && this.game.ui._socialTab === "party") {
       this.game.ui.renderSocialContent();
     }

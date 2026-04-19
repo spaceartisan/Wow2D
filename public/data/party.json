@@ -1,0 +1,14 @@
+{
+  "maxSize": 5,
+  "xpShare": {
+    "enabled": true,
+    "rangeTiles": 50,
+    "levelDiff": 4,
+    "splitMode": "equal"
+  },
+  "questShareKills": {
+    "enabled": true,
+    "rangeTiles": 50,
+    "levelDiff": 4
+  }
+}

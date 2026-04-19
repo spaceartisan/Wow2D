@@ -21,6 +21,7 @@ const RESOURCE_NODE_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "resour
 const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatheringSkills.json"), "utf8"));
 const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
 const AOE_PATTERNS = JSON.parse(fs.readFileSync(path.join(dataDir, "aoePatterns.json"), "utf8"));
+const PARTY_CONFIG = JSON.parse(fs.readFileSync(path.join(dataDir, "party.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
 const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
@@ -293,7 +294,7 @@ class ServerWorld {
     this.defaultMapId = "eldengrove";
     this.players = new Map();   // playerId → PlayerState
     this._nextPartyId = 1;
-    this.parties = new Map();   // partyId → { id, leader, members: Set<playerId> }
+    this.parties = new Map();   // partyId → { id, leader, members: Set<playerId>, pendingInvites: Map<targetId, targetName> }
     this._nextProjId = 1;
     this.tickRate = 60;         // Hz
     this.tickInterval = null;
@@ -666,6 +667,9 @@ class ServerWorld {
       case "block_list":
         this.handleBlockList(player);
         break;
+      case "party_create":
+        this.handlePartyCreate(player);
+        break;
       case "party_invite":
         this.handlePartyInvite(player, msg);
         break;
@@ -680,6 +684,9 @@ class ServerWorld {
         break;
       case "party_kick":
         this.handlePartyKick(player, msg);
+        break;
+      case "party_rescind":
+        this.handlePartyRescind(player, msg);
         break;
       case "party_list":
         this.handlePartyList(player);
@@ -2921,6 +2928,113 @@ class ServerWorld {
     this._savePlayer(player);
   }
 
+  /**
+   * Grant XP from an enemy kill, split among eligible party members.
+   * Uses PARTY_CONFIG.xpShare settings for range, level diff, and split mode.
+   */
+  _grantPartyXp(killer, totalXp) {
+    const cfg = PARTY_CONFIG.xpShare || {};
+    if (!cfg.enabled || !killer.partyId) {
+      // No party or sharing disabled — killer gets 100%
+      this._grantXp(killer, totalXp);
+      return;
+    }
+
+    const party = this.parties.get(killer.partyId);
+    if (!party) {
+      this._grantXp(killer, totalXp);
+      return;
+    }
+
+    const rangeTiles = cfg.rangeTiles ?? 50;
+    const levelDiff = cfg.levelDiff ?? 4;
+    const range = rangeTiles * 16; // convert tiles to pixels (16px per tile)
+
+    // Collect eligible recipients (same map, within range, within level diff)
+    const eligible = [];
+    for (const memberId of party.members) {
+      const m = this.players.get(memberId);
+      if (!m) continue;
+      if (m.mapId !== killer.mapId) continue;
+
+      const dx = m.x - killer.x;
+      const dy = m.y - killer.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (m.id !== killer.id && dist > range) continue;
+
+      if (Math.abs(m.level - killer.level) > levelDiff) continue;
+
+      eligible.push(m);
+    }
+
+    if (eligible.length <= 1) {
+      // Only the killer qualifies — full XP
+      this._grantXp(killer, totalXp);
+      return;
+    }
+
+    // Split evenly
+    const share = Math.max(1, Math.floor(totalXp / eligible.length));
+    for (const m of eligible) {
+      this._grantXp(m, share);
+      // Notify non-killers they received shared XP
+      if (m.id !== killer.id) {
+        this.send(m.ws, {
+          type: "chat",
+          channel: "system",
+          message: `You received ${share} shared XP.`
+        });
+      }
+    }
+  }
+
+  /**
+   * Share quest kill credit with eligible party members (not the killer).
+   * Only "kill" objectives are shared; other objective types are individual.
+   */
+  _shareQuestKillCredit(killer, enemyType) {
+    const cfg = PARTY_CONFIG.questShareKills || {};
+    if (!cfg.enabled || !killer.partyId) return;
+
+    const party = this.parties.get(killer.partyId);
+    if (!party) return;
+
+    const rangeTiles = cfg.rangeTiles ?? 50;
+    const levelDiff = cfg.levelDiff ?? 4;
+    const range = rangeTiles * 16; // tiles → pixels
+
+    for (const memberId of party.members) {
+      if (memberId === killer.id) continue; // killer already got credit via enemy_killed
+      const m = this.players.get(memberId);
+      if (!m) continue;
+      if (m.mapId !== killer.mapId) continue;
+
+      const dx = m.x - killer.x;
+      const dy = m.y - killer.y;
+      if (Math.sqrt(dx * dx + dy * dy) > range) continue;
+      if (Math.abs(m.level - killer.level) > levelDiff) continue;
+
+      // Check if this member has an active quest needing this enemy type
+      let hasRelevantQuest = false;
+      for (const [questId, qs] of Object.entries(m.quests || {})) {
+        if (qs.state !== "active") continue;
+        const def = QUEST_DEFS[questId];
+        if (!def) continue;
+        for (const obj of (def.objectives || [])) {
+          if (obj.type === "kill" && obj.target === enemyType) {
+            hasRelevantQuest = true;
+            break;
+          }
+        }
+        if (hasRelevantQuest) break;
+      }
+
+      if (hasRelevantQuest) {
+        this.send(m.ws, { type: "quest_kill_credit", enemyType });
+      }
+    }
+  }
+
   /* ── enemy management ───────────────────────────────── */
 
   _createEnemiesForMap(mapData, collision) {
@@ -3017,8 +3131,8 @@ class ServerWorld {
     const mapEntry = this.maps.get(killerPlayer.mapId);
     if (mapEntry) mapEntry.drops.push(drop);
 
-    // Grant XP server-side
-    this._grantXp(killerPlayer, enemy.xpReward);
+    // Grant XP (party-shared if applicable)
+    this._grantPartyXp(killerPlayer, enemy.xpReward);
 
     // tell killer about kill
     this.send(killerPlayer.ws, {
@@ -3027,6 +3141,9 @@ class ServerWorld {
       enemyType: enemy.type,
       xpReward: enemy.xpReward
     });
+
+    // Share quest kill credit with eligible party members
+    this._shareQuestKillCredit(killerPlayer, enemy.type);
 
     // tell everyone on this map about the drop
     this.broadcastToMap(killerPlayer.mapId, {
@@ -3399,10 +3516,16 @@ class ServerWorld {
         });
       }
     }
+    const pendingInvites = [];
+    if (party.pendingInvites) {
+      for (const [targetId, targetName] of party.pendingInvites) {
+        pendingInvites.push({ targetId, targetName });
+      }
+    }
     for (const memberId of party.members) {
       const m = this.players.get(memberId);
       if (m) {
-        this.send(m.ws, { type: "party_update", partyId: party.id, members });
+        this.send(m.ws, { type: "party_update", partyId: party.id, members, pendingInvites });
       }
     }
   }
@@ -3414,17 +3537,13 @@ class ServerWorld {
     party.members.delete(player.id);
     player.partyId = null;
 
-    if (party.members.size <= 1) {
-      // Dissolve party
-      for (const memberId of party.members) {
-        const m = this.players.get(memberId);
-        if (m) {
-          m.partyId = null;
-          this.send(m.ws, { type: "party_disbanded" });
-        }
-      }
+    if (party.members.size === 0) {
+      // No one left, delete the party
       this.parties.delete(party.id);
-    } else {
+    } else if (party.members.size === 1 && party.members.has(party.leader)) {
+      // Only the leader remains — keep the party alive, just update UI
+      this._sendPartyUpdate(party);
+    } else if (party.members.size >= 1) {
       // If leader left, promote next member
       if (party.leader === player.id) {
         party.leader = party.members.values().next().value;
@@ -3437,9 +3556,47 @@ class ServerWorld {
     }
   }
 
+  handlePartyCreate(player) {
+    if (player.partyId) {
+      this.send(player.ws, { type: "party_result", error: "You are already in a party." });
+      return;
+    }
+
+    const partyId = this._nextPartyId++;
+    const party = { id: partyId, leader: player.id, members: new Set([player.id]), pendingInvites: new Map() };
+    this.parties.set(partyId, party);
+    player.partyId = partyId;
+
+    this.send(player.ws, { type: "party_result", ok: true, message: "Party created." });
+    this._sendPartyUpdate(party);
+  }
+
   handlePartyInvite(player, msg) {
     const targetName = String(msg.target || "").trim();
     if (!targetName) return;
+
+    // Must be in a party to invite
+    if (!player.partyId) {
+      this.send(player.ws, { type: "party_result", error: "You must create a party first." });
+      return;
+    }
+
+    const party = this.parties.get(player.partyId);
+    if (!party) {
+      this.send(player.ws, { type: "party_result", error: "Party not found." });
+      return;
+    }
+
+    // Only leader can invite
+    if (party.leader !== player.id) {
+      this.send(player.ws, { type: "party_result", error: "Only the party leader can invite." });
+      return;
+    }
+
+    if (party.members.size >= 5) {
+      this.send(player.ws, { type: "party_result", error: "Party is full (max 5)." });
+      return;
+    }
 
     const target = this._findPlayerByName(targetName);
     if (!target) {
@@ -3452,23 +3609,21 @@ class ServerWorld {
       return;
     }
 
+    // Auto-reject if target is already in a party
     if (target.partyId) {
-      this.send(player.ws, { type: "party_result", error: `${targetName} is already in a party.` });
+      this.send(player.ws, { type: "party_result", error: `${target.name} is already in a party.` });
       return;
     }
 
-    // If inviter is in a party, only the leader can invite
-    if (player.partyId) {
-      const party = this.parties.get(player.partyId);
-      if (party && party.leader !== player.id) {
-        this.send(player.ws, { type: "party_result", error: "Only the party leader can invite." });
-        return;
-      }
-      if (party && party.members.size >= 5) {
-        this.send(player.ws, { type: "party_result", error: "Party is full (max 5)." });
-        return;
-      }
+    // Check for duplicate pending invite
+    if (party.pendingInvites && party.pendingInvites.has(target.id)) {
+      this.send(player.ws, { type: "party_result", error: `${target.name} already has a pending invite.` });
+      return;
     }
+
+    // Track pending invite
+    if (!party.pendingInvites) party.pendingInvites = new Map();
+    party.pendingInvites.set(target.id, target.name);
 
     // Send invite to target
     this.send(target.ws, {
@@ -3477,7 +3632,8 @@ class ServerWorld {
       fromId: player.id
     });
 
-    this.send(player.ws, { type: "party_result", ok: true, message: `Party invite sent to ${targetName}.` });
+    this.send(player.ws, { type: "party_result", ok: true, message: `Party invite sent to ${target.name}.` });
+    this._sendPartyUpdate(party);
   }
 
   handlePartyAccept(player, msg) {
@@ -3495,24 +3651,23 @@ class ServerWorld {
       return;
     }
 
-    let party;
-    if (inviter.partyId) {
-      party = this.parties.get(inviter.partyId);
-      if (!party) {
-        this.send(player.ws, { type: "party_result", error: "That party no longer exists." });
-        return;
-      }
-      if (party.members.size >= 5) {
-        this.send(player.ws, { type: "party_result", error: "Party is full." });
-        return;
-      }
-    } else {
-      // Create new party with inviter as leader
-      const partyId = this._nextPartyId++;
-      party = { id: partyId, leader: inviter.id, members: new Set([inviter.id]) };
-      this.parties.set(partyId, party);
-      inviter.partyId = partyId;
+    if (!inviter.partyId) {
+      this.send(player.ws, { type: "party_result", error: "That party no longer exists." });
+      return;
     }
+
+    const party = this.parties.get(inviter.partyId);
+    if (!party) {
+      this.send(player.ws, { type: "party_result", error: "That party no longer exists." });
+      return;
+    }
+    if (party.members.size >= 5) {
+      this.send(player.ws, { type: "party_result", error: "Party is full." });
+      return;
+    }
+
+    // Remove from pending invites
+    if (party.pendingInvites) party.pendingInvites.delete(player.id);
 
     // Add the accepting player
     party.members.add(player.id);
@@ -3535,6 +3690,14 @@ class ServerWorld {
     const inviter = this.players.get(fromId);
     if (inviter) {
       this.send(inviter.ws, { type: "party_result", ok: true, message: `${player.name} declined your party invite.` });
+      // Remove from pending invites
+      if (inviter.partyId) {
+        const party = this.parties.get(inviter.partyId);
+        if (party && party.pendingInvites) {
+          party.pendingInvites.delete(player.id);
+          this._sendPartyUpdate(party);
+        }
+      }
     }
   }
 
@@ -3585,6 +3748,33 @@ class ServerWorld {
         this.send(m.ws, { type: "party_result", ok: true, message: `${target.name} has been removed from the party.` });
       }
     }
+    this._sendPartyUpdate(party);
+  }
+
+  handlePartyRescind(player, msg) {
+    if (!player.partyId) return;
+    const party = this.parties.get(player.partyId);
+    if (!party || party.leader !== player.id) {
+      this.send(player.ws, { type: "party_result", error: "Only the party leader can rescind invites." });
+      return;
+    }
+
+    const targetId = String(msg.targetId || "").trim();
+    if (!targetId || !party.pendingInvites || !party.pendingInvites.has(targetId)) {
+      this.send(player.ws, { type: "party_result", error: "No pending invite for that player." });
+      return;
+    }
+
+    const targetName = party.pendingInvites.get(targetId);
+    party.pendingInvites.delete(targetId);
+
+    // Clear the invite on the target's client if they're online
+    const target = this.players.get(targetId);
+    if (target) {
+      this.send(target.ws, { type: "party_invite_rescinded" });
+    }
+
+    this.send(player.ws, { type: "party_result", ok: true, message: `Invite to ${targetName} has been rescinded.` });
     this._sendPartyUpdate(party);
   }
 

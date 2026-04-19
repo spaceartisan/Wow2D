@@ -99,6 +99,7 @@ export class UISystem {
     this._partyMembers = [];
     this._partyId = null;
     this._pendingPartyInvite = null;
+    this._partyPendingInvites = [];
 
     /* ── DOM listener tracking (cleaned up in destroy()) ── */
     this._domHandlers = [];
@@ -2845,10 +2846,76 @@ export class UISystem {
   _renderPartyTab(body) {
     const members = this._partyMembers || [];
     const invite = this._pendingPartyInvite;
-
-    /* ── Invite player input (when in party as leader, or not in party) ── */
+    const inParty = members.length > 0;
     const isLeader = members.some(m => m.isLeader && m.name === this.game.charData?.name);
-    if (members.length === 0 || isLeader) {
+    const pendingInvites = this._partyPendingInvites || [];
+
+    /* ── Not in a party ── */
+    if (!inParty) {
+      // Pending incoming invite
+      if (invite) {
+        const inviteRow = document.createElement("div");
+        inviteRow.className = "party-invite-row";
+
+        const text = document.createElement("span");
+        text.className = "friend-name";
+        text.textContent = `${invite.from} invited you to a party`;
+
+        const actions = document.createElement("span");
+        actions.className = "friend-actions";
+
+        const acceptBtn = document.createElement("button");
+        acceptBtn.className = "friend-btn friend-accept-btn";
+        acceptBtn.textContent = "✓";
+        acceptBtn.title = "Accept";
+        acceptBtn.addEventListener("click", () => {
+          this.game.network?.sendPartyAccept(invite.fromId);
+          this._pendingPartyInvite = null;
+          this.renderSocialContent();
+        });
+
+        const declineBtn = document.createElement("button");
+        declineBtn.className = "friend-btn friend-reject-btn";
+        declineBtn.textContent = "✕";
+        declineBtn.title = "Decline";
+        declineBtn.addEventListener("click", () => {
+          this.game.network?.sendPartyDecline(invite.fromId);
+          this._pendingPartyInvite = null;
+          this.renderSocialContent();
+        });
+
+        actions.append(acceptBtn, declineBtn);
+        inviteRow.append(text, actions);
+        body.append(inviteRow);
+      }
+
+      // Create party button
+      const createRow = document.createElement("div");
+      createRow.style.textAlign = "center";
+      createRow.style.marginTop = "10px";
+
+      const createBtn = document.createElement("button");
+      createBtn.className = "friends-add-btn";
+      createBtn.textContent = "Create Party";
+      createBtn.style.width = "100%";
+      createBtn.addEventListener("click", () => {
+        this.game.network?.sendPartyCreate();
+      });
+
+      createRow.append(createBtn);
+      body.append(createRow);
+
+      if (!invite) {
+        const empty = document.createElement("div");
+        empty.className = "friends-empty";
+        empty.textContent = "You are not in a party.";
+        body.append(empty);
+      }
+      return;
+    }
+
+    /* ── Invite player input (leader only) ── */
+    if (isLeader) {
       const addRow = document.createElement("div");
       addRow.className = "friends-add-row";
 
@@ -2885,52 +2952,41 @@ export class UISystem {
       body.append(addRow);
     }
 
-    /* ── Pending invite ── */
-    if (invite && members.length === 0) {
-      const inviteRow = document.createElement("div");
-      inviteRow.className = "party-invite-row";
+    /* ── Pending outgoing invites (visible to all members) ── */
+    if (pendingInvites.length > 0) {
+      const pendingHeader = document.createElement("div");
+      pendingHeader.className = "friends-section-header";
+      pendingHeader.textContent = `Pending Invites (${pendingInvites.length})`;
+      body.append(pendingHeader);
 
-      const text = document.createElement("span");
-      text.className = "friend-name";
-      text.textContent = `${invite.from} invited you to a party`;
+      for (const inv of pendingInvites) {
+        const row = document.createElement("div");
+        row.className = "friend-row friend-pending";
 
-      const actions = document.createElement("span");
-      actions.className = "friend-actions";
+        const name = document.createElement("span");
+        name.className = "friend-name";
+        name.textContent = inv.targetName;
 
-      const acceptBtn = document.createElement("button");
-      acceptBtn.className = "friend-btn friend-accept-btn";
-      acceptBtn.textContent = "✓";
-      acceptBtn.title = "Accept";
-      acceptBtn.addEventListener("click", () => {
-        this.game.network?.sendPartyAccept(invite.fromId);
-        this._pendingPartyInvite = null;
-        this.renderSocialContent();
-      });
+        const actions = document.createElement("span");
+        actions.className = "friend-actions";
 
-      const declineBtn = document.createElement("button");
-      declineBtn.className = "friend-btn friend-reject-btn";
-      declineBtn.textContent = "✕";
-      declineBtn.title = "Decline";
-      declineBtn.addEventListener("click", () => {
-        this.game.network?.sendPartyDecline(invite.fromId);
-        this._pendingPartyInvite = null;
-        this.renderSocialContent();
-      });
+        if (isLeader) {
+          const rescindBtn = document.createElement("button");
+          rescindBtn.className = "friend-btn friend-reject-btn";
+          rescindBtn.textContent = "✕";
+          rescindBtn.title = "Rescind Invite";
+          rescindBtn.addEventListener("click", () => {
+            this.game.network?.sendPartyRescind(inv.targetId);
+          });
+          actions.append(rescindBtn);
+        }
 
-      actions.append(acceptBtn, declineBtn);
-      inviteRow.append(text, actions);
-      body.append(inviteRow);
+        row.append(name, actions);
+        body.append(row);
+      }
     }
 
     /* ── Party members ── */
-    if (members.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "friends-empty";
-      empty.textContent = "You are not in a party.";
-      body.append(empty);
-      return;
-    }
-
     const header = document.createElement("div");
     header.className = "friends-section-header";
     header.textContent = `Party Members (${members.length}/5)`;
