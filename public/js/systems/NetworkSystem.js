@@ -361,6 +361,32 @@ export class NetworkSystem {
     this.send({ type: "block_list" });
   }
 
+  /* ── party ── */
+
+  sendPartyInvite(target) {
+    this.send({ type: "party_invite", target });
+  }
+
+  sendPartyAccept(fromId) {
+    this.send({ type: "party_accept", fromId });
+  }
+
+  sendPartyDecline(fromId) {
+    this.send({ type: "party_decline", fromId });
+  }
+
+  sendPartyLeave() {
+    this.send({ type: "party_leave" });
+  }
+
+  sendPartyKick(targetId) {
+    this.send({ type: "party_kick", targetId });
+  }
+
+  sendPartyListRequest() {
+    this.send({ type: "party_list" });
+  }
+
   /* ── message dispatcher ────────────────────────────── */
 
   onMessage(msg) {
@@ -536,6 +562,18 @@ export class NetworkSystem {
         break;
       case "block_result":
         this.onBlockResult(msg);
+        break;
+      case "party_update":
+        this.onPartyUpdate(msg);
+        break;
+      case "party_result":
+        this.onPartyResult(msg);
+        break;
+      case "party_invite_received":
+        this.onPartyInviteReceived(msg);
+        break;
+      case "party_disbanded":
+        this.onPartyDisbanded(msg);
         break;
       default:
         break;
@@ -1280,6 +1318,8 @@ export class NetworkSystem {
       } else {
         this.game.ui.addChatMessage("whisper", `[${msg.from}] whispers: ${msg.text}`);
       }
+    } else if (channel === "party") {
+      this.game.ui.addChatMessage("party", `[Party] [${msg.from}]: ${msg.text}`);
     } else if (channel === "system") {
       this.game.ui.addChatMessage("system", msg.text);
     } else {
@@ -1867,6 +1907,41 @@ export class NetworkSystem {
       this.game.ui.addMessage(`[Social] ${msg.error}`, "system");
     } else if (msg.message) {
       this.game.ui.addMessage(`[Social] ${msg.message}`, "system");
+    }
+  }
+
+  /* ── party handlers ── */
+
+  onPartyUpdate(msg) {
+    this.game.ui._partyMembers = msg.members || [];
+    this.game.ui._partyId = msg.partyId;
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "party") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onPartyResult(msg) {
+    if (msg.error) {
+      this.game.ui.addChatMessage("system", `[Party] ${msg.error}`);
+    } else if (msg.message) {
+      this.game.ui.addChatMessage("system", `[Party] ${msg.message}`);
+    }
+  }
+
+  onPartyInviteReceived(msg) {
+    this.game.ui.addChatMessage("system", `[Party] ${msg.from} has invited you to a party.`);
+    this.game.ui._pendingPartyInvite = { from: msg.from, fromId: msg.fromId };
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "party") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onPartyDisbanded() {
+    this.game.ui._partyMembers = [];
+    this.game.ui._partyId = null;
+    this.game.ui._pendingPartyInvite = null;
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "party") {
+      this.game.ui.renderSocialContent();
     }
   }
 

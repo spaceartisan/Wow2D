@@ -116,6 +116,9 @@
             <div id="player-buffs" class="buff-strip"></div>
           </section>
 
+          <!-- party frames (below player card, WoW-style) -->
+          <div id="party-frames"></div>
+
           <!-- top-right: utility buttons + quest tracker -->
           <div id="top-right-stack">
             <div id="utility-bar">
@@ -138,7 +141,7 @@
                 <img src="assets/icons/pickaxe.png" alt="Professions" class="icon" />
               </button>
               <button data-action="social" class="utility-btn" title="Social (O)">
-                <img src="assets/icons/person.png" alt="Social" class="icon" />
+                <img src="assets/icons/social.png" alt="Social" class="icon" />
               </button>
               <button id="btn-game-menu" class="utility-btn" title="Menu (Esc)">
                 <img src="assets/icons/menu.png" alt="Menu" class="icon" />
@@ -263,11 +266,12 @@
               <button class="chat-tab active" data-channel="all">All</button>
               <button class="chat-tab" data-channel="world">World</button>
               <button class="chat-tab" data-channel="whisper">Whisper</button>
+              <button class="chat-tab" data-channel="party">Party</button>
               <button class="chat-tab" data-channel="system">System</button>
             </div>
             <div id="messages"></div>
             <div id="chat-input-wrap">
-              <input id="chat-input" type="text" maxlength="200" placeholder="Press Enter to chat... (/w name msg to whisper)" autocomplete="off" />
+              <input id="chat-input" type="text" maxlength="200" placeholder="Press Enter to chat... (/w name, /p party)" autocomplete="off" />
             </div>
           </section>
 

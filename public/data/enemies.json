@@ -1,6 +1,7 @@
 {
   "wolf": {
     "name": "Timber Wolf",
+    "level": 1,
     "maxHp": 60,
     "damage": 9,
     "speed": 105,
@@ -24,6 +25,7 @@
   },
   "wolf2": {
     "name": "Timber Wolf2",
+    "level": 1,
     "tileSize": 2,
     "maxHp": 60,
     "damage": 9,
@@ -47,6 +49,7 @@
   },
   "boar": {
     "name": "Wild Boar",
+    "level": 2,
     "maxHp": 74,
     "damage": 11,
     "speed": 95,
@@ -71,6 +74,7 @@
   },
   "bandit": {
     "name": "Bandit Scout",
+    "level": 3,
     "maxHp": 90,
     "damage": 14,
     "speed": 100,

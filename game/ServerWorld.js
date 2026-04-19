@@ -292,6 +292,8 @@ class ServerWorld {
 
     this.defaultMapId = "eldengrove";
     this.players = new Map();   // playerId → PlayerState
+    this._nextPartyId = 1;
+    this.parties = new Map();   // partyId → { id, leader, members: Set<playerId> }
     this._nextProjId = 1;
     this.tickRate = 60;         // Hz
     this.tickInterval = null;
@@ -364,6 +366,7 @@ class ServerWorld {
       id,
       ws,
       username: username || null,
+      partyId: null,
       mapId,
       charId: charData.id || null,
       name: String(charData.name || "Unknown").slice(0, 16),
@@ -523,6 +526,9 @@ class ServerWorld {
     const p = this.players.get(id);
     const mapId = p?.mapId;
 
+    // Clean up party membership
+    if (p && p.partyId) this._removeFromParty(p);
+
     // Save character progression to DB
     if (p && p.charId) {
       this._savePlayer(p);
@@ -659,6 +665,24 @@ class ServerWorld {
         break;
       case "block_list":
         this.handleBlockList(player);
+        break;
+      case "party_invite":
+        this.handlePartyInvite(player, msg);
+        break;
+      case "party_accept":
+        this.handlePartyAccept(player, msg);
+        break;
+      case "party_decline":
+        this.handlePartyDecline(player, msg);
+        break;
+      case "party_leave":
+        this.handlePartyLeave(player);
+        break;
+      case "party_kick":
+        this.handlePartyKick(player, msg);
+        break;
+      case "party_list":
+        this.handlePartyList(player);
         break;
       default:
         break;
@@ -1418,6 +1442,39 @@ class ServerWorld {
         to: target.name,
         text: whisperText
       });
+      return;
+    }
+
+    // party chat: /p message
+    const partyMatch = text.match(/^\/p\s+([\s\S]+)/i);
+    if (partyMatch) {
+      const partyText = partyMatch[1].trim();
+      if (!partyText) return;
+
+      if (!player.partyId) {
+        this.send(player.ws, {
+          type: "chat",
+          channel: "system",
+          from: "System",
+          text: "You are not in a party."
+        });
+        return;
+      }
+
+      const party = this.parties.get(player.partyId);
+      if (!party) return;
+
+      for (const memberId of party.members) {
+        const member = this.players.get(memberId);
+        if (member) {
+          this.send(member.ws, {
+            type: "chat",
+            channel: "party",
+            from: player.name,
+            text: partyText
+          });
+        }
+      }
       return;
     }
 
@@ -3314,6 +3371,235 @@ class ServerWorld {
     const database = require("./database");
     const blocked = database.getBlockedList(player.username);
     this.send(player.ws, { type: "block_list", blocked });
+  }
+
+  /* ── party system ─────────────────────────────────── */
+
+  _findPlayerByName(name) {
+    for (const [, p] of this.players) {
+      if (p.name.toLowerCase() === name.toLowerCase()) return p;
+    }
+    return null;
+  }
+
+  _sendPartyUpdate(party) {
+    const members = [];
+    for (const memberId of party.members) {
+      const m = this.players.get(memberId);
+      if (m) {
+        members.push({
+          id: m.id,
+          name: m.name,
+          charClass: m.charClass,
+          level: m.level,
+          hp: m.hp,
+          maxHp: m.maxHp,
+          online: true,
+          isLeader: memberId === party.leader
+        });
+      }
+    }
+    for (const memberId of party.members) {
+      const m = this.players.get(memberId);
+      if (m) {
+        this.send(m.ws, { type: "party_update", partyId: party.id, members });
+      }
+    }
+  }
+
+  _removeFromParty(player) {
+    const party = this.parties.get(player.partyId);
+    if (!party) { player.partyId = null; return; }
+
+    party.members.delete(player.id);
+    player.partyId = null;
+
+    if (party.members.size <= 1) {
+      // Dissolve party
+      for (const memberId of party.members) {
+        const m = this.players.get(memberId);
+        if (m) {
+          m.partyId = null;
+          this.send(m.ws, { type: "party_disbanded" });
+        }
+      }
+      this.parties.delete(party.id);
+    } else {
+      // If leader left, promote next member
+      if (party.leader === player.id) {
+        party.leader = party.members.values().next().value;
+        const newLeader = this.players.get(party.leader);
+        if (newLeader) {
+          this.send(newLeader.ws, { type: "party_result", ok: true, message: "You are now the party leader." });
+        }
+      }
+      this._sendPartyUpdate(party);
+    }
+  }
+
+  handlePartyInvite(player, msg) {
+    const targetName = String(msg.target || "").trim();
+    if (!targetName) return;
+
+    const target = this._findPlayerByName(targetName);
+    if (!target) {
+      this.send(player.ws, { type: "party_result", error: `Player "${targetName}" not found.` });
+      return;
+    }
+
+    if (target.id === player.id) {
+      this.send(player.ws, { type: "party_result", error: "You can't invite yourself." });
+      return;
+    }
+
+    if (target.partyId) {
+      this.send(player.ws, { type: "party_result", error: `${targetName} is already in a party.` });
+      return;
+    }
+
+    // If inviter is in a party, only the leader can invite
+    if (player.partyId) {
+      const party = this.parties.get(player.partyId);
+      if (party && party.leader !== player.id) {
+        this.send(player.ws, { type: "party_result", error: "Only the party leader can invite." });
+        return;
+      }
+      if (party && party.members.size >= 5) {
+        this.send(player.ws, { type: "party_result", error: "Party is full (max 5)." });
+        return;
+      }
+    }
+
+    // Send invite to target
+    this.send(target.ws, {
+      type: "party_invite_received",
+      from: player.name,
+      fromId: player.id
+    });
+
+    this.send(player.ws, { type: "party_result", ok: true, message: `Party invite sent to ${targetName}.` });
+  }
+
+  handlePartyAccept(player, msg) {
+    const fromId = String(msg.fromId || "").trim();
+    if (!fromId) return;
+
+    const inviter = this.players.get(fromId);
+    if (!inviter) {
+      this.send(player.ws, { type: "party_result", error: "The inviting player is no longer online." });
+      return;
+    }
+
+    if (player.partyId) {
+      this.send(player.ws, { type: "party_result", error: "You are already in a party." });
+      return;
+    }
+
+    let party;
+    if (inviter.partyId) {
+      party = this.parties.get(inviter.partyId);
+      if (!party) {
+        this.send(player.ws, { type: "party_result", error: "That party no longer exists." });
+        return;
+      }
+      if (party.members.size >= 5) {
+        this.send(player.ws, { type: "party_result", error: "Party is full." });
+        return;
+      }
+    } else {
+      // Create new party with inviter as leader
+      const partyId = this._nextPartyId++;
+      party = { id: partyId, leader: inviter.id, members: new Set([inviter.id]) };
+      this.parties.set(partyId, party);
+      inviter.partyId = partyId;
+    }
+
+    // Add the accepting player
+    party.members.add(player.id);
+    player.partyId = party.id;
+
+    // Notify all members
+    for (const memberId of party.members) {
+      const m = this.players.get(memberId);
+      if (m) {
+        this.send(m.ws, { type: "party_result", ok: true, message: `${player.name} has joined the party.` });
+      }
+    }
+
+    this._sendPartyUpdate(party);
+  }
+
+  handlePartyDecline(player, msg) {
+    const fromId = String(msg.fromId || "").trim();
+    if (!fromId) return;
+    const inviter = this.players.get(fromId);
+    if (inviter) {
+      this.send(inviter.ws, { type: "party_result", ok: true, message: `${player.name} declined your party invite.` });
+    }
+  }
+
+  handlePartyLeave(player) {
+    if (!player.partyId) {
+      this.send(player.ws, { type: "party_result", error: "You are not in a party." });
+      return;
+    }
+
+    const party = this.parties.get(player.partyId);
+    this._removeFromParty(player);
+    this.send(player.ws, { type: "party_disbanded" });
+
+    if (party && party.members.size > 0) {
+      for (const memberId of party.members) {
+        const m = this.players.get(memberId);
+        if (m) {
+          this.send(m.ws, { type: "party_result", ok: true, message: `${player.name} has left the party.` });
+        }
+      }
+    }
+  }
+
+  handlePartyKick(player, msg) {
+    if (!player.partyId) return;
+    const party = this.parties.get(player.partyId);
+    if (!party || party.leader !== player.id) {
+      this.send(player.ws, { type: "party_result", error: "Only the party leader can kick members." });
+      return;
+    }
+
+    const targetId = String(msg.targetId || "").trim();
+    if (!targetId || targetId === player.id) return;
+
+    const target = this.players.get(targetId);
+    if (!target || target.partyId !== party.id) {
+      this.send(player.ws, { type: "party_result", error: "Player is not in your party." });
+      return;
+    }
+
+    this._removeFromParty(target);
+    this.send(target.ws, { type: "party_disbanded" });
+    this.send(target.ws, { type: "party_result", ok: true, message: "You have been removed from the party." });
+
+    for (const memberId of party.members) {
+      const m = this.players.get(memberId);
+      if (m) {
+        this.send(m.ws, { type: "party_result", ok: true, message: `${target.name} has been removed from the party.` });
+      }
+    }
+    this._sendPartyUpdate(party);
+  }
+
+  handlePartyList(player) {
+    if (!player.partyId) {
+      this.send(player.ws, { type: "party_update", partyId: null, members: [] });
+      return;
+    }
+    const party = this.parties.get(player.partyId);
+    if (!party) {
+      player.partyId = null;
+      this.send(player.ws, { type: "party_update", partyId: null, members: [] });
+      return;
+    }
+    this._sendPartyUpdate(party);
   }
 
   _savePlayer(p) {

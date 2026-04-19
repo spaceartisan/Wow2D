@@ -27,6 +27,7 @@ export class UISystem {
       targetHpFill: document.getElementById("target-hp-fill"),
       targetHpText: document.getElementById("target-hp-text"),
       targetLevel: document.getElementById("target-level"),
+      partyFrames: document.getElementById("party-frames"),
       npcDialogPanel: document.getElementById("npc-dialog-panel"),
       npcDialogName: document.getElementById("npc-dialog-name"),
       npcDialogBody: document.getElementById("npc-dialog-body"),
@@ -93,6 +94,11 @@ export class UISystem {
     /* ── Friends state ── */
     this._friendsList = [];
     this._friendsDirty = false;
+
+    /* ── Party state ── */
+    this._partyMembers = [];
+    this._partyId = null;
+    this._pendingPartyInvite = null;
 
     /* ── DOM listener tracking (cleaned up in destroy()) ── */
     this._domHandlers = [];
@@ -329,7 +335,7 @@ export class UISystem {
     this.renderChatMessages();
 
     // Play subtle ping for incoming whisper or world chat
-    if (channel === "whisper" || channel === "world") {
+    if (channel === "whisper" || channel === "world" || channel === "party") {
       this.game.audio.play("chat_msg");
     }
   }
@@ -554,6 +560,7 @@ export class UISystem {
     }
 
     this.updateTargetPanel();
+    this.updatePartyFrames();
     this.updateCastBar();
     this.updateCraftingBar();
     this.updateGatherBar();
@@ -1999,6 +2006,86 @@ export class UISystem {
     }
   }
 
+  updatePartyFrames() {
+    const container = this.el.partyFrames;
+    if (!container) return;
+
+    const members = this._partyMembers || [];
+    const myName = this.game.charData?.name;
+
+    // Filter out self — only show other party members
+    const others = members.filter(m => m.name !== myName);
+
+    if (others.length === 0) {
+      container.textContent = "";
+      return;
+    }
+
+    // Only rebuild DOM when membership changes
+    const key = others.map(m => m.id).join(",");
+    if (this._partyFrameKey !== key) {
+      this._partyFrameKey = key;
+      container.textContent = "";
+
+      for (const m of others) {
+        const frame = document.createElement("div");
+        frame.className = "party-frame" + (m.isLeader ? " is-leader" : "");
+        frame.dataset.memberId = m.id;
+
+        const portrait = document.createElement("div");
+        portrait.className = "party-frame-portrait";
+        portrait.textContent = (m.charClass || "?").charAt(0).toUpperCase();
+
+        const info = document.createElement("div");
+        info.className = "party-frame-info";
+
+        const name = document.createElement("div");
+        name.className = "party-frame-name";
+        name.textContent = (m.isLeader ? "★ " : "") + m.name;
+
+        const hpBar = document.createElement("div");
+        hpBar.className = "party-frame-hp-bar";
+
+        const hpFill = document.createElement("div");
+        hpFill.className = "party-frame-hp-fill";
+        const rp = this.game.entities.remotePlayers.find(p => p.id === m.id);
+        const hp = rp ? rp.hp : m.hp;
+        const maxHp = rp ? rp.maxHp : m.maxHp;
+        const ratio = maxHp > 0 ? hp / maxHp : 1;
+        hpFill.style.width = `${Math.max(0, ratio) * 100}%`;
+
+        hpBar.append(hpFill);
+        info.append(name, hpBar);
+        frame.append(portrait, info);
+
+        // Click to target that party member
+        frame.addEventListener("click", () => {
+          const rp = this.game.entities.remotePlayers.find(p => p.id === m.id);
+          if (rp) {
+            this.game.combat.targetEnemyId = null;
+            this.game.combat.targetPlayerId = rp.id;
+          }
+        });
+
+        container.append(frame);
+      }
+    } else {
+      // Update HP bars in place using live remote player data
+      for (const m of others) {
+        const frame = container.querySelector(`[data-member-id="${m.id}"]`);
+        if (!frame) continue;
+        const hpFill = frame.querySelector(".party-frame-hp-fill");
+        if (hpFill) {
+          const rp = this.game.entities.remotePlayers.find(p => p.id === m.id);
+          const hp = rp ? rp.hp : m.hp;
+          const maxHp = rp ? rp.maxHp : m.maxHp;
+          const ratio = maxHp > 0 ? hp / maxHp : 1;
+          hpFill.style.width = `${Math.max(0, ratio) * 100}%`;
+        }
+      }
+    }
+  }
+
   updateCastBar() {
     if (!this._castActive) return;
     const elapsed = performance.now() - this._castStart;
@@ -2432,6 +2519,10 @@ export class UISystem {
       this.startWhisperTo(player.name);
     });
 
+    addOption("Invite to Party", () => {
+      this.game.network?.sendPartyInvite(player.name);
+    });
+
     addOption("Add Friend", () => {
       this.game.network?.sendFriendRequest(player.name);
     });
@@ -2526,6 +2617,7 @@ export class UISystem {
     if (this.socialOpen) {
       this.game.network?.sendFriendListRequest();
       this.game.network?.sendBlockListRequest();
+      this.game.network?.sendPartyListRequest();
       this.renderSocialContent();
     }
   }
@@ -2546,6 +2638,14 @@ export class UISystem {
       this.renderSocialContent();
     });
 
+    const partyTab = document.createElement("button");
+    partyTab.className = `social-tab ${this._socialTab === "party" ? "active" : ""}`;
+    partyTab.textContent = "Party";
+    partyTab.addEventListener("click", () => {
+      this._socialTab = "party";
+      this.renderSocialContent();
+    });
+
     const blockedTab = document.createElement("button");
     blockedTab.className = `social-tab ${this._socialTab === "blocked" ? "active" : ""}`;
     blockedTab.textContent = "Blocked";
@@ -2554,11 +2654,13 @@ export class UISystem {
       this.renderSocialContent();
     });
 
-    tabs.append(friendsTab, blockedTab);
+    tabs.append(friendsTab, partyTab, blockedTab);
     body.append(tabs);
 
     if (this._socialTab === "friends") {
       this._renderFriendsTab(body);
+    } else if (this._socialTab === "party") {
+      this._renderPartyTab(body);
     } else {
       this._renderBlockedTab(body);
     }
@@ -2738,6 +2840,169 @@ export class UISystem {
       empty.textContent = "No friends yet. Add one above!";
       body.append(empty);
     }
+  }
+
+  _renderPartyTab(body) {
+    const members = this._partyMembers || [];
+    const invite = this._pendingPartyInvite;
+
+    /* ── Invite player input (when in party as leader, or not in party) ── */
+    const isLeader = members.some(m => m.isLeader && m.name === this.game.charData?.name);
+    if (members.length === 0 || isLeader) {
+      const addRow = document.createElement("div");
+      addRow.className = "friends-add-row";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "friends-add-input";
+      input.placeholder = "Character name...";
+      input.maxLength = 16;
+      input.addEventListener("keydown", (e) => e.stopPropagation());
+      input.addEventListener("keyup", (e) => e.stopPropagation());
+      input.addEventListener("keypress", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          const name = input.value.trim();
+          if (name) {
+            this.game.network?.sendPartyInvite(name);
+            input.value = "";
+          }
+        }
+      });
+
+      const inviteBtn = document.createElement("button");
+      inviteBtn.className = "friends-add-btn";
+      inviteBtn.textContent = "Invite";
+      inviteBtn.addEventListener("click", () => {
+        const name = input.value.trim();
+        if (name) {
+          this.game.network?.sendPartyInvite(name);
+          input.value = "";
+        }
+      });
+
+      addRow.append(input, inviteBtn);
+      body.append(addRow);
+    }
+
+    /* ── Pending invite ── */
+    if (invite && members.length === 0) {
+      const inviteRow = document.createElement("div");
+      inviteRow.className = "party-invite-row";
+
+      const text = document.createElement("span");
+      text.className = "friend-name";
+      text.textContent = `${invite.from} invited you to a party`;
+
+      const actions = document.createElement("span");
+      actions.className = "friend-actions";
+
+      const acceptBtn = document.createElement("button");
+      acceptBtn.className = "friend-btn friend-accept-btn";
+      acceptBtn.textContent = "✓";
+      acceptBtn.title = "Accept";
+      acceptBtn.addEventListener("click", () => {
+        this.game.network?.sendPartyAccept(invite.fromId);
+        this._pendingPartyInvite = null;
+        this.renderSocialContent();
+      });
+
+      const declineBtn = document.createElement("button");
+      declineBtn.className = "friend-btn friend-reject-btn";
+      declineBtn.textContent = "✕";
+      declineBtn.title = "Decline";
+      declineBtn.addEventListener("click", () => {
+        this.game.network?.sendPartyDecline(invite.fromId);
+        this._pendingPartyInvite = null;
+        this.renderSocialContent();
+      });
+
+      actions.append(acceptBtn, declineBtn);
+      inviteRow.append(text, actions);
+      body.append(inviteRow);
+    }
+
+    /* ── Party members ── */
+    if (members.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "friends-empty";
+      empty.textContent = "You are not in a party.";
+      body.append(empty);
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "friends-section-header";
+    header.textContent = `Party Members (${members.length}/5)`;
+    body.append(header);
+
+    for (const m of members) {
+      const row = document.createElement("div");
+      row.className = "friend-row friend-online";
+
+      const statusDot = document.createElement("span");
+      statusDot.className = "friend-status-dot online";
+
+      const info = document.createElement("span");
+      info.className = "friend-info";
+
+      const name = document.createElement("span");
+      name.className = "friend-name";
+      name.textContent = m.name + (m.isLeader ? " ★" : "");
+
+      const detail = document.createElement("span");
+      detail.className = "friend-detail";
+      detail.textContent = ` Lv.${m.level} ${(m.charClass || "").charAt(0).toUpperCase() + (m.charClass || "").slice(1)}`;
+
+      info.append(name, detail);
+
+      const actions = document.createElement("span");
+      actions.className = "friend-actions";
+
+      // Whisper button
+      if (m.name !== this.game.charData?.name) {
+        const whisperBtn = document.createElement("button");
+        whisperBtn.className = "friend-btn friend-whisper-btn";
+        whisperBtn.textContent = "💬";
+        whisperBtn.title = "Whisper";
+        whisperBtn.addEventListener("click", () => {
+          this.startWhisperTo(m.name);
+        });
+        actions.append(whisperBtn);
+      }
+
+      // Kick button (leader only, not self)
+      if (isLeader && m.name !== this.game.charData?.name) {
+        const kickBtn = document.createElement("button");
+        kickBtn.className = "friend-btn friend-remove-btn";
+        kickBtn.textContent = "✕";
+        kickBtn.title = "Kick";
+        kickBtn.addEventListener("click", () => {
+          this.game.network?.sendPartyKick(m.id);
+        });
+        actions.append(kickBtn);
+      }
+
+      row.append(statusDot, info, actions);
+      body.append(row);
+    }
+
+    /* ── Leave party button ── */
+    const leaveRow = document.createElement("div");
+    leaveRow.style.textAlign = "center";
+    leaveRow.style.marginTop = "10px";
+
+    const leaveBtn = document.createElement("button");
+    leaveBtn.className = "friends-add-btn";
+    leaveBtn.textContent = "Leave Party";
+    leaveBtn.style.borderColor = "#f44336";
+    leaveBtn.style.color = "#f44336";
+    leaveBtn.addEventListener("click", () => {
+      this.game.network?.sendPartyLeave();
+    });
+
+    leaveRow.append(leaveBtn);
+    body.append(leaveRow);
   }
 
   _renderBlockedTab(body) {
