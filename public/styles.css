@@ -672,11 +672,6 @@ input, textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-#player-level {
-  color: var(--text-muted);
-  font-size: 11px;
   margin-bottom: 5px;
 }
 
@@ -722,11 +717,17 @@ input, textarea {
 }
 
 .bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text-bright);
+  text-shadow: 0 0 3px rgba(0,0,0,0.9), 1px 1px 1px rgba(0,0,0,0.7);
   white-space: nowrap;
-  min-width: 60px;
-  text-align: right;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .bar.enemy {
@@ -830,20 +831,60 @@ input, textarea {
   top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 200px;
+  width: 240px;
   padding: 8px 10px;
 }
 
+.target-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.target-portrait {
+  width: 54px;
+  height: 54px;
+  border: 2px solid var(--accent-gold);
+  border-radius: 8px;
+  background: linear-gradient(145deg, #5a4420, #382810);
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.target-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.target-meta {
+  flex: 1;
+  min-width: 0;
+}
+
 #target-panel h3 {
-  margin: 0;
+  margin: 0 0 3px 0;
   font-size: 13px;
   color: #f4d0a0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #target-hp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 10px;
-  margin-top: 3px;
-  color: var(--text-muted);
+  color: var(--text-bright);
+  text-shadow: 0 0 3px rgba(0,0,0,0.9), 1px 1px 1px rgba(0,0,0,0.7);
+  white-space: nowrap;
+  z-index: 1;
+  pointer-events: none;
 }
 
 /* ── buff / debuff icon strips ────────────────────────── */
@@ -1457,11 +1498,6 @@ input, textarea {
   background: linear-gradient(90deg, #3a8a3a, #4eba4e) !important;
 }
 
-.target-level-text {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-left: 6px;
-}
 
 /* ── quest log panel ──────────────────────────────────── */
 

@@ -106,17 +106,14 @@
           <section id="player-panel" class="hud-card">
             <div class="portrait" id="player-portrait"></div>
             <div class="player-meta">
-              <div id="player-name">Adventurer</div>
-              <div id="player-level">Level 1</div>
+              <div id="player-name">Adventurer (Lv.1)</div>
               <div class="bar-wrap">
                 <label>HP</label>
-                <div class="bar hp"><span id="hp-fill"></span></div>
-                <span class="bar-text" id="hp-text">120 / 120</span>
+                <div class="bar hp"><span id="hp-fill"></span><span class="bar-text" id="hp-text">120 / 120</span></div>
               </div>
               <div class="bar-wrap">
                 <label>Mana</label>
-                <div class="bar mana"><span id="mana-fill"></span></div>
-                <span class="bar-text" id="mana-text">80 / 80</span>
+                <div class="bar mana"><span id="mana-fill"></span><span class="bar-text" id="mana-text">80 / 80</span></div>
               </div>
             </div>
             <div id="player-buffs" class="buff-strip"></div>
@@ -166,10 +163,13 @@
 
           <!-- target panel -->
           <section id="target-panel" class="hud-card hidden">
-            <h3 id="target-name">Target</h3>
-            <span id="target-level" class="target-level-text"></span>
-            <div class="bar enemy"><span id="target-hp-fill"></span></div>
-            <div id="target-hp-text"></div>
+            <div class="target-header">
+              <div class="target-portrait" id="target-portrait"></div>
+              <div class="target-meta">
+                <h3 id="target-name">Target</h3>
+                <div class="bar enemy"><span id="target-hp-fill"></span><span class="bar-text" id="target-hp-text"></span></div>
+              </div>
+            </div>
             <div id="target-debuffs" class="buff-strip"></div>
           </section>
 

@@ -12,7 +12,6 @@ export class UISystem {
       manaText: document.getElementById("mana-text"),
       xpFill: document.getElementById("xp-fill"),
       playerName: document.getElementById("player-name"),
-      playerLevel: document.getElementById("player-level"),
       playerPortrait: document.getElementById("player-portrait"),
       questTracker: document.getElementById("quest-tracker"),
       inventoryPanel: document.getElementById("inventory-panel"),
@@ -23,10 +22,10 @@ export class UISystem {
       messages: document.getElementById("messages"),
       deathOverlay: document.getElementById("death-overlay"),
       targetPanel: document.getElementById("target-panel"),
+      targetPortrait: document.getElementById("target-portrait"),
       targetName: document.getElementById("target-name"),
       targetHpFill: document.getElementById("target-hp-fill"),
       targetHpText: document.getElementById("target-hp-text"),
-      targetLevel: document.getElementById("target-level"),
       partyFrames: document.getElementById("party-frames"),
       npcDialogPanel: document.getElementById("npc-dialog-panel"),
       npcDialogName: document.getElementById("npc-dialog-name"),
@@ -227,7 +226,7 @@ export class UISystem {
 
   initPlayerDisplay() {
     const charData = this.game.charData;
-    this.el.playerName.textContent = charData.name;
+    this.el.playerName.textContent = `${charData.name} (Lv.${charData.level || 1})`;
 
     const classDef = CLASSES[charData.charClass];
     const portraitSrc = `/assets/sprites/portraits/${charData.portrait || "portrait_1"}.png`;
@@ -556,7 +555,7 @@ export class UISystem {
       }
     }
 
-    if (this.el.playerLevel) this.el.playerLevel.textContent = `Level ${player.level}`;
+    if (this.el.playerName) this.el.playerName.textContent = `${this.game.charData?.name || 'Adventurer'} (Lv.${player.level})`;
 
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
     const manaRatio = player.maxMana > 0 ? player.mana / player.maxMana : 0;
@@ -635,10 +634,10 @@ export class UISystem {
       }
       const ratio = target.hp / target.maxHp;
       this.el.targetPanel.classList.remove("hidden");
-      this.el.targetName.textContent = target.name;
+      this._setTargetPortrait(`/assets/sprites/portraits/enemies/${target.portrait || target.type || 'wolf'}.png`);
+      this.el.targetName.textContent = target.level ? `${target.name} (Lv.${target.level})` : target.name;
       this.el.targetHpFill.style.width = `${ratio * 100}%`;
       this.el.targetHpText.textContent = `${Math.round(target.hp)} / ${target.maxHp}`;
-      if (this.el.targetLevel) this.el.targetLevel.textContent = target.level ? `Lv ${target.level}` : "";
       if (hpBar) hpBar.classList.remove("friendly");
       this._renderBuffStrip(this.el.targetDebuffs, target.debuffs || [], false);
       return;
@@ -655,10 +654,10 @@ export class UISystem {
       }
       const ratio = rp.maxHp > 0 ? rp.hp / rp.maxHp : 1;
       this.el.targetPanel.classList.remove("hidden");
-      this.el.targetName.textContent = rp.name;
+      this._setTargetPortrait(`/assets/sprites/portraits/${rp.portrait || 'portrait_1'}.png`);
+      this.el.targetName.textContent = rp.level ? `${rp.name} (Lv.${rp.level})` : rp.name;
       this.el.targetHpFill.style.width = `${ratio * 100}%`;
       this.el.targetHpText.textContent = `${Math.round(rp.hp)} / ${rp.maxHp}`;
-      if (this.el.targetLevel) this.el.targetLevel.textContent = rp.level ? `Lv ${rp.level}` : "";
       if (hpBar) hpBar.classList.add("friendly");
       this._renderBuffStrip(this.el.targetDebuffs, [], false);
       return;
@@ -667,6 +666,20 @@ export class UISystem {
     this.el.targetPanel.classList.add("hidden");
     if (hpBar) hpBar.classList.remove("friendly");
     this._renderBuffStrip(this.el.targetDebuffs, [], false);
+  }
+
+  /* ── target portrait helper ───────────────────────── */
+
+  _setTargetPortrait(src) {
+    const el = this.el.targetPortrait;
+    if (!el) return;
+    const img = el.querySelector("img");
+    if (img && img.src.endsWith(src)) return; // already set
+    el.textContent = "";
+    const newImg = document.createElement("img");
+    newImg.src = src;
+    newImg.alt = "";
+    el.appendChild(newImg);
   }
 
   /* ── buff / debuff icon rendering ─────────────────── */
