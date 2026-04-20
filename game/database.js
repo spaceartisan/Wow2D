@@ -14,6 +14,7 @@ const DB_PATH = path.join(DATA_DIR, "azerfall.db");
 /* Load class definitions for validation */
 const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "data", "playerBase.json"), "utf8"));
 const VALID_CLASSES = Object.keys(PLAYER_BASE_DATA.classes || {});
+const VALID_PORTRAITS = ["portrait_1","portrait_2","portrait_3","portrait_4","portrait_5","portrait_6"];
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -91,6 +92,7 @@ db.exec(`
     alter("floor", "INTEGER NOT NULL DEFAULT 0");
     alter("pvp_kills", "INTEGER NOT NULL DEFAULT 0");
     alter("pvp_deaths", "INTEGER NOT NULL DEFAULT 0");
+    alter("portrait", "TEXT NOT NULL DEFAULT 'portrait_1'");
   });
   runMigrations();
 }
@@ -111,11 +113,11 @@ const stmts = {
   getAccount:     db.prepare("SELECT * FROM accounts WHERE username = ?"),
   insertAccount:  db.prepare("INSERT INTO accounts (username, hash, salt) VALUES (?, ?, ?)"),
 
-  getCharacters:  db.prepare("SELECT id, name, char_class AS charClass, level, created_at AS createdAt FROM characters WHERE username = ? ORDER BY id"),
+  getCharacters:  db.prepare("SELECT id, name, char_class AS charClass, level, portrait, created_at AS createdAt FROM characters WHERE username = ? ORDER BY id"),
   countCharacters: db.prepare("SELECT COUNT(*) AS cnt FROM characters WHERE username = ?"),
-  insertCharacter: db.prepare("INSERT INTO characters (username, name, char_class) VALUES (?, ?, ?)"),
+  insertCharacter: db.prepare("INSERT INTO characters (username, name, char_class, portrait) VALUES (?, ?, ?, ?)"),
   deleteCharacter: db.prepare("DELETE FROM characters WHERE id = ? AND username = ?"),
-  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, map_id AS mapId, pos_x AS posX, pos_y AS posY, floor, pvp_kills AS pvpKills, pvp_deaths AS pvpDeaths, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
+  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, map_id AS mapId, pos_x AS posX, pos_y AS posY, floor, pvp_kills AS pvpKills, pvp_deaths AS pvpDeaths, portrait, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
 
   saveCharacter: db.prepare("UPDATE characters SET level = ?, xp = ?, gold = ?, hp = ?, mana = ?, inventory = ?, equipment = ?, quests = ?, hearthstone = ?, bank = ?, hotbar = ?, gathering_skills = ?, map_id = ?, pos_x = ?, pos_y = ?, floor = ?, pvp_kills = ?, pvp_deaths = ? WHERE id = ?"),
 
@@ -209,7 +211,7 @@ function getCharacters(token) {
   return { characters };
 }
 
-function createCharacter(token, charName, charClass) {
+function createCharacter(token, charName, charClass, portrait) {
   const username = validateSession(token);
   if (!username) return { error: "Auth failed." };
 
@@ -232,9 +234,11 @@ function createCharacter(token, charName, charClass) {
     return { error: "Invalid class." };
   }
 
+  const port = VALID_PORTRAITS.includes(portrait) ? portrait : "portrait_1";
+
   const displayName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1).toLowerCase();
   try {
-    stmts.insertCharacter.run(username, displayName, cls);
+    stmts.insertCharacter.run(username, displayName, cls, port);
   } catch (err) {
     if (err.message && err.message.includes("UNIQUE constraint failed")) {
       return { error: "Character name is already taken." };

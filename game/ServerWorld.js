@@ -388,6 +388,7 @@ class ServerWorld {
       charId: charData.id || null,
       name: String(charData.name || "Unknown").slice(0, 16),
       charClass,
+      portrait: charData.portrait || "portrait_1",
       level,
       xp,
       gold,
@@ -534,7 +535,8 @@ class ServerWorld {
       floor: state.floor || 0,
       pvpMode: mapEntry.data.pvpMode || "none",
       pvpKills: state.pvpKills || 0,
-      pvpDeaths: state.pvpDeaths || 0
+      pvpDeaths: state.pvpDeaths || 0,
+      portrait: state.portrait
     });
 
     // tell everyone else on the same map a player joined
@@ -4705,6 +4707,7 @@ class ServerWorld {
           id: m.id,
           name: m.name,
           charClass: m.charClass,
+          portrait: m.portrait,
           level: m.level,
           hp: m.hp,
           maxHp: m.maxHp,
@@ -5648,6 +5651,7 @@ class ServerWorld {
       id: p.id,
       name: p.name,
       charClass: p.charClass,
+      portrait: p.portrait,
       level: p.level,
       x: p.x,
       y: p.y,

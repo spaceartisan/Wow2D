@@ -344,24 +344,17 @@ input, textarea {
   width: 48px;
   height: 48px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  font-weight: bold;
-  color: #fff;
+  border: 2px solid var(--accent-gold);
+  overflow: hidden;
   flex-shrink: 0;
+  background: linear-gradient(145deg, #5a4420, #382810);
 }
 
-.char-avatar.warrior {
-  background: linear-gradient(135deg, #6b3a2a, #8c4e30);
-}
-
-.char-avatar.mage {
-  background: linear-gradient(135deg, #2e3a6b, #4a5aa0);
-}
-
-.char-avatar.rogue {
-  background: linear-gradient(135deg, #3a3a3a, #5a5a5a);
+.char-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .char-info {
@@ -456,6 +449,43 @@ input, textarea {
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Portrait picker in character creation */
+.portrait-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.portrait-btn {
+  width: 52px;
+  height: 52px;
+  padding: 2px;
+  border: 2px solid var(--panel-border-dim);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: all 0.15s;
+  overflow: hidden;
+}
+
+.portrait-btn:hover {
+  border-color: var(--panel-border);
+}
+
+.portrait-btn.selected {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 6px rgba(212, 169, 67, 0.4);
+}
+
+.portrait-btn-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 2px;
+  image-rendering: pixelated;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -569,12 +599,15 @@ input, textarea {
   border: 1px solid var(--accent-gold);
   border-radius: 4px;
   background: linear-gradient(145deg, #5a4420, #382810);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: bold;
-  color: var(--accent-gold-bright);
+  overflow: hidden;
   flex-shrink: 0;
+}
+
+.party-portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .party-frame-info {
@@ -615,13 +648,16 @@ input, textarea {
   border: 2px solid var(--accent-gold);
   border-radius: 8px;
   background: linear-gradient(145deg, #5a4420, #382810);
-  display: grid;
-  place-items: center;
-  font-size: 24px;
-  font-weight: bold;
-  color: var(--accent-gold-bright);
+  overflow: hidden;
   flex-shrink: 0;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .player-meta {

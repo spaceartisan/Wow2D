@@ -158,6 +158,26 @@ export class ScreenManager {
 
     const classBtns = classPicker.querySelectorAll(".class-btn");
 
+    // Build portrait picker
+    const portraitPicker = document.getElementById("portrait-picker");
+    portraitPicker.textContent = "";
+    const portraitIds = ["portrait_1","portrait_2","portrait_3","portrait_4","portrait_5","portrait_6"];
+    portraitIds.forEach((pid, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "portrait-btn" + (i === 0 ? " selected" : "");
+      btn.dataset.portrait = pid;
+      btn.innerHTML = `<img class="portrait-btn-img" src="/assets/sprites/portraits/${pid}.png" alt="Portrait ${i + 1}">`;
+      portraitPicker.appendChild(btn);
+    });
+    const portraitBtns = portraitPicker.querySelectorAll(".portrait-btn");
+    portraitBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        portraitBtns.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+      });
+    });
+
     // class picker
     classBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -183,12 +203,14 @@ export class ScreenManager {
 
       const charName = document.getElementById("char-name-input").value.trim();
       const charClass = document.querySelector(".class-btn.selected")?.dataset.class || "warrior";
+      const portrait = document.querySelector(".portrait-btn.selected")?.dataset.portrait || "portrait_1";
 
       try {
         const data = await this.api("/api/characters/create", {
           token: this.session.token,
           charName,
-          charClass
+          charClass,
+          portrait
         });
         this.session.characters = data.characters;
         createPanel.classList.add("hidden");
@@ -257,11 +279,12 @@ export class ScreenManager {
       const card = document.createElement("div");
       card.className = "char-card" + (index === this.selectedCharIndex ? " selected" : "");
 
-      const classInitial = (this._classesData[char.charClass]?.name || char.charClass).charAt(0).toUpperCase();
-      const className = this._classesData[char.charClass]?.name || this.capitalize(char.charClass);
+      const classDef = this._classesData[char.charClass];
+      const className = classDef?.name || this.capitalize(char.charClass);
+      const portraitSrc = `/assets/sprites/portraits/${char.portrait || "portrait_1"}.png`;
 
       card.innerHTML = `
-        <div class="char-avatar ${char.charClass}">${classInitial}</div>
+        <div class="char-avatar"><img class="char-avatar-img" src="${portraitSrc}" alt="${className}"></div>
         <div class="char-info">
           <div class="char-info-name">${this.escapeHtml(char.name)}</div>
           <div class="char-info-detail">Level ${char.level} ${className}</div>

@@ -229,9 +229,14 @@ export class UISystem {
     const charData = this.game.charData;
     this.el.playerName.textContent = charData.name;
 
-    const classInitials = {};
-    for (const [id, cls] of Object.entries(CLASSES)) classInitials[id] = cls.name.charAt(0);
-    this.el.playerPortrait.textContent = classInitials[charData.charClass] || "A";
+    const classDef = CLASSES[charData.charClass];
+    const portraitSrc = `/assets/sprites/portraits/${charData.portrait || "portrait_1"}.png`;
+    this.el.playerPortrait.textContent = "";
+    const img = document.createElement("img");
+    img.className = "portrait-img";
+    img.src = portraitSrc;
+    img.alt = classDef?.name || charData.charClass;
+    this.el.playerPortrait.appendChild(img);
   }
 
   bindButtons() {
@@ -2391,7 +2396,11 @@ export class UISystem {
 
         const portrait = document.createElement("div");
         portrait.className = "party-frame-portrait";
-        portrait.textContent = (m.charClass || "?").charAt(0).toUpperCase();
+        const pImg = document.createElement("img");
+        pImg.className = "party-portrait-img";
+        pImg.src = `/assets/sprites/portraits/${m.portrait || "portrait_1"}.png`;
+        pImg.alt = m.name || "?";
+        portrait.appendChild(pImg);
 
         const info = document.createElement("div");
         info.className = "party-frame-info";

@@ -90,8 +90,8 @@ app.post("/api/characters", (req, res) => {
 });
 
 app.post("/api/characters/create", (req, res) => {
-  const { token, charName, charClass } = req.body || {};
-  const result = database.createCharacter(token, charName, charClass);
+  const { token, charName, charClass, portrait } = req.body || {};
+  const result = database.createCharacter(token, charName, charClass, portrait);
   if (result.error) {
     const status = result.error.includes("Auth") ? 401 : 400;
     return res.status(status).json(result);
