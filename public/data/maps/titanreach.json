@@ -1,6 +1,7 @@
 {
     "id": "titanreach",
     "name": "Titanreach",
+    "pvpMode": "none",
     "width": 500,
     "height": 500,
     "tileSize": 48,

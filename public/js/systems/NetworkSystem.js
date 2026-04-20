@@ -39,6 +39,9 @@ export class NetworkSystem {
     this._reconnectTimer = null;
     this._intentionalClose = false;
 
+    /** Tracks casting/channeling particle intervals for remote players. */
+    this._remoteCastIntervals = new Map(); // playerId → intervalId
+
     /* ── Source-style snapshot interpolation state ──── */
 
     /** Immediate overrides applied on top of interpolated data. */
@@ -220,12 +223,17 @@ export class NetworkSystem {
     this.send({ type: "attack", enemyId });
   }
 
+  sendPvpAttack(targetPlayerId) {
+    this.send({ type: "attack", targetPlayerId });
+  }
+
   sendHeal() {
     this.send({ type: "heal" });
   }
 
-  sendSkill(skillId, enemyId, targetX, targetY) {
+  sendSkill(skillId, enemyId, targetX, targetY, targetPlayerId) {
     const msg = { type: "use_skill", skillId, enemyId: enemyId || null };
+    if (targetPlayerId) msg.targetPlayerId = targetPlayerId;
     if (targetX != null) msg.targetX = targetX;
     if (targetY != null) msg.targetY = targetY;
     this.send(msg);
@@ -418,7 +426,7 @@ export class NetworkSystem {
         this.onPlayerDamaged(msg);
         break;
       case "you_died":
-        this.onPlayerDied();
+        this.onPlayerDied(msg);
         break;
       case "you_respawned":
         this.onPlayerRespawned(msg);
@@ -589,6 +597,51 @@ export class NetworkSystem {
       case "party_invite_rescinded":
         this.onPartyInviteRescinded();
         break;
+      case "pvp_attack_result":
+        this.onPvpAttackResult(msg);
+        break;
+      case "pvp_combat_visual":
+        this.onPvpCombatVisual(msg);
+        break;
+      case "pvp_kill":
+        this.onPvpKill(msg);
+        break;
+      case "pvp_combat_timer":
+        this.onPvpCombatTimer(msg);
+        break;
+      case "pvp_safe_zone_blocked":
+        this.onPvpSafeZoneBlocked(msg);
+        break;
+      case "pvp_stats":
+        this.onPvpStats(msg);
+        break;
+      case "duel_result":
+        this.onDuelResult(msg);
+        break;
+      case "duel_challenge_received":
+        this.onDuelChallengeReceived(msg);
+        break;
+      case "duel_challenge_cancelled":
+        this.onDuelChallengeCancelled(msg);
+        break;
+      case "duel_started":
+        this.onDuelStarted(msg);
+        break;
+      case "duel_ended":
+        this.onDuelEnded(msg);
+        break;
+      case "player_cast_start":
+        this.onPlayerCastStart(msg);
+        break;
+      case "player_channel_start":
+        this.onPlayerChannelStart(msg);
+        break;
+      case "player_cast_end":
+        this.onPlayerCastEnd(msg);
+        break;
+      case "skill_aoe_visual":
+        this.onSkillAoeVisual(msg);
+        break;
       default:
         break;
     }
@@ -638,6 +691,11 @@ export class NetworkSystem {
     }
 
     this.enemyOverrides.clear();
+
+    // Clear any remote cast/channel particle intervals
+    for (const iv of this._remoteCastIntervals.values()) clearInterval(iv);
+    this._remoteCastIntervals.clear();
+
     this.game.entities.drops = (msg.drops || []).map((d) => ({
       ...d,
       expiresAt: now + 25000
@@ -724,6 +782,12 @@ export class NetworkSystem {
     if (msg.gatheringSkills) {
       this.game.entities.player.gatheringSkills = msg.gatheringSkills;
     }
+
+    // Load PVP data
+    if (msg.pvpMode !== undefined) this.game.pvpMode = msg.pvpMode;
+    if (msg.pvpKills !== undefined) this.game.entities.player.pvpKills = msg.pvpKills;
+    if (msg.pvpDeaths !== undefined) this.game.entities.player.pvpDeaths = msg.pvpDeaths;
+    this.game.pvpCombatUntil = 0;
 
     // Load resource nodes
     if (msg.resourceNodes) {
@@ -944,24 +1008,32 @@ export class NetworkSystem {
   onPlayerDamaged(msg) {
     const player = this.game.entities.player;
     player.hp = msg.hp;
-    this.game.ui.addMessage(`${msg.attackerName} hits you for ${msg.damage}.`);
 
-    // Look up the attacking enemy's effects from enemies.json
-    const enemyDef = msg.attackerType ? this.game.data.enemies[msg.attackerType] : null;
-    const hitParticle = enemyDef?.hitParticle || "player_hit";
-    const hitSfx = enemyDef?.hitSfx || "player_hit";
-
-    this.game.audio.play(hitSfx);
-    this.game.particles.emit(hitParticle, player.x, player.y);
+    if (msg.isPvp) {
+      this.game.ui.addMessage(`[PVP] ${msg.attackerName} hits you for ${msg.damage}.`, "pvp");
+      this.game.audio.play("player_hit");
+      this.game.particles.emit("player_hit", player.x, player.y);
+    } else {
+      this.game.ui.addMessage(`${msg.attackerName} hits you for ${msg.damage}.`);
+      // Look up the attacking enemy's effects from enemies.json
+      const enemyDef = msg.attackerType ? this.game.data.enemies[msg.attackerType] : null;
+      const hitParticle = enemyDef?.hitParticle || "player_hit";
+      const hitSfx = enemyDef?.hitSfx || "player_hit";
+      this.game.audio.play(hitSfx);
+      this.game.particles.emit(hitParticle, player.x, player.y);
+    }
   }
 
-  onPlayerDied() {
+  onPlayerDied(msg) {
     const player = this.game.entities.player;
     player.dead = true;
     player.deathUntil = performance.now() + 4200;
-    // Gold penalty is now server-authoritative; don't modify locally
     this.game.ui.closeLootWindow();
-    this.game.ui.addMessage("You died.");
+    if (msg && msg.pvp) {
+      this.game.ui.addMessage(`[PVP] Killed by ${msg.killerName}!`, "pvp");
+    } else {
+      this.game.ui.addMessage("You died.");
+    }
     this.game.audio.play("player_death");
     this.game.particles.emit("death", player.x, player.y);
   }
@@ -1055,7 +1127,18 @@ export class NetworkSystem {
       });
     }
 
-    if (msg.damage != null && msg.enemyId != null) {
+    if (msg.pvpHit) {
+      // Single-target PVP skill hit
+      const hit = msg.pvpHit;
+      if (skillDef?.projectileSpeed && skillDef.projectileSpeed > 0) return; // projectile in flight
+      const tp = this.game.entities.remotePlayers.find(p => p.id === hit.targetPlayerId)
+        || (this.game.entities.player.id === hit.targetPlayerId ? this.game.entities.player : null);
+      if (tp) {
+        if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, tp.x, tp.y);
+        if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      }
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits for ${hit.damage}.`);
+    } else if (msg.damage != null && msg.enemyId != null) {
       const enemy = this.game.entities.getEnemyById(msg.enemyId);
 
       // Ranged / projectile skill — damage comes later via projectile_hit
@@ -1077,6 +1160,7 @@ export class NetworkSystem {
     } else if (msg.aoe && msg.hits) {
       // AoE skill — process all hits
       let totalDmg = 0;
+      let totalTargets = msg.hits.length;
       for (const hit of msg.hits) {
         const enemy = this.game.entities.getEnemyById(hit.enemyId);
         if (enemy) {
@@ -1089,6 +1173,18 @@ export class NetworkSystem {
         this.enemyOverrides.set(hit.enemyId, { hp: hit.enemyHp, maxHp: hit.enemyMaxHp });
         totalDmg += hit.damage;
       }
+      // AoE PVP hits — emit particles on hit players
+      if (msg.pvpHits) {
+        for (const pvpHit of msg.pvpHits) {
+          const tp = this.game.entities.remotePlayers.find(p => p.id === pvpHit.targetPlayerId)
+            || (this.game.entities.player.id === pvpHit.targetPlayerId ? this.game.entities.player : null);
+          if (tp && skillDef?.hitParticle) {
+            this.game.particles.emit(skillDef.hitParticle, tp.x, tp.y);
+          }
+          totalDmg += pvpHit.damage;
+          totalTargets++;
+        }
+      }
       // Emit AoE particle effect on each affected tile
       const aoeParticle = skillDef?.aoeParticleEffect;
       if (aoeParticle && msg.aoeTiles) {
@@ -1097,8 +1193,8 @@ export class NetworkSystem {
         }
       }
       if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
-      if (msg.hits.length > 0) {
-        this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits ${msg.hits.length} target(s) for ${totalDmg} total.`);
+      if (totalTargets > 0) {
+        this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits ${totalTargets} target(s) for ${totalDmg} total.`);
       } else {
         this.game.ui.addMessage(`${skillDef?.name || msg.skillId} hits no targets.`);
       }
@@ -1199,8 +1295,18 @@ export class NetworkSystem {
     const player = this.game.entities.player;
     const skillDef = this.game.data.skills[msg.skillId];
 
-    if (msg.damage != null && msg.enemyId != null) {
-      // Single-target damage tick
+    if (msg.pvpHit) {
+      // Single-target PVP channel tick
+      const hit = msg.pvpHit;
+      const tp = this.game.entities.remotePlayers.find(p => p.id === hit.targetPlayerId)
+        || (this.game.entities.player.id === hit.targetPlayerId ? this.game.entities.player : null);
+      if (tp) {
+        if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, tp.x, tp.y);
+      }
+      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: ${hit.damage} damage.`);
+    } else if (msg.damage != null && msg.enemyId != null) {
+      // Single-target PVE damage tick
       const enemy = this.game.entities.getEnemyById(msg.enemyId);
       if (enemy) {
         enemy.hp = msg.enemyHp;
@@ -1213,6 +1319,7 @@ export class NetworkSystem {
     } else if (msg.aoe && msg.hits) {
       // AoE damage tick
       let totalDmg = 0;
+      let totalTargets = msg.hits.length;
       for (const hit of msg.hits) {
         const enemy = this.game.entities.getEnemyById(hit.enemyId);
         if (enemy) {
@@ -1223,6 +1330,18 @@ export class NetworkSystem {
         this.enemyOverrides.set(hit.enemyId, { hp: hit.enemyHp, maxHp: hit.enemyMaxHp });
         totalDmg += hit.damage;
       }
+      // AoE PVP hits
+      if (msg.pvpHits) {
+        for (const pvpHit of msg.pvpHits) {
+          const tp = this.game.entities.remotePlayers.find(p => p.id === pvpHit.targetPlayerId)
+            || (this.game.entities.player.id === pvpHit.targetPlayerId ? this.game.entities.player : null);
+          if (tp && skillDef?.hitParticle) {
+            this.game.particles.emit(skillDef.hitParticle, tp.x, tp.y);
+          }
+          totalDmg += pvpHit.damage;
+          totalTargets++;
+        }
+      }
       const aoeParticle = skillDef?.aoeParticleEffect;
       if (aoeParticle && msg.aoeTiles) {
         for (const [wx, wy] of msg.aoeTiles) {
@@ -1230,7 +1349,7 @@ export class NetworkSystem {
         }
       }
       if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
-      if (msg.hits.length > 0) {
+      if (totalTargets > 0) {
         this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: ${totalDmg} total damage.`);
       }
     } else if (msg.healAmount != null) {
@@ -1366,6 +1485,9 @@ export class NetworkSystem {
 
     this.game.combat.clearTarget();
     this.game.ui.closeAllPanels();
+
+    // Update PVP mode for new map
+    if (msg.pvpMode !== undefined) this.game.pvpMode = msg.pvpMode;
 
     // Load new map terrain/NPCs/statues if the map actually changed (e.g. admin teleport)
     if (msg.mapId && msg.mapId !== this.game.world.mapId) {
@@ -1974,6 +2096,164 @@ export class NetworkSystem {
     }
   }
 
+  /* ── PVP handlers ─────────────────────────────────── */
+
+  onPvpAttackResult(msg) {
+    // Attacker sees their hit on another player
+    this.game.ui.addMessage(`[PVP] You hit ${msg.targetName} for ${msg.damage}.`, "pvp");
+    const rp = this.game.entities.remotePlayers.find(p => p.id === msg.targetId);
+    if (rp) {
+      this.game.particles.emit("player_hit", rp.x, rp.y);
+    }
+  }
+
+  onPvpCombatVisual(msg) {
+    // Third-party observers see PVP combat between two other players
+    const attacker = this.game.entities.remotePlayers.find(p => p.id === msg.attackerId);
+    const target = this.game.entities.remotePlayers.find(p => p.id === msg.targetId)
+      || (this.game.entities.player.id === msg.targetId ? this.game.entities.player : null);
+    const tx = target ? target.x : (msg.tx || 0);
+    const ty = target ? target.y : (msg.ty || 0);
+
+    // Use skill-specific or weapon-specific effects from server
+    const particle = msg.hitParticle || "hit_spark";
+    const sfx = msg.hitSfx || "sword_hit";
+    this.game.particles.emit(particle, tx, ty);
+    this.game.audio.play(sfx);
+  }
+
+  onPvpKill(msg) {
+    // We killed another player
+    const player = this.game.entities.player;
+    player.pvpKills = msg.pvpKills;
+    this.game.ui.addMessage(`[PVP] You killed ${msg.victimName}!`, "pvp");
+  }
+
+  onPvpCombatTimer(msg) {
+    // Server tells us our PVP combat timer
+    this.game.pvpCombatUntil = Date.now() + (msg.remainingSec * 1000);
+  }
+
+  onPvpSafeZoneBlocked(msg) {
+    this.game.ui.addMessage("[PVP] You cannot enter a safe zone during PVP combat.", "pvp");
+  }
+
+  onPvpStats(msg) {
+    this.game.entities.player.pvpKills = msg.pvpKills;
+    this.game.entities.player.pvpDeaths = msg.pvpDeaths;
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  /* ── Duel handlers ────────────────────────────────── */
+
+  onDuelResult(msg) {
+    if (msg.error) {
+      this.game.ui.addMessage(`[Duel] ${msg.error}`, "pvp");
+    } else if (msg.message) {
+      this.game.ui.addMessage(`[Duel] ${msg.message}`, "pvp");
+    }
+  }
+
+  onDuelChallengeReceived(msg) {
+    this.game.ui.addMessage(`[Duel] ${msg.fromName} has challenged you to a duel!`, "pvp");
+    this.game.ui._pendingDuelChallenge = { fromId: msg.fromId, fromName: msg.fromName };
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onDuelChallengeCancelled(msg) {
+    this.game.ui._pendingDuelChallenge = null;
+    this.game.ui.addMessage("[Duel] The duel challenge was cancelled.", "pvp");
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onDuelStarted(msg) {
+    this.game.ui._pendingDuelChallenge = null;
+    this.game._duelOpponent = { id: msg.opponentId, name: msg.opponentName };
+    this.game.ui.addMessage(`[Duel] Duel started with ${msg.opponentName}!`, "pvp");
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  onDuelEnded(msg) {
+    const opponent = this.game._duelOpponent;
+    this.game._duelOpponent = null;
+    this.game.ui._pendingDuelChallenge = null;
+    if (opponent) {
+      this.game.ui.addMessage(`[Duel] Duel with ${opponent.name} has ended.`, "pvp");
+    }
+    if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
+      this.game.ui.renderSocialContent();
+    }
+  }
+
+  /* ── Remote player cast/channel visual handlers ─── */
+
+  onPlayerCastStart(msg) {
+    // Another player started casting — show casting particles on them
+    this._clearRemoteCastInterval(msg.playerId);
+    const rp = this.game.entities.remotePlayers.find(p => p.id === msg.playerId);
+    if (!rp) return;
+    const skillDef = this.game.data.skills[msg.skillId];
+    if (skillDef?.castSfx) this.game.audio.play(skillDef.castSfx);
+    this.game.particles.emit("casting", rp.x, rp.y);
+    const iv = setInterval(() => {
+      const p = this.game.entities.remotePlayers.find(p => p.id === msg.playerId);
+      if (p) this.game.particles.emit("casting", p.x, p.y);
+    }, 250);
+    this._remoteCastIntervals.set(msg.playerId, iv);
+  }
+
+  onPlayerChannelStart(msg) {
+    // Another player started channeling — show casting + skill particles
+    this._clearRemoteCastInterval(msg.playerId);
+    const rp = this.game.entities.remotePlayers.find(p => p.id === msg.playerId);
+    if (!rp) return;
+    const skillDef = this.game.data.skills[msg.skillId];
+    if (skillDef?.castSfx) this.game.audio.play(skillDef.castSfx);
+    if (skillDef?.particle) this.game.particles.emit(skillDef.particle, rp.x, rp.y);
+    this.game.particles.emit("casting", rp.x, rp.y);
+    const iv = setInterval(() => {
+      const p = this.game.entities.remotePlayers.find(p => p.id === msg.playerId);
+      if (p) {
+        this.game.particles.emit("casting", p.x, p.y);
+        if (skillDef?.particle) this.game.particles.emit(skillDef.particle, p.x, p.y);
+      }
+    }, 400);
+    this._remoteCastIntervals.set(msg.playerId, iv);
+  }
+
+  onPlayerCastEnd(msg) {
+    // Another player's cast finished or was interrupted — stop particles
+    this._clearRemoteCastInterval(msg.playerId);
+  }
+
+  _clearRemoteCastInterval(playerId) {
+    const iv = this._remoteCastIntervals.get(playerId);
+    if (iv) {
+      clearInterval(iv);
+      this._remoteCastIntervals.delete(playerId);
+    }
+  }
+
+  onSkillAoeVisual(msg) {
+    // Observer sees AoE ground effects from another player's skill
+    const skillDef = this.game.data.skills[msg.skillId];
+    const aoeParticle = msg.aoeParticleEffect || skillDef?.aoeParticleEffect;
+    if (aoeParticle && msg.aoeTiles) {
+      for (const [wx, wy] of msg.aoeTiles) {
+        this.game.particles.emit(aoeParticle, wx, wy);
+      }
+    }
+    if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+  }
+
   /* ═══════════════════════════════════════════════════════
      SOURCE-STYLE ENTITY INTERPOLATION
      ═══════════════════════════════════════════════════════
@@ -2125,15 +2405,71 @@ export class NetworkSystem {
    * Damage is computed later on the server when the projectile hits.
    */
   onProjectileSpawn(msg) {
+    // PVP projectile targeting a player
+    if (msg.targetPlayerId) {
+      const tp = this.game.entities.remotePlayers.find(p => p.id === msg.targetPlayerId)
+        || (this.game.entities.player.id === msg.targetPlayerId ? this.game.entities.player : null);
+      const tx = tp ? tp.x : (msg.tx ?? msg.sx);
+      const ty = tp ? tp.y : (msg.ty ?? msg.sy);
+
+      if (msg.weaponId) {
+        const weaponDef = this.game.data.items[msg.weaponId];
+        this.game.projectiles.spawn({
+          sx: msg.sx, sy: msg.sy,
+          tx, ty,
+          targetPlayerId: msg.targetPlayerId,
+          speed: msg.speed,
+          sprite: "assets/sprites/entities/arrow.png",
+          spriteW: 16, spriteH: 32,
+          color: "#d4a856",
+          trail: "#8b7340",
+          size: 3,
+          onHit: () => {
+            const p = this.game.entities.remotePlayers.find(p => p.id === msg.targetPlayerId)
+              || (this.game.entities.player.id === msg.targetPlayerId ? this.game.entities.player : null);
+            if (p) {
+              this.game.particles.emit(weaponDef?.hitParticle || "hit_spark", p.x, p.y);
+              this.game.audio.play(weaponDef?.hitSfx || "sword_hit");
+            }
+          }
+        });
+      } else if (msg.skillId) {
+        const pColors = NetworkSystem._PROJ_COLORS[msg.damageType] || NetworkSystem._PROJ_COLORS.physical;
+        const skillDef = this.game.data.skills[msg.skillId];
+        this.game.projectiles.spawn({
+          sx: msg.sx, sy: msg.sy,
+          tx, ty,
+          targetPlayerId: msg.targetPlayerId,
+          speed: msg.speed,
+          color: pColors.color,
+          trail: pColors.trail,
+          size: pColors.size,
+          onHit: () => {
+            const p = this.game.entities.remotePlayers.find(p => p.id === msg.targetPlayerId)
+              || (this.game.entities.player.id === msg.targetPlayerId ? this.game.entities.player : null);
+            if (p) {
+              if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, p.x, p.y);
+              if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+            }
+          }
+        });
+      }
+      return;
+    }
+
+    // PVE projectile targeting an enemy
     const enemy = this.game.entities.getEnemyById(msg.targetEnemyId);
-    if (!enemy) return;
+    if (!enemy) console.warn("[ProjectileSpawn] Enemy not found locally, using server coords:", msg.targetEnemyId);
+    // Use local enemy position if available, otherwise fall back to server-sent coordinates
+    const tx = enemy ? enemy.x : (msg.tx ?? msg.sx);
+    const ty = enemy ? enemy.y : (msg.ty ?? msg.sy);
 
     if (msg.weaponId) {
       // Weapon attack — spawn arrow
       const weaponDef = this.game.data.items[msg.weaponId];
       this.game.projectiles.spawn({
         sx: msg.sx, sy: msg.sy,
-        tx: enemy.x, ty: enemy.y,
+        tx, ty,
         targetId: msg.targetEnemyId,
         speed: msg.speed,
         sprite: "assets/sprites/entities/arrow.png",
@@ -2155,7 +2491,7 @@ export class NetworkSystem {
       const skillDef = this.game.data.skills[msg.skillId];
       this.game.projectiles.spawn({
         sx: msg.sx, sy: msg.sy,
-        tx: enemy.x, ty: enemy.y,
+        tx, ty,
         targetId: msg.targetEnemyId,
         speed: msg.speed,
         color: pColors.color,

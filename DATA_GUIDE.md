@@ -1318,6 +1318,36 @@ Defines item rarity tiers and their display colors. Items reference a rarity by 
 
 ---
 
+## pvp.json
+
+Global PVP configuration. The server reads this at startup.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `combatTimerSec` | number | Duration (seconds) of PVP combat status after attacking another player (prevents safe zone entry). Default `30` |
+| `killTimerSec` | number | Duration (seconds) of PVP combat status after killing another player. Default `300` |
+| `deathGoldPenalty` | number | Percentage of gold (0–100) lost by the victim on PVP death. Default `5` |
+| `friendlyFireParty` | boolean | Whether party members can damage each other. Default `false` |
+
+**Example:**
+```json
+{
+  "combatTimerSec": 30,
+  "killTimerSec": 300,
+  "deathGoldPenalty": 5,
+  "friendlyFireParty": false
+}
+```
+
+### Map-level PVP fields (in each map JSON)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pvpMode` | string | `"none"` (safe), `"ffa"` (free-for-all), or `"duel"` (mutual opt-in) |
+| `pvpSafeZoneProtection` | boolean | *(optional)* If `true`, players in safe zones cannot be attacked (FFA maps only) |
+
+---
+
 ## Asset Checklist
 
 When adding new content, ensure the matching sprite/icon exists:

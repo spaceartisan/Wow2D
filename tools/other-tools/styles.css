@@ -201,6 +201,8 @@ code, .mono, pre { font-family: var(--mono); }
   min-height: 0;
 }
 .tool-view.active { display: grid; }
+.tool-view--single.active { display: grid; grid-template-columns: minmax(0, 1fr); }
+.tool-view--single > .panel { min-width: 0; }
 
 /* ─── Panels ──────────────────────────────────── */
 .panel {
@@ -450,6 +452,17 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.55; }
 .editor-grid {
   display: grid;
   grid-template-columns: minmax(360px, 1.5fr) minmax(260px, 0.8fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
+}
+.editor-grid--wide-form {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
+}
+.single-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(400px, 2.5fr) minmax(260px, 1fr);
   gap: 12px;
   min-height: 0;
   height: 100%;

@@ -193,10 +193,10 @@ export class WorldSystem {
 
   isSafeZone(worldX, worldY) {
     for (const zone of this.safeZones) {
-      const x1 = zone.x * this.tileSize;
-      const y1 = zone.y * this.tileSize;
-      const x2 = (zone.x + zone.w) * this.tileSize;
-      const y2 = (zone.y + zone.h) * this.tileSize;
+      const x1 = zone.x1 * this.tileSize;
+      const y1 = zone.y1 * this.tileSize;
+      const x2 = zone.x2 * this.tileSize;
+      const y2 = zone.y2 * this.tileSize;
       if (worldX >= x1 && worldX <= x2 && worldY >= y1 && worldY <= y2) {
         return true;
       }

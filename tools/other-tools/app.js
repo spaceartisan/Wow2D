@@ -26,7 +26,7 @@
     attackCooldown: 1.25,
     loot: [],
   };
-  const NPC_TYPES = ['quest_giver', 'vendor', 'banker', 'crafting_station'];
+  const NPC_TYPES = ['quest_giver', 'vendor', 'banker', 'crafting_station', 'npc', 'gathering'];
   const DEFAULT_NEW_NPC = {
     id: 'newNpc',
     name: 'New NPC',
@@ -135,6 +135,13 @@
     selectedAoePatternKey: null,
     aoePatternSearch: '',
     aoePatternDirty: false,
+
+    rarities: {},
+    raritiesDirty: false,
+    party: null,
+    partyDirty: false,
+    theme: null,
+    themeDirty: false,
   };
 
   const els = {};
@@ -142,14 +149,14 @@
     'connectionBadge','dirtyBadge','loadButton','saveButton',
     'reloadButton','validateButton','scanTilesButton','addTileButton','duplicateTileButton','deleteTileButton','searchInput','tileList','entryCount','blockedCount','selectedTileLabel','emptyState','tileForm','tileIdInput','tileBlockedInput','tileColorPicker','tileRInput','tileGInput','tileBInput','colorPreview','spritePreviewImage','spritePreviewFallback','spriteStatusBadge','spritePathLabel','entryJsonPreview','diagnosticsList','validationSummary','tileListItemTemplate','scanModal','scanModalSubtitle','scanModalCloseButton','scanCancelButton','scanConfirmButton','scanNewCount','scanExistingCount','scanSpriteDirLabel','scanTileIdList',
     'itemSearchInput','itemList','itemEntryCount','itemTypeCount','selectedItemLabel','itemEmptyState','itemForm','itemIdInput','itemNameInput','itemTypeInput','itemIconInput','itemValueInput','itemStackSizeInput','itemDescriptionInput','itemStatsAttackInput','itemStatsHpInput','itemStatsManaInput','itemStatsDefenseInput','itemRarityInput','itemDismantleableInput','itemDismantleEditor','itemDismantleEmptyState','itemDismantleAddButton','itemEffectsEditor','itemEffectsEmptyState','itemEffectAddButton','itemAttackBonusInput','itemHandedInput','itemWeaponTypeInput','itemRequiresQuiverInput','itemWeaponRangeInput','itemHpBonusInput','itemManaBonusInput','itemMaxArrowsInput','itemToolTypeInput','itemToolTierInput','itemGatheringLevelReqInput','itemPermanentInput','itemConcentrationInput','itemCastTimeInput','itemCooldownInput','itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput','itemIconPreviewImage','itemIconPreviewFallback','itemIconStatusBadge','itemIconPathLabel','itemJsonPreview','itemDiagnosticsList','itemValidationSummary','itemListItemTemplate','addItemButton','duplicateItemButton','deleteItemButton','validateItemsButton','reloadItemsButton',
-    'enemySearchInput','enemyList','enemyEntryCount','enemyLootRefCount','selectedEnemyLabel','enemyEmptyState','enemyForm','enemyIdInput','enemyNameInput','enemyPreviewImage','enemyPreviewFallback','enemySpriteStatusBadge','enemySpritePathLabel','enemyColorPreview','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyLootEditor','enemyLootEmptyState','enemyLootAddButton','enemyJsonPreview','enemyDiagnosticsList','enemyValidationSummary','enemyListItemTemplate','addEnemyButton','duplicateEnemyButton','deleteEnemyButton','validateEnemiesButton','reloadEnemiesButton',
-    'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcCraftingSkillInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
-    'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNotStartedTextInput','questDialogNotStartedOptionsEditor','questDialogNotStartedOptionsEmptyState','questDialogNotStartedAddButton','questDialogActiveTextInput','questDialogActiveOptionsEditor','questDialogActiveOptionsEmptyState','questDialogActiveAddButton','questDialogReadyTextInput','questDialogReadyOptionsEditor','questDialogReadyOptionsEmptyState','questDialogReadyAddButton','questDialogCompletedTextInput','questDialogCompletedOptionsEditor','questDialogCompletedOptionsEmptyState','questDialogCompletedAddButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
+    'enemySearchInput','enemyList','enemyEntryCount','enemyLootRefCount','selectedEnemyLabel','enemyEmptyState','enemyForm','enemyIdInput','enemyNameInput','enemyPreviewImage','enemyPreviewFallback','enemySpriteStatusBadge','enemySpritePathLabel','enemyColorPreview','enemyLevelInput','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyLootEditor','enemyLootEmptyState','enemyLootAddButton','enemyJsonPreview','enemyDiagnosticsList','enemyValidationSummary','enemyListItemTemplate','addEnemyButton','duplicateEnemyButton','deleteEnemyButton','validateEnemiesButton','reloadEnemiesButton',
+    'npcSearchInput','npcList','npcEntryCount','npcVendorCount','selectedNpcLabel','npcEmptyState','npcForm','npcIdInput','npcNameInput','npcTypeInput','npcColorInput','npcPreviewImage','npcPreviewFallback','npcSpriteStatusBadge','npcSpritePathLabel','npcColorPreview','npcDefaultDialogInput','npcCraftingSkillInput','npcQuestEditor','npcQuestEmptyState','npcQuestAddButton','npcShopEditor','npcShopEmptyState','npcShopAddButton','npcDialogTreeStack','npcDialogTreeAddNodeButton','npcJsonPreview','npcDiagnosticsList','npcValidationSummary','addNpcButton','duplicateNpcButton','deleteNpcButton','validateNpcsButton','reloadNpcsButton',
+    'questSearchInput','questList','questEntryCount','questObjectiveCount','selectedQuestLabel','questEmptyState','questForm','questIdInput','questNameInput','questGiverInput','questLevelInput','questDescriptionInput','questPrereqEditor','questPrereqEmptyState','questPrereqAddButton','questObjectivesEditor','questObjectivesEmptyState','questObjectiveAddButton','questRewardXpInput','questRewardGoldInput','questRewardItemsEditor','questRewardItemsEmptyState','questRewardItemAddButton','questDialogNodeStack','questDialogAddNodeButton','questJsonPreview','questDiagnosticsList','questValidationSummary','addQuestButton','duplicateQuestButton','deleteQuestButton','validateQuestsButton','reloadQuestsButton',
     'playerBaseForm','pbMaxHpInput','pbMaxManaInput','pbDamageInput','pbHpPerLevelInput','pbManaPerLevelInput','pbDamagePerLevelInput','pbMoveSpeedInput','pbAttackRangeInput','pbAttackCooldownInput','pbClassesEditor','playerBaseJsonPreview','playerBaseDiagnosticsList','playerBaseValidationSummary','validatePlayerBaseButton','reloadPlayerBaseButton',
     'propSearchInput','propList','propEntryCount','propBlockedCount','selectedPropLabel','propEmptyState','propForm','propIdInput','propBlockedInput','propColorPicker','propRInput','propGInput','propBInput','propColorPreview','propSpritePreviewImage','propSpritePreviewFallback','propSpriteStatusBadge','propSpritePathLabel','propJsonPreview','propDiagnosticsList','propValidationSummary','addPropButton','duplicatePropButton','deletePropButton','validatePropsButton','reloadPropsButton','scanPropsButton',
     'particleSearchInput','particleList','particleEntryCount','particleAdditiveCount','selectedParticleLabel','particleEmptyState','particleForm','particleIdInput','particleBlendModeInput','particleEmitIntervalInput','particleContinuousInput','particleFadeOutInput','particleCountMinInput','particleCountMaxInput','particleLifetimeMinInput','particleLifetimeMaxInput','particleSpeedMinInput','particleSpeedMaxInput','particleAngleMinInput','particleAngleMaxInput','particleGravityInput','particleFrictionInput','particleSizeMinInput','particleSizeMaxInput','particleSizeEndInput','particleColorEditor','particleColorEmptyState','particleColorSwatchRow','particleColorAddButton','particleJsonPreview','particleDiagnosticsList','particleValidationSummary','addParticleButton','duplicateParticleButton','deleteParticleButton','validateParticlesButton','reloadParticlesButton','particlePreviewCanvas','particleEmitButton','particleClearButton',
     'skillSearchInput','skillList','skillEntryCount','skillTypeCount','selectedSkillLabel','skillEmptyState','skillForm','skillIdInput','skillNameInput','skillTypeInput','skillTargetingInput','skillIconInput','skillLevelReqInput','skillManaCostInput','skillCooldownInput','skillRangeInput','skillDescriptionInput','skillClassesExtraInput','skillParticleInput','skillHitParticleInput','skillSfxInput','skillCastSfxInput','skillCastTimeInput','skillChannelTicksInput','skillIgnoreConcentrationInput','skillAoePatternInput','skillAoeParticleEffectInput','skillProjectileSpeedInput','skillDamageInput','skillDamagePerLevelInput','skillDamageTypeInput','skillAoeRadiusInput','skillHitsInput','skillHitIntervalInput','skillChanneledInput','skillHealAmountInput','skillHealPerLevelInput','skillHealTicksInput','skillHealIntervalInput','skillHealChanneledInput','skillJsonPreview','skillDiagnosticsList','skillValidationSummary','addSkillButton','duplicateSkillButton','deleteSkillButton','validateSkillsButton','reloadSkillsButton','skillIconPreviewImage','skillIconPreviewFallback','skillIconStatusBadge','skillIconPathLabel',
-    'enemyHitParticleInput','enemyHitSfxInput',
+    'enemyHitParticleInput','enemyHitSfxInput','enemyTileSizeInput',
     'itemHitParticleInput','itemHitSfxInput','itemSwingSfxInput','itemUseParticleInput','itemUseSfxInput',
     'pbHitParticleInput','pbHitSfxInput','pbSwingSfxInput',
     'statusEffectSearchInput','statusEffectList','statusEffectEntryCount','statusEffectBuffCount','selectedStatusEffectLabel','statusEffectEmptyState','statusEffectForm','statusEffectIdInput','statusEffectNameInput','statusEffectDescriptionInput','statusEffectTypeInput','statusEffectIconInput','statusEffectJsonPreview','statusEffectDiagnosticsList','statusEffectValidationSummary','addStatusEffectButton','duplicateStatusEffectButton','deleteStatusEffectButton','validateStatusEffectsButton','reloadStatusEffectsButton','statusEffectIconPreviewImage','statusEffectIconPreviewFallback','statusEffectIconStatusBadge','statusEffectIconPathLabel',
@@ -157,11 +164,14 @@
     'gatheringSkillSearchInput','gatheringSkillList','gatheringSkillEntryCount','gatheringSkillToolCount','selectedGatheringSkillLabel','gatheringSkillEmptyState','gatheringSkillForm','gatheringSkillIdInput','gatheringSkillNameInput','gatheringSkillIconInput','gatheringSkillToolTypeInput','gatheringSkillCategoryInput','gatheringSkillDescriptionInput','gatheringSkillJsonPreview','gatheringSkillDiagnosticsList','gatheringSkillValidationSummary','addGatheringSkillButton','duplicateGatheringSkillButton','deleteGatheringSkillButton','validateGatheringSkillsButton','reloadGatheringSkillsButton',
     'resourceNodeSearchInput','resourceNodeList','resourceNodeEntryCount','resourceNodeSkillCount','selectedResourceNodeLabel','resourceNodeEmptyState','resourceNodeForm','resourceNodeIdInput','resourceNodeNameInput','resourceNodeSpriteImage','resourceNodeSpriteFallback','resourceNodeSpriteStatusBadge','resourceNodeSpritePathLabel','resourceNodeColorPreview','resourceNodeSkillInput','resourceNodeToolTypeInput','resourceNodeToolTierInput','resourceNodeRequiredLevelInput','resourceNodeXpInput','resourceNodeMaxHarvestsInput','resourceNodeRespawnTicksInput','resourceNodeGatherItemInput','resourceNodeColorPicker','resourceNodeRInput','resourceNodeGInput','resourceNodeBInput','resourceNodeJsonPreview','resourceNodeDiagnosticsList','resourceNodeValidationSummary','addResourceNodeButton','duplicateResourceNodeButton','deleteResourceNodeButton','validateResourceNodesButton','reloadResourceNodesButton',
     'recipeSearchInput','recipeList','recipeEntryCount','recipeSkillCount','selectedRecipeLabel','recipeEmptyState','recipeForm','recipeIdInput','recipeNameInput','recipeSkillInput','recipeRequiredLevelInput','recipeXpInput','recipeCraftTimeInput','recipeInputEditor','recipeInputEmptyState','recipeInputAddButton','recipeOutputIdInput','recipeOutputQtyInput','recipeJsonPreview','recipeDiagnosticsList','recipeValidationSummary','addRecipeButton','duplicateRecipeButton','deleteRecipeButton','validateRecipesButton','reloadRecipesButton',
-    'aoePatternSearchInput','aoePatternList','aoePatternEntryCount','aoePatternDirectionalCount','selectedAoePatternLabel','aoePatternEmptyState','aoePatternForm','aoePatternIdInput','aoePatternNameInput','aoePatternOriginInput','aoePatternDirectionalInput','aoePatternCanvas','aoePatternGridSizeInput','aoePatternClearButton','aoePatternTileCount','aoePatternJsonPreview','aoePatternDiagnosticsList','aoePatternValidationSummary','addAoePatternButton','duplicateAoePatternButton','deleteAoePatternButton','validateAoePatternsButton','reloadAoePatternsButton'
+    'aoePatternSearchInput','aoePatternList','aoePatternEntryCount','aoePatternDirectionalCount','selectedAoePatternLabel','aoePatternEmptyState','aoePatternForm','aoePatternIdInput','aoePatternNameInput','aoePatternOriginInput','aoePatternDirectionalInput','aoePatternCanvas','aoePatternGridSizeInput','aoePatternClearButton','aoePatternTileCount','aoePatternJsonPreview','aoePatternDiagnosticsList','aoePatternValidationSummary','addAoePatternButton','duplicateAoePatternButton','deleteAoePatternButton','validateAoePatternsButton','reloadAoePatternsButton',
+    'raritiesEditorContainer','raritiesJsonPreview','raritiesDiagnosticsList','raritiesValidationSummary','addRarityButton','deleteRarityButton','validateRaritiesButton','reloadRaritiesButton',
+    'partyMaxSizeInput','partyXpShareEnabledInput','partyXpShareRangeInput','partyXpShareLevelDiffInput','partyXpShareSplitModeInput','partyQuestShareEnabledInput','partyQuestShareRangeInput','partyQuestShareLevelDiffInput','partyJsonPreview','partyDiagnosticsList','partyValidationSummary','reloadPartyButton',
+    'themeGameNameInput','themeGameSubtitleInput','themeTaglineInput','themeWelcomeMessageInput','themeDefaultMapInput','themeLogoGlyphInput','themeLogoPreviewImage','themeLogoPreviewFallback','themeVersionTextInput','themeUiFontFamilyInput','themeUiFontSizeInput','themeUiBorderRadiusInput','themeColorsEditor','themeCharSelectTitleInput','themeCreateCharTitleInput','themeLoginContainerBorderRadiusInput','themeLoginContainerPaddingInput','themeLoginTitleFontSizeInput','themeLoginTaglineFontSizeInput','themeLoginInputFontSizeInput','themeLoginInputBorderRadiusInput','themeLoginInputPaddingInput','themeLoginButtonFontSizeInput','themeLoginButtonBorderRadiusInput','themeLoginButtonPaddingInput','themeLoginBackdropGradientInput','themeJsonPreview','themeDiagnosticsList','themeValidationSummary','reloadThemeButton'
   ];
 
   function bindEls() { ids.forEach(id => els[id] = document.getElementById(id)); }
-  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : (state.activeTab === 'recipes' ? state.recipeDirty : (state.activeTab === 'aoePatterns' ? state.aoePatternDirty : state.tileDirty)))))))))))); }
+  function currentDirty() { return state.activeTab === 'items' ? state.itemDirty : (state.activeTab === 'enemies' ? state.enemyDirty : (state.activeTab === 'npcs' ? state.npcDirty : (state.activeTab === 'quests' ? state.questDirty : (state.activeTab === 'playerBase' ? state.playerBaseDirty : (state.activeTab === 'props' ? state.propDirty : (state.activeTab === 'particles' ? state.particleDirty : (state.activeTab === 'skills' ? state.skillDirty : (state.activeTab === 'statusEffects' ? state.statusEffectDirty : (state.activeTab === 'gatheringSkills' ? state.gatheringSkillDirty : (state.activeTab === 'resourceNodes' ? state.resourceNodeDirty : (state.activeTab === 'recipes' ? state.recipeDirty : (state.activeTab === 'aoePatterns' ? state.aoePatternDirty : (state.activeTab === 'rarities' ? state.raritiesDirty : (state.activeTab === 'party' ? state.partyDirty : (state.activeTab === 'theme' ? state.themeDirty : state.tileDirty))))))))))))))); }
   function setServerStatus(online) {
     state.serverOnline = online;
     els.connectionBadge.textContent = online ? 'Server online' : 'Server offline';
@@ -186,6 +196,9 @@
   function setResourceNodeDirty(v){ state.resourceNodeDirty = v; updateDirtyBadge(); }
   function setRecipeDirty(v){ state.recipeDirty = v; updateDirtyBadge(); }
   function setAoePatternDirty(v){ state.aoePatternDirty = v; updateDirtyBadge(); }
+  function setRaritiesDirty(v){ state.raritiesDirty = v; updateDirtyBadge(); }
+  function setPartyDirty(v){ state.partyDirty = v; updateDirtyBadge(); }
+  function setThemeDirty(v){ state.themeDirty = v; updateDirtyBadge(); }
   function clampByte(value) { const num = Number(value); return Number.isNaN(num) ? 0 : Math.max(0, Math.min(255, Math.round(num))); }
   function rgbToHex(rgb) { const [r,g,b]=rgb.map(clampByte); return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
   function hexToRgb(hex) { const n=String(hex).replace('#','').trim(); if(!/^[0-9a-fA-F]{6}$/.test(n)) return [0,0,0]; return [0,2,4].map(i=>parseInt(n.slice(i,i+2),16)); }
@@ -859,6 +872,7 @@
   function buildCurrentEnemyObject(key) {
     const obj = {
       name: (els.enemyNameInput.value || '').trim() || key,
+      level: Number(els.enemyLevelInput.value || 1),
       maxHp: Number(els.enemyMaxHpInput.value || 0),
       damage: Number(els.enemyDamageInput.value || 0),
       speed: Number(els.enemySpeedInput.value || 0),
@@ -877,6 +891,8 @@
     const hitSfx = els.enemyHitSfxInput.value.trim();
     if (hitParticle) obj.hitParticle = hitParticle;
     if (hitSfx) obj.hitSfx = hitSfx;
+    const tileSize = parseInt(els.enemyTileSizeInput.value, 10);
+    if (tileSize > 1) obj.tileSize = tileSize;
     return obj;
   }
   function renderEnemyPanel() {
@@ -893,6 +909,7 @@
     els.enemyForm.classList.remove('hidden');
     els.enemyIdInput.value = state.selectedEnemyKey;
     els.enemyNameInput.value = enemy.name || '';
+    els.enemyLevelInput.value = toIntOrEmpty(enemy.level ?? 1);
     els.enemyMaxHpInput.value = toNumOrEmpty(enemy.maxHp);
     els.enemyDamageInput.value = toNumOrEmpty(enemy.damage);
     els.enemySpeedInput.value = toNumOrEmpty(enemy.speed);
@@ -907,6 +924,7 @@
     els.enemyAttackCooldownInput.value = toNumOrEmpty(enemy.attackCooldown);
     els.enemyHitParticleInput.value = enemy.hitParticle || '';
     els.enemyHitSfxInput.value = enemy.hitSfx || '';
+    els.enemyTileSizeInput.value = enemy.tileSize > 1 ? String(enemy.tileSize) : '';
     els.enemyColorPreview.style.background = enemy.color || '#808080';
     renderEnemyLootEditor();
     els.enemySpritePathLabel.textContent = getEntitySpriteDisplayPath(state.selectedEnemyKey);
@@ -1063,7 +1081,7 @@
   function updateNpcTypeFieldVisibility(type) {
     document.querySelectorAll('[data-npc-field]').forEach(el => {
       const field = el.dataset.npcField;
-      const show = (type === 'quest_giver' && field === 'questIds') || (type === 'vendor' && field === 'shop') || (type === 'crafting_station' && field === 'craftingSkill');
+      const show = (type === 'quest_giver' && field === 'questIds') || (type === 'vendor' && field === 'shop') || (type === 'crafting_station' && field === 'craftingSkill') || (field === 'dialogTree');
       el.classList.toggle('hidden-field', !show);
     });
   }
@@ -1134,6 +1152,9 @@
     if (obj.type === 'quest_giver') obj.questIds = Array.isArray(current.questIds) ? [...current.questIds] : [];
     if (obj.type === 'vendor') obj.shop = Array.isArray(current.shop) ? [...current.shop] : [];
     if (obj.type === 'crafting_station') obj.craftingSkill = els.npcCraftingSkillInput.value || 'smelting';
+    // dialogTree: always preserve from current state (edited live via renderDialogNodeStack)
+    const curNpc = state.npcs[state.selectedNpcKey];
+    if (curNpc && curNpc.dialogTree && typeof curNpc.dialogTree === 'object') obj.dialogTree = curNpc.dialogTree;
     return obj;
   }
   function renderNpcPanel() {
@@ -1158,6 +1179,14 @@
     els.npcJsonPreview.textContent = JSON.stringify({ [state.selectedNpcKey]: npc }, null, 2);
     updateNpcTypeFieldVisibility(els.npcTypeInput.value);
     if (npc.craftingSkill) els.npcCraftingSkillInput.value = npc.craftingSkill;
+    // Render dialogTree
+    const dTree = npc.dialogTree && typeof npc.dialogTree === 'object' ? npc.dialogTree : {};
+    renderDialogNodeStack(els.npcDialogTreeStack, dTree, (newMap) => {
+      const cur = state.npcs[state.selectedNpcKey]; if (!cur) return;
+      cur.dialogTree = newMap;
+      setNpcDirty(true);
+      els.npcJsonPreview.textContent = JSON.stringify({ [state.selectedNpcKey]: cur }, null, 2);
+    }, ['root']);
     renderNpcQuestEditor();
     renderNpcShopEditor();
     setNpcSpriteStatus(null);
@@ -1252,67 +1281,171 @@
     const d = dialog && typeof dialog === 'object' ? dialog[key] : null;
     return d && typeof d === 'object' && !Array.isArray(d) ? d : { text:'', options:[] };
   }
-  function getQuestDialogStateConfig() {
-    return {
-      not_started: { textInput: els.questDialogNotStartedTextInput, editor: els.questDialogNotStartedOptionsEditor, empty: els.questDialogNotStartedOptionsEmptyState },
-      active: { textInput: els.questDialogActiveTextInput, editor: els.questDialogActiveOptionsEditor, empty: els.questDialogActiveOptionsEmptyState },
-      ready_to_turn_in: { textInput: els.questDialogReadyTextInput, editor: els.questDialogReadyOptionsEditor, empty: els.questDialogReadyOptionsEmptyState },
-      completed: { textInput: els.questDialogCompletedTextInput, editor: els.questDialogCompletedOptionsEditor, empty: els.questDialogCompletedOptionsEmptyState },
-    };
-  }
-  function normalizeDialogOptions(options) {
-    return Array.isArray(options) ? options.map(opt => ({ label: String(opt?.label || ''), action: String(opt?.action || 'close') })) : [];
-  }
-  function renderQuestDialogOptionsEditor(stateKey) {
-    const quest = getSelectedQuestEntry();
-    const config = getQuestDialogStateConfig()[stateKey];
-    if (!config) return;
-    const options = normalizeDialogOptions(quest?.dialog?.[stateKey]?.options || []);
-    config.editor.innerHTML = '';
-    options.forEach((opt, index) => {
-      const row = document.createElement('div');
-      row.className = 'dialog-option-row';
-      row.innerHTML = `
-        <label class="field"><span>Label</span><input class="dialog-option-label" type="text" /></label>
-        <label class="field"><span>Action</span><select class="dialog-option-action"><option value="accept">accept</option><option value="complete">complete</option><option value="close">close</option></select></label>
-        <button type="button" class="button danger small">Delete</button>
-      `;
-      row.querySelector('.dialog-option-label').value = opt.label || '';
-      row.querySelector('.dialog-option-action').value = ['accept','complete','close'].includes(opt.action) ? opt.action : 'close';
-      const sync = () => {
-        const current = getSelectedQuestEntry(); if (!current) return;
-        current.dialog = current.dialog && typeof current.dialog === 'object' ? current.dialog : {};
-        const stateObj = safeDialogState(current.dialog, stateKey);
-        const nextOptions = normalizeDialogOptions(stateObj.options);
-        nextOptions[index] = {
-          label: row.querySelector('.dialog-option-label').value || '',
-          action: row.querySelector('.dialog-option-action').value || 'close',
-        };
-        current.dialog[stateKey] = { text: config.textInput.value || '', options: nextOptions };
-        setQuestDirty(true); renderQuestPanel();
+  // ── Shared dialog node-map editor ──────────────────────────────────────────
+  // Used by both quest dialog and NPC dialogTree.
+  // container: DOM element to render into
+  // dialogMap: { nodeKey: { text, options:[{label,action?,next?}] } }
+  // onChange(newDialogMap): called whenever any value changes
+  // requiredKeys: array of node keys that get a "REQUIRED" badge and can't be renamed/deleted
+  function renderDialogNodeStack(container, dialogMap, onChange, requiredKeys=[]) {
+    container.innerHTML = '';
+    const map = dialogMap && typeof dialogMap === 'object' ? dialogMap : {};
+    const allKeys = Object.keys(map);
+
+    allKeys.forEach(nodeKey => {
+      const node = map[nodeKey] || { text:'', options:[] };
+      const isRequired = requiredKeys.includes(nodeKey);
+      const card = document.createElement('div');
+      card.className = 'dialog-state-card';
+
+      const header = document.createElement('div');
+      header.className = 'inline-json-header row-between';
+      header.style.marginBottom = '6px';
+
+      const titleRow = document.createElement('div');
+      titleRow.style.cssText = 'display:flex;align-items:center;gap:6px';
+      const nodeKeyInput = document.createElement('input');
+      nodeKeyInput.type = 'text';
+      nodeKeyInput.value = nodeKey;
+      nodeKeyInput.style.cssText = 'font-family:var(--font-mono);font-size:12px;font-weight:700;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--accent-gold);padding:2px 4px;width:160px';
+      nodeKeyInput.readOnly = isRequired;
+      if (isRequired) nodeKeyInput.style.opacity = '0.6';
+      const badge = document.createElement('span');
+      badge.className = 'badge muted';
+      badge.textContent = isRequired ? 'required' : 'node';
+      badge.style.fontSize = '10px';
+      titleRow.appendChild(nodeKeyInput);
+      titleRow.appendChild(badge);
+
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:6px';
+      const addOptBtn = document.createElement('button');
+      addOptBtn.type = 'button'; addOptBtn.className = 'button secondary small';
+      addOptBtn.textContent = 'Add Option';
+      const delNodeBtn = document.createElement('button');
+      delNodeBtn.type = 'button'; delNodeBtn.className = 'button danger small';
+      delNodeBtn.textContent = '✕ Node';
+      if (isRequired) delNodeBtn.disabled = true;
+      btns.appendChild(addOptBtn);
+      btns.appendChild(delNodeBtn);
+
+      header.appendChild(titleRow);
+      header.appendChild(btns);
+      card.appendChild(header);
+
+      const textArea = document.createElement('textarea');
+      textArea.className = 'field';
+      textArea.rows = 2;
+      textArea.style.cssText = 'width:100%;margin-bottom:6px;resize:vertical';
+      textArea.placeholder = 'Dialog text…';
+      textArea.value = node.text || '';
+      card.appendChild(textArea);
+
+      const optContainer = document.createElement('div');
+      optContainer.className = 'dialog-options-editor';
+      card.appendChild(optContainer);
+
+      const renderOptions = () => {
+        optContainer.innerHTML = '';
+        const opts = Array.isArray(node.options) ? node.options : [];
+        opts.forEach((opt, idx) => {
+          const row = document.createElement('div');
+          row.className = 'dialog-option-row';
+          row.style.cssText = 'display:grid;grid-template-columns:1fr 110px 130px 28px;gap:4px;align-items:center;margin-bottom:4px';
+          // Label
+          const labelInp = document.createElement('input');
+          labelInp.type = 'text'; labelInp.placeholder = 'Button text';
+          labelInp.value = opt.label || '';
+          labelInp.style.cssText = 'font-size:12px';
+          // Action
+          const actionSel = document.createElement('select');
+          actionSel.style.cssText = 'font-size:12px';
+          ['', 'accept','complete','close','open_shop','open_bank','open_crafting'].forEach(a => {
+            const o = document.createElement('option'); o.value=a; o.textContent=a||'(action)'; actionSel.appendChild(o);
+          });
+          actionSel.value = opt.action || '';
+          // Next
+          const nextInp = document.createElement('input');
+          nextInp.type = 'text'; nextInp.placeholder = 'next node…';
+          nextInp.value = opt.next || '';
+          nextInp.style.cssText = 'font-size:12px;font-family:var(--font-mono)';
+          // Delete
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button'; delBtn.className = 'button danger small';
+          delBtn.textContent = '✕'; delBtn.style.padding = '2px 6px';
+
+          const sync = () => {
+            node.options[idx] = { label: labelInp.value, ...(actionSel.value ? {action: actionSel.value} : {}), ...(nextInp.value.trim() ? {next: nextInp.value.trim()} : {}) };
+            fireChange();
+          };
+          labelInp.addEventListener('input', sync);
+          actionSel.addEventListener('change', sync);
+          nextInp.addEventListener('input', sync);
+          delBtn.addEventListener('click', () => { node.options.splice(idx, 1); renderOptions(); fireChange(); });
+
+          row.appendChild(labelInp); row.appendChild(actionSel); row.appendChild(nextInp); row.appendChild(delBtn);
+          optContainer.appendChild(row);
+        });
       };
-      row.querySelector('.dialog-option-label').addEventListener('input', sync);
-      row.querySelector('.dialog-option-action').addEventListener('change', sync);
-      row.querySelector('.button').addEventListener('click', () => {
-        const current = getSelectedQuestEntry(); if (!current) return;
-        current.dialog = current.dialog && typeof current.dialog === 'object' ? current.dialog : {};
-        const stateObj = safeDialogState(current.dialog, stateKey);
-        const nextOptions = normalizeDialogOptions(stateObj.options).filter((_, i) => i !== index);
-        current.dialog[stateKey] = { text: config.textInput.value || '', options: nextOptions };
-        setQuestDirty(true); renderQuestPanel();
+
+      const fireChange = () => {
+        const curKey = nodeKeyInput.value.trim() || nodeKey;
+        node.text = textArea.value;
+        // Rebuild map preserving order with possible key rename
+        const newMap = {};
+        Object.keys(map).forEach(k => { newMap[k === nodeKey ? curKey : k] = map[k]; });
+        onChange(newMap);
+      };
+
+      textArea.addEventListener('input', fireChange);
+      nodeKeyInput.addEventListener('change', () => {
+        const newKey = nodeKeyInput.value.trim();
+        if (!newKey || newKey === nodeKey || map[newKey]) { nodeKeyInput.value = nodeKey; return; }
+        const newMap = {};
+        Object.keys(map).forEach(k => { newMap[k === nodeKey ? newKey : k] = map[k]; });
+        onChange(newMap);
       });
-      config.editor.appendChild(row);
+      addOptBtn.addEventListener('click', () => {
+        node.options = Array.isArray(node.options) ? node.options : [];
+        node.options.push({ label: '' });
+        renderOptions(); fireChange();
+      });
+      delNodeBtn.addEventListener('click', () => {
+        delete map[nodeKey];
+        onChange({...map});
+      });
+
+      renderOptions();
+      container.appendChild(card);
     });
-    config.empty.classList.toggle('hidden', options.length > 0);
   }
-  function addQuestDialogOption(stateKey) {
-    const current = getSelectedQuestEntry(); if (!current) return;
-    current.dialog = current.dialog && typeof current.dialog === 'object' ? current.dialog : {};
-    const stateObj = safeDialogState(current.dialog, stateKey);
-    const nextOptions = normalizeDialogOptions(stateObj.options);
-    nextOptions.push({ label: '', action: 'close' });
-    current.dialog[stateKey] = { text: getQuestDialogStateConfig()[stateKey].textInput.value || '', options: nextOptions };
-    setQuestDirty(true); renderQuestPanel();
+
+  function addDialogNode(dialogMap, onDone) {
+    const key = prompt('New node key (e.g. "wolf_lore"):');
+    if (!key || !key.trim()) return;
+    const k = key.trim();
+    if (dialogMap[k]) { alert(`Node "${k}" already exists.`); return; }
+    dialogMap[k] = { text: '', options: [] };
+    onDone(dialogMap);
+  }
+
+  // ── Quest Dialog ───────────────────────────────────────────────────────────
+  const QUEST_REQUIRED_NODES = ['not_started', 'active', 'ready_to_turn_in', 'completed'];
+
+  function renderQuestDialogEditor(quest) {
+    const dialog = quest && typeof quest.dialog === 'object' ? quest.dialog : {};
+    // Ensure required nodes exist
+    QUEST_REQUIRED_NODES.forEach(k => { if (!dialog[k]) dialog[k] = { text:'', options:[] }; });
+    renderDialogNodeStack(els.questDialogNodeStack, dialog, (newMap) => {
+      const current = getSelectedQuestEntry(); if (!current) return;
+      current.dialog = newMap;
+      setQuestDirty(true);
+      els.questJsonPreview.textContent = JSON.stringify({ [state.selectedQuestKey]: current }, null, 2);
+    }, QUEST_REQUIRED_NODES);
+  }
+
+  function normalizeDialogOptions(options) {
+    return Array.isArray(options) ? options : [];
   }
   function populateQuestGiverSelect(selected) {
     els.questGiverInput.innerHTML = '';
@@ -1334,6 +1467,7 @@
       els.questGiverInput.appendChild(missing);
     }
   }
+
   function renderQuestList() {
     const visibleKeys = getVisibleQuestKeys();
     const allKeys = Object.keys(state.quests);
@@ -1434,12 +1568,7 @@
         gold: Number(els.questRewardGoldInput.value || 0),
         items: Array.isArray(current.rewards?.items) ? [...current.rewards.items] : [],
       },
-      dialog: {
-        not_started: { text: els.questDialogNotStartedTextInput.value || '', options: normalizeDialogOptions(current.dialog?.not_started?.options || []) },
-        active: { text: els.questDialogActiveTextInput.value || '', options: normalizeDialogOptions(current.dialog?.active?.options || []) },
-        ready_to_turn_in: { text: els.questDialogReadyTextInput.value || '', options: normalizeDialogOptions(current.dialog?.ready_to_turn_in?.options || []) },
-        completed: { text: els.questDialogCompletedTextInput.value || '', options: normalizeDialogOptions(current.dialog?.completed?.options || []) },
-      },
+      dialog: current.dialog && typeof current.dialog === 'object' ? current.dialog : {},
     };
   }
   function renderQuestPanel() {
@@ -1451,11 +1580,6 @@
       els.questJsonPreview.textContent = '';
       return;
     }
-    const dialog = quest.dialog || {};
-    const notStarted = safeDialogState(dialog, 'not_started');
-    const active = safeDialogState(dialog, 'active');
-    const ready = safeDialogState(dialog, 'ready_to_turn_in');
-    const completed = safeDialogState(dialog, 'completed');
     els.selectedQuestLabel.textContent = state.selectedQuestKey;
     els.questEmptyState.classList.add('hidden');
     els.questForm.classList.remove('hidden');
@@ -1466,17 +1590,10 @@
     els.questDescriptionInput.value = quest.description || '';
     els.questRewardXpInput.value = toIntOrEmpty(quest.rewards?.xp ?? 0);
     els.questRewardGoldInput.value = toIntOrEmpty(quest.rewards?.gold ?? 0);
-    els.questDialogNotStartedTextInput.value = notStarted.text || '';
-    els.questDialogActiveTextInput.value = active.text || '';
-    els.questDialogReadyTextInput.value = ready.text || '';
-    els.questDialogCompletedTextInput.value = completed.text || '';
     renderQuestPrereqEditor();
     renderQuestObjectivesEditor();
     renderQuestRewardItemsEditor();
-    renderQuestDialogOptionsEditor('not_started');
-    renderQuestDialogOptionsEditor('active');
-    renderQuestDialogOptionsEditor('ready_to_turn_in');
-    renderQuestDialogOptionsEditor('completed');
+    renderQuestDialogEditor(quest);
     els.questJsonPreview.textContent = JSON.stringify({ [state.selectedQuestKey]: buildCurrentQuestObject() }, null, 2);
   }
   function renderQuestDiagnostics(items=[], summary='No validation run yet') {
@@ -3083,11 +3200,304 @@
   function duplicateAoePattern() { const p=getSelectedAoePatternEntry(); if(!p) return; const k=ensureUniqueAoePatternKey(`${state.selectedAoePatternKey}_copy`); state.aoePatterns[k]=JSON.parse(JSON.stringify(p)); state.selectedAoePatternKey=k; setAoePatternDirty(true); renderAoePatterns(); }
   function deleteAoePattern() { if(!getSelectedAoePatternEntry()) return; if(!window.confirm(`Delete "${state.selectedAoePatternKey}"?`)) return; delete state.aoePatterns[state.selectedAoePatternKey]; state.selectedAoePatternKey=Object.keys(state.aoePatterns)[0]||null; setAoePatternDirty(true); renderAoePatterns(); }
 
+  // ── RARITIES ───────────────────────────────────────────────────────────────
+  const RARITY_ORDER = ['common','uncommon','rare','epic','legendary'];
+
+  let _selectedRarityKey = null;
+
+  function renderRaritiesEditor() {
+    const r = state.rarities || {};
+    els.raritiesEditorContainer.innerHTML = '';
+    const keys = [...new Set([...RARITY_ORDER, ...Object.keys(r)])];
+
+    // Header row
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:grid;grid-template-columns:130px 36px 1fr 36px 1fr;gap:6px;align-items:center;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)';
+    ['Rarity','','Name Color','','Glow Color'].forEach(t => {
+      const s = document.createElement('span'); s.className = 'field-label'; s.textContent = t; hdr.appendChild(s);
+    });
+    els.raritiesEditorContainer.appendChild(hdr);
+
+    keys.forEach(key => {
+      if (!r[key]) r[key] = { color:'#ffffff', glow:'rgba(255,255,255,0)' };
+      const entry = r[key];
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:130px 36px 1fr 36px 1fr;gap:6px;align-items:center;margin-bottom:6px';
+      row.dataset.rarityKey = key;
+
+      // Label
+      const label = document.createElement('span');
+      label.style.cssText = `font-family:var(--font-mono);font-size:13px;font-weight:600;color:${entry.color||'#fff'};cursor:pointer`;
+      label.textContent = key;
+      label.addEventListener('click', () => {
+        _selectedRarityKey = key;
+        document.querySelectorAll('[data-rarity-key]').forEach(r => r.style.background = '');
+        row.style.background = 'rgba(255,255,255,0.05)';
+      });
+
+      // Color picker
+      const colorPicker = document.createElement('input');
+      colorPicker.type = 'color';
+      colorPicker.style.cssText = 'width:32px;height:28px;padding:2px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);cursor:pointer';
+      colorPicker.value = /^#[0-9a-fA-F]{6}$/.test(entry.color) ? entry.color : '#ffffff';
+
+      // Color text
+      const colorInp = document.createElement('input');
+      colorInp.type = 'text'; colorInp.value = entry.color || '#ffffff';
+      colorInp.style.cssText = 'font-family:var(--font-mono);font-size:12px';
+      colorInp.placeholder = '#rrggbb';
+
+      // Glow picker (hex only portion)
+      const glowPicker = document.createElement('input');
+      glowPicker.type = 'color';
+      glowPicker.style.cssText = 'width:32px;height:28px;padding:2px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);cursor:pointer';
+      const glowHex = entry.glow ? entry.glow.match(/#[0-9a-fA-F]{6}/) : null;
+      glowPicker.value = glowHex ? glowHex[0] : '#ffffff';
+
+      // Glow text
+      const glowInp = document.createElement('input');
+      glowInp.type = 'text'; glowInp.value = entry.glow || 'rgba(0,0,0,0)';
+      glowInp.style.cssText = 'font-family:var(--font-mono);font-size:12px';
+      glowInp.placeholder = 'rgba(…)';
+
+      const sync = () => {
+        state.rarities[key] = { color: colorInp.value.trim(), glow: glowInp.value.trim() };
+        label.style.color = colorInp.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(colorInp.value)) colorPicker.value = colorInp.value;
+        setRaritiesDirty(true);
+        els.raritiesJsonPreview.textContent = JSON.stringify(state.rarities, null, 2);
+      };
+      colorPicker.addEventListener('input', () => { colorInp.value = colorPicker.value; sync(); });
+      colorInp.addEventListener('input', sync);
+      glowPicker.addEventListener('input', () => {
+        // Update just the hex part of the rgba string, preserving alpha
+        const cur = glowInp.value;
+        const alphaMatch = cur.match(/[\d.]+\)$/);
+        const alpha = alphaMatch ? alphaMatch[0] : '0.15)';
+        const hex = glowPicker.value;
+        const r2 = parseInt(hex.slice(1,3),16), g2 = parseInt(hex.slice(3,5),16), b2 = parseInt(hex.slice(5,7),16);
+        glowInp.value = `rgba(${r2}, ${g2}, ${b2}, ${alpha.replace(')','')})`;
+        sync();
+      });
+      glowInp.addEventListener('input', sync);
+
+      row.appendChild(label); row.appendChild(colorPicker); row.appendChild(colorInp);
+      row.appendChild(glowPicker); row.appendChild(glowInp);
+      els.raritiesEditorContainer.appendChild(row);
+    });
+    els.raritiesJsonPreview.textContent = JSON.stringify(r, null, 2);
+  }
+
+  function addRarity() {
+    const key = prompt('New rarity key (e.g. "mythic"):');
+    if (!key || !key.trim()) return;
+    const k = key.trim();
+    if (state.rarities[k]) { alert(`Rarity "${k}" already exists.`); return; }
+    state.rarities[k] = { color: '#ffffff', glow: 'rgba(255,255,255,0)' };
+    setRaritiesDirty(true);
+    renderRaritiesEditor();
+  }
+
+  function deleteRarity() {
+    if (!_selectedRarityKey) { alert('Click a rarity name first to select it.'); return; }
+    if (RARITY_ORDER.includes(_selectedRarityKey)) { if (!confirm(`"${_selectedRarityKey}" is a standard rarity. Delete anyway?`)) return; }
+    delete state.rarities[_selectedRarityKey];
+    _selectedRarityKey = null;
+    setRaritiesDirty(true);
+    renderRaritiesEditor();
+  }
+  function renderRaritiesDiagnostics(items=[], summary='No validation run yet') { els.raritiesValidationSummary.textContent=summary; els.raritiesDiagnosticsList.innerHTML=''; if(!items.length){els.raritiesDiagnosticsList.className='diagnostics-list empty-diagnostics';els.raritiesDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.raritiesDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.raritiesDiagnosticsList.appendChild(d);} }
+  function validateRarities() {
+    const messages = [];
+    const r = state.rarities;
+    RARITY_ORDER.forEach(key => { if (!r[key]) messages.push({level:'warning',title:`Missing: ${key}`,message:`Standard rarity "${key}" not found.`}); });
+    Object.entries(r).forEach(([key,v]) => {
+      if (!v.color) messages.push({level:'error',title:`Missing color: ${key}`,message:'color is required.'});
+      if (!v.glow) messages.push({level:'warning',title:`Missing glow: ${key}`,message:'glow should be set (use rgba with alpha 0 for none).'});
+    });
+    if (!messages.length) messages.push({level:'info',title:'Validation passed',message:'All rarities look good.'});
+    const ec=messages.filter(m=>m.level==='error').length; const wc=messages.filter(m=>m.level==='warning').length;
+    renderRaritiesDiagnostics(messages, ec||wc?`${ec} error(s), ${wc} warning(s)`:'Validation passed');
+  }
+  async function loadRarities() { const r=await apiFetch('/api/rarities'); state.rarities=r.rarities||{}; setRaritiesDirty(false); renderRaritiesEditor(); renderRaritiesDiagnostics([{level:'info',title:'Loaded',message:r.path}],`Loaded ${Object.keys(state.rarities).length} rarities`); }
+  async function saveRarities() { const r=await apiFetch('/api/rarities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rarities:state.rarities})}); setRaritiesDirty(false); renderRaritiesDiagnostics([{level:'info',title:'Saved',message:r.path}],`Saved`); }
+
+  // ── PARTY ──────────────────────────────────────────────────────────────────
+  function buildCurrentPartyObject() {
+    return {
+      maxSize: Number(els.partyMaxSizeInput.value) || 5,
+      xpShare: {
+        enabled: els.partyXpShareEnabledInput.checked,
+        rangeTiles: Number(els.partyXpShareRangeInput.value) || 0,
+        levelDiff: Number(els.partyXpShareLevelDiffInput.value) || 0,
+        splitMode: els.partyXpShareSplitModeInput.value || 'equal',
+      },
+      questShareKills: {
+        enabled: els.partyQuestShareEnabledInput.checked,
+        rangeTiles: Number(els.partyQuestShareRangeInput.value) || 0,
+        levelDiff: Number(els.partyQuestShareLevelDiffInput.value) || 0,
+      },
+    };
+  }
+  function renderPartyForm() {
+    const p = state.party;
+    if (!p) return;
+    els.partyMaxSizeInput.value = p.maxSize ?? 5;
+    els.partyXpShareEnabledInput.checked = !!p.xpShare?.enabled;
+    els.partyXpShareRangeInput.value = p.xpShare?.rangeTiles ?? 50;
+    els.partyXpShareLevelDiffInput.value = p.xpShare?.levelDiff ?? 4;
+    els.partyXpShareSplitModeInput.value = p.xpShare?.splitMode || 'equal';
+    els.partyQuestShareEnabledInput.checked = !!p.questShareKills?.enabled;
+    els.partyQuestShareRangeInput.value = p.questShareKills?.rangeTiles ?? 50;
+    els.partyQuestShareLevelDiffInput.value = p.questShareKills?.levelDiff ?? 4;
+    els.partyJsonPreview.textContent = JSON.stringify(p, null, 2);
+  }
+  function syncPartyFromForm() { state.party = buildCurrentPartyObject(); setPartyDirty(true); els.partyJsonPreview.textContent = JSON.stringify(state.party, null, 2); }
+  function renderPartyDiagnostics(items=[], summary='No validation run yet') { els.partyValidationSummary.textContent=summary; els.partyDiagnosticsList.innerHTML=''; if(!items.length){els.partyDiagnosticsList.className='diagnostics-list empty-diagnostics';els.partyDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.partyDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.partyDiagnosticsList.appendChild(d);} }
+  async function loadParty() { const r=await apiFetch('/api/party'); state.party=r.party||{}; setPartyDirty(false); renderPartyForm(); renderPartyDiagnostics([{level:'info',title:'Loaded',message:r.path}],'Loaded'); }
+  async function saveParty() { const r=await apiFetch('/api/party',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({party:state.party})}); setPartyDirty(false); renderPartyDiagnostics([{level:'info',title:'Saved',message:r.path}],'Saved'); }
+
+  // ── THEME ──────────────────────────────────────────────────────────────────
+  const THEME_COLORS = ['bgDark','panelBg','panelBgSolid','panelBorder','panelBorderDim','accentGold','accentGoldBright','textMain','textMuted','textBright','hp','hpGrad','mana','manaGrad','xp','xpGrad','enemy','btnBg','btnBorder','btnHover','danger','success'];
+
+  function renderThemeColorsEditor() {
+    const colors = state.theme?.ui?.colors || {};
+    els.themeColorsEditor.innerHTML = '';
+    THEME_COLORS.forEach(key => {
+      const val = colors[key] || '';
+      const isHex = /^#[0-9a-fA-F]{3,8}$/.test(val);
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex;gap:4px;align-items:flex-end;margin-bottom:4px';
+
+      const picker = document.createElement('input');
+      picker.type = 'color';
+      picker.style.cssText = 'width:32px;height:32px;flex-shrink:0;padding:2px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);cursor:pointer;align-self:flex-end;margin-bottom:0';
+      picker.value = isHex ? val.slice(0,7) : '#000000';
+      if (!isHex) picker.style.opacity = '0.4';
+
+      const lbl = document.createElement('label');
+      lbl.className = 'field';
+      lbl.style.cssText = 'flex:1;margin-bottom:0';
+      const span = document.createElement('span'); span.textContent = key;
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.id = `themeColor_${key}`; inp.value = val;
+      inp.style.cssText = 'font-family:var(--font-mono);font-size:11px';
+      if (isHex) inp.style.borderLeft = `4px solid ${val}`;
+      lbl.appendChild(span); lbl.appendChild(inp);
+
+      picker.addEventListener('input', () => {
+        inp.value = picker.value;
+        inp.style.borderLeft = `4px solid ${picker.value}`;
+        picker.style.opacity = '1';
+        if (!state.theme.ui) state.theme.ui = {};
+        if (!state.theme.ui.colors) state.theme.ui.colors = {};
+        state.theme.ui.colors[key] = picker.value;
+        setThemeDirty(true);
+        els.themeJsonPreview.textContent = JSON.stringify(state.theme, null, 2);
+      });
+      inp.addEventListener('input', () => {
+        if (!state.theme.ui) state.theme.ui = {};
+        if (!state.theme.ui.colors) state.theme.ui.colors = {};
+        state.theme.ui.colors[key] = inp.value;
+        const h = /^#[0-9a-fA-F]{3,8}$/.test(inp.value);
+        inp.style.borderLeft = h ? `4px solid ${inp.value}` : '';
+        if (h) { picker.value = inp.value.slice(0,7); picker.style.opacity = '1'; }
+        else picker.style.opacity = '0.4';
+        setThemeDirty(true);
+        els.themeJsonPreview.textContent = JSON.stringify(state.theme, null, 2);
+      });
+
+      wrapper.appendChild(picker); wrapper.appendChild(lbl);
+      els.themeColorsEditor.appendChild(wrapper);
+    });
+  }
+
+  function updateThemeLogoPreview() {
+    const path = (els.themeLogoGlyphInput.value || '').trim();
+    const img = els.themeLogoPreviewImage;
+    const fallback = els.themeLogoPreviewFallback;
+    if (!path) { img.style.display='none'; fallback.style.display=''; fallback.textContent='No preview'; return; }
+    img.style.display = 'none'; fallback.style.display = ''; fallback.textContent = 'Loading…';
+    img.onload = () => { img.style.display='block'; fallback.style.display='none'; };
+    img.onerror = () => { img.style.display='none'; fallback.style.display=''; fallback.textContent='Not found'; };
+    img.src = `/api/status-sprite/${encodeURIComponent(path)}?v=${Date.now()}`;
+  }
+
+  function renderThemeForm() {
+    const t = state.theme;
+    if (!t) return;
+    els.themeGameNameInput.value = t.gameName || '';
+    els.themeGameSubtitleInput.value = t.gameSubtitle || '';
+    els.themeTaglineInput.value = t.tagline || '';
+    els.themeWelcomeMessageInput.value = t.welcomeMessage || '';
+    els.themeDefaultMapInput.value = t.defaultMap || '';
+    els.themeLogoGlyphInput.value = t.logoGlyph || '';
+    els.themeVersionTextInput.value = t.versionText || '';
+    els.themeCharSelectTitleInput.value = t.charSelectTitle || '';
+    els.themeCreateCharTitleInput.value = t.createCharTitle || '';
+    const ui = t.ui || {};
+    els.themeUiFontFamilyInput.value = ui.fontFamily || '';
+    els.themeUiFontSizeInput.value = ui.fontSize || '';
+    els.themeUiBorderRadiusInput.value = ui.borderRadius || '';
+    const login = ui.login || {};
+    els.themeLoginContainerBorderRadiusInput.value = login.containerBorderRadius || '';
+    els.themeLoginContainerPaddingInput.value = login.containerPadding || '';
+    els.themeLoginTitleFontSizeInput.value = login.titleFontSize || '';
+    els.themeLoginTaglineFontSizeInput.value = login.taglineFontSize || '';
+    els.themeLoginInputFontSizeInput.value = login.inputFontSize || '';
+    els.themeLoginInputBorderRadiusInput.value = login.inputBorderRadius || '';
+    els.themeLoginInputPaddingInput.value = login.inputPadding || '';
+    els.themeLoginButtonFontSizeInput.value = login.buttonFontSize || '';
+    els.themeLoginButtonBorderRadiusInput.value = login.buttonBorderRadius || '';
+    els.themeLoginButtonPaddingInput.value = login.buttonPadding || '';
+    els.themeLoginBackdropGradientInput.value = login.backdropGradient || '';
+    renderThemeColorsEditor();
+    updateThemeLogoPreview();
+    els.themeJsonPreview.textContent = JSON.stringify(t, null, 2);
+  }
+
+  function syncThemeFromForm() {
+    if (!state.theme) state.theme = {};
+    const t = state.theme;
+    t.gameName = els.themeGameNameInput.value;
+    t.gameSubtitle = els.themeGameSubtitleInput.value;
+    t.tagline = els.themeTaglineInput.value;
+    t.welcomeMessage = els.themeWelcomeMessageInput.value;
+    t.defaultMap = els.themeDefaultMapInput.value;
+    t.logoGlyph = els.themeLogoGlyphInput.value;
+    updateThemeLogoPreview();
+    t.versionText = els.themeVersionTextInput.value;
+    t.charSelectTitle = els.themeCharSelectTitleInput.value;
+    t.createCharTitle = els.themeCreateCharTitleInput.value;
+    if (!t.ui) t.ui = {};
+    t.ui.fontFamily = els.themeUiFontFamilyInput.value;
+    t.ui.fontSize = els.themeUiFontSizeInput.value;
+    t.ui.borderRadius = els.themeUiBorderRadiusInput.value;
+    if (!t.ui.login) t.ui.login = {};
+    t.ui.login.containerBorderRadius = els.themeLoginContainerBorderRadiusInput.value;
+    t.ui.login.containerPadding = els.themeLoginContainerPaddingInput.value;
+    t.ui.login.titleFontSize = els.themeLoginTitleFontSizeInput.value;
+    t.ui.login.taglineFontSize = els.themeLoginTaglineFontSizeInput.value;
+    t.ui.login.inputFontSize = els.themeLoginInputFontSizeInput.value;
+    t.ui.login.inputBorderRadius = els.themeLoginInputBorderRadiusInput.value;
+    t.ui.login.inputPadding = els.themeLoginInputPaddingInput.value;
+    t.ui.login.buttonFontSize = els.themeLoginButtonFontSizeInput.value;
+    t.ui.login.buttonBorderRadius = els.themeLoginButtonBorderRadiusInput.value;
+    t.ui.login.buttonPadding = els.themeLoginButtonPaddingInput.value;
+    t.ui.login.backdropGradient = els.themeLoginBackdropGradientInput.value;
+    setThemeDirty(true);
+    els.themeJsonPreview.textContent = JSON.stringify(t, null, 2);
+  }
+
+  function renderThemeDiagnostics(items=[], summary='No validation run yet') { els.themeValidationSummary.textContent=summary; els.themeDiagnosticsList.innerHTML=''; if(!items.length){els.themeDiagnosticsList.className='diagnostics-list empty-diagnostics';els.themeDiagnosticsList.innerHTML='<p>No messages yet.</p>';return;} els.themeDiagnosticsList.className='diagnostics-list'; for(const item of items){const d=document.createElement('div');d.className=`diagnostic-item ${item.level||'info'}`;d.innerHTML=`<strong>${item.title}</strong><div>${item.message}</div>`;els.themeDiagnosticsList.appendChild(d);} }
+  async function loadTheme() { const r=await apiFetch('/api/theme'); state.theme=r.theme||{}; setThemeDirty(false); renderThemeForm(); renderThemeDiagnostics([{level:'info',title:'Loaded',message:r.path}],'Loaded'); }
+  async function saveTheme() { const r=await apiFetch('/api/theme',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({theme:state.theme})}); setThemeDirty(false); renderThemeDiagnostics([{level:'info',title:'Saved',message:r.path}],'Saved'); }
+
   function bindEvents() {
     document.querySelectorAll('.tabbar .tab[data-tab]').forEach(btn => { if (!btn.disabled) btn.addEventListener('click', () => switchTab(btn.dataset.tab)); });
-    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : (state.activeTab === 'recipes' ? loadRecipes() : (state.activeTab === 'aoePatterns' ? loadAoePatterns() : loadPalette())))))))))))));
+    els.loadButton.addEventListener('click', () => state.activeTab === 'items' ? loadItems() : (state.activeTab === 'enemies' ? loadEnemies() : (state.activeTab === 'npcs' ? loadNpcs() : (state.activeTab === 'quests' ? loadQuests() : (state.activeTab === 'playerBase' ? loadPlayerBase() : (state.activeTab === 'props' ? loadProps() : (state.activeTab === 'particles' ? loadParticles() : (state.activeTab === 'skills' ? loadSkills() : (state.activeTab === 'statusEffects' ? loadStatusEffects() : (state.activeTab === 'gatheringSkills' ? loadGatheringSkills() : (state.activeTab === 'resourceNodes' ? loadResourceNodes() : (state.activeTab === 'recipes' ? loadRecipes() : (state.activeTab === 'aoePatterns' ? loadAoePatterns() : (state.activeTab === 'rarities' ? loadRarities() : (state.activeTab === 'party' ? loadParty() : (state.activeTab === 'theme' ? loadTheme() : loadPalette()))))))))))))))));
     els.saveButton.addEventListener('click', () => {
-      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes', recipes:'Recipes', aoePatterns:'AoE Patterns' };
+      const tabNames = { tilePalette:'Tile Palette', items:'Items', enemies:'Enemies', npcs:'NPCs', quests:'Quests', playerBase:'Player Base', props:'Props', particles:'Particles', skills:'Skills', statusEffects:'Status Effects', gatheringSkills:'Gathering Skills', resourceNodes:'Resource Nodes', recipes:'Recipes', aoePatterns:'AoE Patterns', rarities:'Rarities', party:'Party', theme:'Theme' };
       const label = tabNames[state.activeTab] || state.activeTab;
       if (!window.confirm(`Save ${label} to disk?\n\nThis will overwrite the JSON file.`)) return;
       if (state.activeTab === 'items') saveItems();
@@ -3103,6 +3513,9 @@
       else if (state.activeTab === 'resourceNodes') saveResourceNodes();
       else if (state.activeTab === 'recipes') saveRecipes();
       else if (state.activeTab === 'aoePatterns') saveAoePatterns();
+      else if (state.activeTab === 'rarities') saveRarities();
+      else if (state.activeTab === 'party') saveParty();
+      else if (state.activeTab === 'theme') saveTheme();
       else savePalette();
     });
     els.reloadButton.addEventListener('click', loadPalette);
@@ -3148,7 +3561,7 @@
     els.duplicateEnemyButton.addEventListener('click', duplicateEnemy);
     els.deleteEnemyButton.addEventListener('click', deleteEnemy);
     els.enemySearchInput.addEventListener('input', e => { state.enemySearch = e.target.value || ''; renderEnemyList(); });
-    ['enemyIdInput','enemyNameInput','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyHitParticleInput','enemyHitSfxInput'].forEach(id => els[id].addEventListener('input', syncSelectedEnemyFromForm));
+    ['enemyIdInput','enemyNameInput','enemyLevelInput','enemyMaxHpInput','enemyDamageInput','enemySpeedInput','enemyXpInput','enemyGoldMinInput','enemyGoldMaxInput','enemyRespawnSecondsInput','enemyColorInput','enemyRadiusInput','enemyAggroRangeInput','enemyAttackRangeInput','enemyAttackCooldownInput','enemyHitParticleInput','enemyHitSfxInput','enemyTileSizeInput'].forEach(id => els[id].addEventListener('input', syncSelectedEnemyFromForm));
     els.enemyLootAddButton.addEventListener('click', addEnemyLootEntry);
     els.enemyPreviewImage.addEventListener('load', () => setEnemySpriteStatus(true));
     els.enemyPreviewImage.addEventListener('error', () => setEnemySpriteStatus(false));
@@ -3161,6 +3574,11 @@
     els.npcSearchInput.addEventListener('input', e => { state.npcSearch = e.target.value || ''; renderNpcList(); });
     ['npcIdInput','npcNameInput','npcColorInput','npcDefaultDialogInput'].forEach(id => els[id].addEventListener('input', syncSelectedNpcFromForm));
     els.npcCraftingSkillInput.addEventListener("change", syncSelectedNpcFromForm);
+    els.npcDialogTreeAddNodeButton.addEventListener("click", () => {
+      const cur = state.npcs[state.selectedNpcKey]; if (!cur) return;
+      if (!cur.dialogTree || typeof cur.dialogTree !== "object") cur.dialogTree = { root:{ text:"", options:[] } };
+      addDialogNode(cur.dialogTree, (newMap) => { cur.dialogTree = newMap; setNpcDirty(true); renderNpcPanel(); });
+    });
     els.npcTypeInput.addEventListener('change', syncSelectedNpcFromForm);
     els.npcQuestAddButton.addEventListener('click', addNpcQuestEntry);
     els.npcShopAddButton.addEventListener('click', addNpcShopEntry);
@@ -3173,15 +3591,15 @@
     els.duplicateQuestButton.addEventListener('click', duplicateQuest);
     els.deleteQuestButton.addEventListener('click', deleteQuest);
     els.questSearchInput.addEventListener('input', e => { state.questSearch = e.target.value || ''; renderQuestList(); });
-    ['questIdInput','questNameInput','questLevelInput','questDescriptionInput','questRewardXpInput','questRewardGoldInput','questDialogNotStartedTextInput','questDialogActiveTextInput','questDialogReadyTextInput','questDialogCompletedTextInput'].forEach(id => els[id].addEventListener('input', syncSelectedQuestFromForm));
-    els.questGiverInput.addEventListener('change', syncSelectedQuestFromForm);
+    ['questIdInput','questNameInput','questLevelInput','questDescriptionInput','questRewardXpInput','questRewardGoldInput'].forEach(id => els[id].addEventListener('input', syncSelectedQuestFromForm));
+    els.questDialogAddNodeButton.addEventListener('click', () => {
+      const current = getSelectedQuestEntry(); if (!current) return;
+      current.dialog = current.dialog && typeof current.dialog === 'object' ? current.dialog : {};
+      addDialogNode(current.dialog, (newMap) => { current.dialog = newMap; setQuestDirty(true); renderQuestPanel(); });
+    });    els.questGiverInput.addEventListener('change', syncSelectedQuestFromForm);
     els.questPrereqAddButton.addEventListener('click', addQuestPrereqEntry);
     els.questObjectiveAddButton.addEventListener('click', addQuestObjectiveEntry);
     els.questRewardItemAddButton.addEventListener('click', addQuestRewardItemEntry);
-    els.questDialogNotStartedAddButton.addEventListener('click', () => addQuestDialogOption('not_started'));
-    els.questDialogActiveAddButton.addEventListener('click', () => addQuestDialogOption('active'));
-    els.questDialogReadyAddButton.addEventListener('click', () => addQuestDialogOption('ready_to_turn_in'));
-    els.questDialogCompletedAddButton.addEventListener('click', () => addQuestDialogOption('completed'));
 
     els.reloadPlayerBaseButton.addEventListener('click', loadPlayerBase);
     els.validatePlayerBaseButton.addEventListener('click', validatePlayerBase);
@@ -3302,6 +3720,19 @@
     els.addAoePatternButton.addEventListener('click', addAoePattern);
     els.duplicateAoePatternButton.addEventListener('click', duplicateAoePattern);
     els.deleteAoePatternButton.addEventListener('click', deleteAoePattern);
+
+    els.validateRaritiesButton.addEventListener('click', validateRarities);
+    els.reloadRaritiesButton.addEventListener('click', loadRarities);
+    els.addRarityButton.addEventListener('click', addRarity);
+    els.deleteRarityButton.addEventListener('click', deleteRarity);
+
+    els.reloadPartyButton.addEventListener('click', loadParty);
+    ['partyMaxSizeInput','partyXpShareRangeInput','partyXpShareLevelDiffInput','partyQuestShareRangeInput','partyQuestShareLevelDiffInput'].forEach(id => els[id].addEventListener('input', syncPartyFromForm));
+    ['partyXpShareEnabledInput','partyQuestShareEnabledInput'].forEach(id => els[id].addEventListener('change', syncPartyFromForm));
+    els.partyXpShareSplitModeInput.addEventListener('change', syncPartyFromForm);
+
+    els.reloadThemeButton.addEventListener('click', loadTheme);
+    ['themeGameNameInput','themeGameSubtitleInput','themeTaglineInput','themeWelcomeMessageInput','themeDefaultMapInput','themeLogoGlyphInput','themeVersionTextInput','themeCharSelectTitleInput','themeCreateCharTitleInput','themeUiFontFamilyInput','themeUiFontSizeInput','themeUiBorderRadiusInput','themeLoginContainerBorderRadiusInput','themeLoginContainerPaddingInput','themeLoginTitleFontSizeInput','themeLoginTaglineFontSizeInput','themeLoginInputFontSizeInput','themeLoginInputBorderRadiusInput','themeLoginInputPaddingInput','themeLoginButtonFontSizeInput','themeLoginButtonBorderRadiusInput','themeLoginButtonPaddingInput','themeLoginBackdropGradientInput'].forEach(id => els[id] && els[id].addEventListener('input', syncThemeFromForm));
     els.aoePatternGridSizeInput.addEventListener("change", () => { const p=getSelectedAoePatternEntry(); if(p) drawAoePatternCanvas(p.tiles, p.directional); });
     els.aoePatternClearButton.addEventListener("click", () => { const p=getSelectedAoePatternEntry(); if(!p) return; p.tiles=[]; setAoePatternDirty(true); renderAoePatternList(); drawAoePatternCanvas([], p.directional); els.aoePatternJsonPreview.textContent=JSON.stringify({[state.selectedAoePatternKey]:p},null,2); });
     els.aoePatternCanvas.addEventListener("mousedown", aoeCanvasMouseDown);
@@ -3323,7 +3754,7 @@
     });
 
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && !els.scanModal.classList.contains('hidden')) closeScanModal(); });
-    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty || state.recipeDirty || state.aoePatternDirty)) return; event.preventDefault(); event.returnValue = ''; });
+    window.addEventListener('beforeunload', event => { if (!(state.tileDirty || state.itemDirty || state.enemyDirty || state.npcDirty || state.questDirty || state.playerBaseDirty || state.propDirty || state.particleDirty || state.skillDirty || state.statusEffectDirty || state.gatheringSkillDirty || state.resourceNodeDirty || state.recipeDirty || state.aoePatternDirty || state.raritiesDirty || state.partyDirty || state.themeDirty)) return; event.preventDefault(); event.returnValue = ''; });
   }
 
   async function init() {
@@ -3345,7 +3776,7 @@
     renderResourceNodes();
     renderRecipes();
     renderAoePatterns();
-    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes(), loadRecipes(), loadAoePatterns()]); }
+    try { await Promise.all([loadPalette(), loadItems(), loadEnemies(), loadNpcs(), loadQuests(), loadPlayerBase(), loadProps(), loadParticles(), loadSkills(), loadStatusEffects(), loadGatheringSkills(), loadResourceNodes(), loadRecipes(), loadAoePatterns(), loadRarities(), loadParty(), loadTheme()]); }
     catch (error) {
       renderTileDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }, { level:'info', title:'Expected project-relative paths', message:'Run the included server from tools/other-tools so it can reach ../../public/data and ../../public/assets/sprites.' }], 'Unable to load one or more data files');
       renderItemDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
@@ -3360,6 +3791,9 @@
       renderResourceNodeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderRecipeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
       renderAoePatternDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderRaritiesDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderPartyDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
+      renderThemeDiagnostics([{ level:'error', title:'Startup load failed', message:String(error.message || error) }], 'Unable to load one or more data files');
     }
   }
 

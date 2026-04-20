@@ -155,6 +155,24 @@ const AOE_PATTERNS_CANDIDATES = [
   path.resolve(process.cwd(), '../public/data/aoePatterns.json'),
   path.resolve(process.cwd(), '../../wow2d/public/data/aoePatterns.json'),
 ];
+const RARITIES_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/rarities.json'),
+  path.resolve(process.cwd(), '../../public/data/rarities.json'),
+  path.resolve(process.cwd(), 'public/data/rarities.json'),
+  path.resolve(process.cwd(), '../public/data/rarities.json'),
+];
+const PARTY_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/party.json'),
+  path.resolve(process.cwd(), '../../public/data/party.json'),
+  path.resolve(process.cwd(), 'public/data/party.json'),
+  path.resolve(process.cwd(), '../public/data/party.json'),
+];
+const THEME_CANDIDATES = [
+  path.resolve(__dirname, '../../public/data/theme.json'),
+  path.resolve(process.cwd(), '../../public/data/theme.json'),
+  path.resolve(process.cwd(), 'public/data/theme.json'),
+  path.resolve(process.cwd(), '../public/data/theme.json'),
+];
 const SFX_DIR_CANDIDATES = [
   path.resolve(__dirname, '../../public/assets/sfx'),
   path.resolve(process.cwd(), '../../public/assets/sfx'),
@@ -188,6 +206,9 @@ function resolveExistingGatheringSkillsPath() { return firstExisting(GATHERING_S
 function resolveExistingResourceNodesPath() { return firstExisting(RESOURCE_NODES_CANDIDATES); }
 function resolveExistingRecipesPath() { return firstExisting(RECIPES_CANDIDATES); }
 function resolveExistingAoePatternsPath() { return firstExisting(AOE_PATTERNS_CANDIDATES); }
+function resolveExistingRaritiesPath() { return firstExisting(RARITIES_CANDIDATES); }
+function resolveExistingPartyPath() { return firstExisting(PARTY_CANDIDATES); }
+function resolveExistingThemePath() { return firstExisting(THEME_CANDIDATES); }
 function resolveExistingSfxDir() { return firstExisting(SFX_DIR_CANDIDATES); }
 
 function listTileSpriteIds() {
@@ -260,7 +281,7 @@ function validateItems(items) {
   return null;
 }
 function validateNpcs(npcs) {
-  const validTypes = new Set(['quest_giver','vendor','banker']);
+  const validTypes = new Set(['quest_giver','vendor','banker','crafting_station','npc','gathering']);
   if (!npcs || typeof npcs !== 'object' || Array.isArray(npcs)) return 'npcs must be an object keyed by npc id.';
   for (const [key, entry] of Object.entries(npcs)) {
     if (!key.trim()) return 'NPC ids cannot be blank.';
@@ -268,7 +289,16 @@ function validateNpcs(npcs) {
     for (const field of ['id','name','color','type','defaultDialog']) if (typeof entry[field] !== 'string') return `Entry for "${key}" must contain ${field}: string.`;
     if (!validTypes.has(entry.type)) return `Entry for "${key}" has invalid type "${entry.type}".`;
     if (entry.type === 'quest_giver' && entry.questIds && !Array.isArray(entry.questIds)) return `Entry for "${key}" questIds must be an array.`;
-    if (entry.type === 'vendor' && entry.shop && !Array.isArray(entry.shop)) return `Entry for "${key}" shop must be an array.`;
+    if ((entry.type === 'vendor' || entry.type === 'gathering') && entry.shop && !Array.isArray(entry.shop)) return `Entry for "${key}" shop must be an array.`;
+    if (entry.type === 'crafting_station' && entry.craftingSkill && typeof entry.craftingSkill !== 'string') return `Entry for "${key}" craftingSkill must be a string.`;
+    if (entry.dialogTree != null) {
+      if (typeof entry.dialogTree !== 'object' || Array.isArray(entry.dialogTree)) return `Entry for "${key}" dialogTree must be an object.`;
+      for (const [nodeKey, node] of Object.entries(entry.dialogTree)) {
+        if (!node || typeof node !== 'object') return `Entry for "${key}" dialogTree.${nodeKey} must be an object.`;
+        if (typeof node.text !== 'string') return `Entry for "${key}" dialogTree.${nodeKey}.text must be a string.`;
+        if (!Array.isArray(node.options)) return `Entry for "${key}" dialogTree.${nodeKey}.options must be an array.`;
+      }
+    }
   }
   return null;
 }
@@ -298,6 +328,12 @@ function validateQuests(quests) {
       if (typeof d.text !== 'string') return `Entry for "${key}" dialog.${state}.text must be a string.`;
       if (!Array.isArray(d.options)) return `Entry for "${key}" dialog.${state}.options must be an array.`;
     }
+    // Extra nodes (beyond the 4 required) are allowed freely
+    for (const [nodeKey, d] of Object.entries(entry.dialog)) {
+      if (!d || typeof d !== 'object') return `Entry for "${key}" dialog.${nodeKey} must be an object.`;
+      if (typeof d.text !== 'string') return `Entry for "${key}" dialog.${nodeKey}.text must be a string.`;
+      if (!Array.isArray(d.options)) return `Entry for "${key}" dialog.${nodeKey}.options must be an array.`;
+    }
   }
   return null;
 }
@@ -325,6 +361,28 @@ function validateAoePatterns(aoePatterns) {
       if (!Array.isArray(tile) || tile.length !== 2 || typeof tile[0] !== 'number' || typeof tile[1] !== 'number') return `Entry for "${key}" has an invalid tile — each tile must be [dx, dy].`;
     }
   }
+  return null;
+}
+
+function validateRarities(rarities) {
+  if (!rarities || typeof rarities !== 'object' || Array.isArray(rarities)) return 'rarities must be an object keyed by rarity name.';
+  for (const [key, entry] of Object.entries(rarities)) {
+    if (!entry || typeof entry !== 'object') return `Entry for "${key}" must be an object.`;
+    if (typeof entry.color !== 'string') return `Entry for "${key}" must have color: string.`;
+    if (typeof entry.glow !== 'string') return `Entry for "${key}" must have glow: string.`;
+  }
+  return null;
+}
+function validateParty(party) {
+  if (!party || typeof party !== 'object' || Array.isArray(party)) return 'party must be an object.';
+  if (typeof party.maxSize !== 'number') return 'party.maxSize must be a number.';
+  if (!party.xpShare || typeof party.xpShare !== 'object') return 'party.xpShare must be an object.';
+  if (!party.questShareKills || typeof party.questShareKills !== 'object') return 'party.questShareKills must be an object.';
+  return null;
+}
+function validateTheme(theme) {
+  if (!theme || typeof theme !== 'object' || Array.isArray(theme)) return 'theme must be an object.';
+  for (const field of ['gameName','defaultMap']) if (typeof theme[field] !== 'string') return `theme.${field} must be a string.`;
   return null;
 }
 
@@ -445,7 +503,52 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname || '/');
 
-  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), recipesPath: resolveExistingRecipesPath(), aoePatternsPath: resolveExistingAoePatternsPath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+  if (pathname === '/health') return sendJson(res, 200, { ok:true, tilePalettePath: resolveExistingTilePalettePath(), itemsPath: resolveExistingItemsPath(), enemiesPath: resolveExistingEnemiesPath(), npcsPath: resolveExistingNpcsPath(), questsPath: resolveExistingQuestsPath(), propsPath: resolveExistingPropsPath(), particlesPath: resolveExistingParticlesPath(), skillsPath: resolveExistingSkillsPath(), statusEffectsPath: resolveExistingStatusEffectsPath(), gatheringSkillsPath: resolveExistingGatheringSkillsPath(), resourceNodesPath: resolveExistingResourceNodesPath(), recipesPath: resolveExistingRecipesPath(), aoePatternsPath: resolveExistingAoePatternsPath(), raritiesPath: resolveExistingRaritiesPath(), partyPath: resolveExistingPartyPath(), themePath: resolveExistingThemePath(), playerBasePath: resolveExistingPlayerBasePath(), port: PORT });
+
+  if (pathname === '/api/rarities' && req.method === 'GET') {
+    try { return sendJson(res, 200, { rarities: JSON.parse(await fs.promises.readFile(resolveExistingRaritiesPath(), 'utf8')), path: resolveExistingRaritiesPath() }); }
+    catch (e) { return sendJson(res, 500, { error: e.message, path: resolveExistingRaritiesPath() }); }
+  }
+  if (pathname === '/api/rarities' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const err = validateRarities(body.rarities);
+      if (err) return sendJson(res, 400, { error: err });
+      const p = resolveExistingRaritiesPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.rarities, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (e) { return sendJson(res, 500, { error: e.message }); }
+  }
+
+  if (pathname === '/api/party' && req.method === 'GET') {
+    try { return sendJson(res, 200, { party: JSON.parse(await fs.promises.readFile(resolveExistingPartyPath(), 'utf8')), path: resolveExistingPartyPath() }); }
+    catch (e) { return sendJson(res, 500, { error: e.message, path: resolveExistingPartyPath() }); }
+  }
+  if (pathname === '/api/party' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const err = validateParty(body.party);
+      if (err) return sendJson(res, 400, { error: err });
+      const p = resolveExistingPartyPath();
+      await fs.promises.writeFile(p, JSON.stringify(body.party, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (e) { return sendJson(res, 500, { error: e.message }); }
+  }
+
+  if (pathname === '/api/theme' && req.method === 'GET') {
+    try { return sendJson(res, 200, { theme: JSON.parse(await fs.promises.readFile(resolveExistingThemePath(), 'utf8')), path: resolveExistingThemePath() }); }
+    catch (e) { return sendJson(res, 500, { error: e.message, path: resolveExistingThemePath() }); }
+  }
+  if (pathname === '/api/theme' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const err = validateTheme(body.theme);
+      if (err) return sendJson(res, 400, { error: err });
+      const p = resolveExistingThemePath();
+      await fs.promises.writeFile(p, JSON.stringify(body.theme, null, 2) + '\n', 'utf8');
+      return sendJson(res, 200, { ok:true, path:p });
+    } catch (e) { return sendJson(res, 500, { error: e.message }); }
+  }
 
   if (pathname === '/api/aoe-patterns' && req.method === 'GET') {
     try { return sendJson(res, 200, { aoePatterns: JSON.parse(await fs.promises.readFile(resolveExistingAoePatternsPath(), 'utf8')), path: resolveExistingAoePatternsPath() }); }
@@ -797,6 +900,9 @@ server.listen(PORT, () => {
   console.log(`Resource nodes:   ${resolveExistingResourceNodesPath()}`);
   console.log(`Recipes:          ${resolveExistingRecipesPath()}`);
   console.log(`AoE Patterns:     ${resolveExistingAoePatternsPath()}`);
+  console.log(`Rarities:         ${resolveExistingRaritiesPath()}`);
+  console.log(`Party:            ${resolveExistingPartyPath()}`);
+  console.log(`Theme:            ${resolveExistingThemePath()}`);
   console.log(`Skill icon dir:   ${resolveExistingSkillIconDir()}`);
   console.log(`Gathering dir:    ${resolveExistingGatheringSpriteDir()}`);
   console.log(`Player base target: ${resolveExistingPlayerBasePath()}`);

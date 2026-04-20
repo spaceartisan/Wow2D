@@ -22,6 +22,7 @@ const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatherin
 const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
 const AOE_PATTERNS = JSON.parse(fs.readFileSync(path.join(dataDir, "aoePatterns.json"), "utf8"));
 const PARTY_CONFIG = JSON.parse(fs.readFileSync(path.join(dataDir, "party.json"), "utf8"));
+const PVP_CONFIG = JSON.parse(fs.readFileSync(path.join(dataDir, "pvp.json"), "utf8"));
 const THEME = JSON.parse(fs.readFileSync(path.join(dataDir, "theme.json"), "utf8"));
 
 /* Shared player base stats — single source of truth for client + server */
@@ -144,12 +145,12 @@ class CollisionMap {
     const sp = mapData.spawnPoint || [0, 0];
     this.spawnPoint = { x: sp[0] * this.tileSize + this.tileSize / 2, y: sp[1] * this.tileSize + this.tileSize / 2 };
 
-    // Safe zones from map data
+    // Safe zones from map data (tile coords: x1, y1, x2, y2)
     this.safeZones = (mapData.safeZones || []).map(sz => ({
-      x1: sz.x * this.tileSize,
-      y1: sz.y * this.tileSize,
-      x2: (sz.x + sz.w) * this.tileSize,
-      y2: (sz.y + sz.h) * this.tileSize
+      x1: sz.x1 * this.tileSize,
+      y1: sz.y1 * this.tileSize,
+      x2: sz.x2 * this.tileSize,
+      y2: sz.y2 * this.tileSize
     }));
 
     // Store building data for upper-floor collision
@@ -466,7 +467,11 @@ class ServerWorld {
           skills[skillId] = { level: 1, xp: 0, ...(raw[skillId] || {}) };
         }
         return skills;
-      })()
+      })(),
+      // PVP state
+      pvpKills: Number(charData.pvpKills) || 0,
+      pvpDeaths: Number(charData.pvpDeaths) || 0,
+      pvpCombatUntil: 0,  // timestamp: combat timer preventing safe zone entry
     };
 
     this.players.set(id, state);
@@ -511,7 +516,10 @@ class ServerWorld {
       resourceNodes: this.resourceNodeSnapshot(mapId),
       x: state.x,
       y: state.y,
-      floor: state.floor || 0
+      floor: state.floor || 0,
+      pvpMode: mapEntry.data.pvpMode || "none",
+      pvpKills: state.pvpKills || 0,
+      pvpDeaths: state.pvpDeaths || 0
     });
 
     // tell everyone else on the same map a player joined
@@ -527,6 +535,17 @@ class ServerWorld {
   removePlayer(id) {
     const p = this.players.get(id);
     const mapId = p?.mapId;
+
+    // Clean up duel state
+    if (p) {
+      this._endDuel(p);
+      this._clearDuelPending(p);
+      // Also clear any pending duel FROM this player to someone else
+      if (p._pendingDuelTarget) {
+        const target = this.players.get(p._pendingDuelTarget);
+        if (target) this._clearDuelPending(target);
+      }
+    }
 
     // Clean up party membership
     if (p && p.partyId) this._removeFromParty(p);
@@ -692,6 +711,25 @@ class ServerWorld {
       case "party_list":
         this.handlePartyList(player);
         break;
+      case "pvp_stats":
+        this.send(player.ws, {
+          type: "pvp_stats",
+          pvpKills: player.pvpKills || 0,
+          pvpDeaths: player.pvpDeaths || 0
+        });
+        break;
+      case "duel_challenge":
+        this.handleDuelChallenge(player, msg);
+        break;
+      case "duel_accept":
+        this.handleDuelAccept(player, msg);
+        break;
+      case "duel_decline":
+        this.handleDuelDecline(player, msg);
+        break;
+      case "duel_cancel":
+        this.handleDuelCancel(player);
+        break;
       default:
         break;
     }
@@ -717,6 +755,11 @@ class ServerWorld {
     // Don't allow moving into blocked tiles (use player's current map)
     const mapEntry = this.maps.get(player.mapId);
     if (mapEntry && !mapEntry.collision.isBlocked(x, y, 16, floor)) {
+      // PVP combat timer: prevent entering safe zones
+      if (player.pvpCombatUntil > Date.now() && mapEntry.collision.isSafeZone(x, y)) {
+        this.send(player.ws, { type: "pvp_safe_zone_blocked" });
+        return;
+      }
       player.x = x;
       player.y = y;
       player.floor = floor;
@@ -750,6 +793,10 @@ class ServerWorld {
     // Notify old map players that this player left
     this.broadcastToMap(oldMapId, { type: "player_left", playerId: player.id }, player.id);
 
+    // Clean up duel on map change
+    this._endDuel(player);
+    this._clearDuelPending(player);
+
     // Move player to new map
     player.mapId = targetMapId;
     player.x = targetX;
@@ -757,12 +804,14 @@ class ServerWorld {
     player.floor = 0;
 
     // Send fresh state for new map
+    const newMapEntry = this.maps.get(targetMapId);
     this.send(player.ws, {
       type: "map_changed",
       mapId: targetMapId,
       enemies: this.enemySnapshot(targetMapId),
       players: this.otherPlayersSnapshot(player.id, targetMapId),
-      drops: this.dropsSnapshot(targetMapId)
+      drops: this.dropsSnapshot(targetMapId),
+      pvpMode: newMapEntry?.data.pvpMode || "none"
     });
 
     // Notify new map players
@@ -782,6 +831,56 @@ class ServerWorld {
     const mapEntry = this.maps.get(player.mapId);
     if (!mapEntry) return;
 
+    // ── PVP attack ──
+    if (msg.targetPlayerId) {
+      const target = this.players.get(msg.targetPlayerId);
+      if (!target || target.dead || target.mapId !== player.mapId) return;
+      if (!this._canPvpAttack(player, target, mapEntry)) return;
+
+      player.lastAttackAt = now;
+      const weaponDef = player.equipment?.mainHand ? ITEMS[player.equipment.mainHand.id] : null;
+
+      // Ranged PVP
+      if (weaponDef?.range) {
+        if (weaponDef.requiresQuiver) {
+          const quiver = player.equipment.offHand;
+          if (!quiver || quiver.type !== "quiver" || !(quiver.arrows > 0)) {
+            this.send(player.ws, { type: "attack_result", ok: false, reason: "Out of arrows!" });
+            return;
+          }
+          quiver.arrows--;
+          this.send(player.ws, { type: "quiver_update", arrows: quiver.arrows, maxArrows: ITEMS[quiver.id]?.maxArrows || quiver.maxArrows || 50 });
+        }
+        const projId = this._nextProjId++;
+        mapEntry.projectiles.push({
+          id: projId, playerId: player.id, targetPlayerId: target.id,
+          x: player.x, y: player.y, speed: 360,
+          type: "pvp_attack",
+          hitParticle: weaponDef.hitParticle || "hit_spark",
+          hitSfx: weaponDef.hitSfx || "sword_hit",
+        });
+        this.broadcastToMap(player.mapId, {
+          type: "projectile_spawn",
+          attackerId: player.id,
+          sx: player.x, sy: player.y,
+          tx: target.x, ty: target.y,
+          targetPlayerId: target.id,
+          speed: 360,
+          weaponId: player.equipment?.mainHand?.id || null,
+        });
+        this._setPvpCombatTimer(player, "attack", now);
+        return;
+      }
+
+      // Melee PVP
+      const d = dist(player.x, player.y, target.x, target.y);
+      if (d > player.attackRange + 30) return;
+
+      this._applyPvpDamage(player, target, mapEntry, now);
+      return;
+    }
+
+    // ── PVE attack (existing) ──
     const enemy = mapEntry.enemies.find((e) => e.id === msg.enemyId);
     if (!enemy || enemy.dead) return;
 
@@ -817,6 +916,7 @@ class ServerWorld {
         type: "projectile_spawn",
         attackerId: player.id,
         sx: player.x, sy: player.y,
+        tx: enemy.x, ty: enemy.y,
         targetEnemyId: enemy.id,
         speed: 360,
         weaponId: player.equipment?.mainHand?.id || null,
@@ -861,6 +961,288 @@ class ServerWorld {
       enemy.hp = 0;
       this.killEnemy(enemy, player);
     }
+  }
+
+  /* ── PVP helpers ─────────────────────────────────────── */
+
+  /**
+   * Check if player can PVP attack target on the given map.
+   */
+  _canPvpAttack(attacker, target, mapEntry) {
+    if (attacker.id === target.id) return false;
+    if (target.dead) return false;
+    const mapData = mapEntry.data;
+    const pvpMode = mapData.pvpMode || "none";
+    if (pvpMode === "none") return false;
+
+    // Party immunity — can't hit party members
+    if (attacker.partyId && attacker.partyId === target.partyId) {
+      if (!PVP_CONFIG.friendlyFireParty) return false;
+    }
+
+    if (pvpMode === "ffa") {
+      // Safe zone protection
+      if (mapData.pvpSafeZoneProtection) {
+        if (mapEntry.collision.isSafeZone(attacker.x, attacker.y)) return false;
+        if (mapEntry.collision.isSafeZone(target.x, target.y)) return false;
+      }
+      return true;
+    }
+
+    // "duel" mode — only if both players have an active duel (future: duel invite system)
+    // For now, duel mode blocks all PVP unless in a duel
+    if (pvpMode === "duel") {
+      return (attacker._duelTarget === target.id && target._duelTarget === attacker.id);
+    }
+    return false;
+  }
+
+  /**
+   * Apply melee PVP damage from attacker to target.
+   */
+  _applyPvpDamage(attacker, target, mapEntry, now) {
+    const dmgMult = this._getPlayerDamageMultiplier(attacker);
+    const damage = Math.max(2, Math.round((attacker.damage + randInt(-2, 4)) * dmgMult));
+    target.hp -= damage;
+
+    const weaponDef = attacker.equipment?.mainHand ? ITEMS[attacker.equipment.mainHand.id] : null;
+
+    // Tell attacker about the hit
+    this.send(attacker.ws, {
+      type: "pvp_attack_result",
+      targetId: target.id,
+      targetName: target.name,
+      damage,
+      targetHp: target.hp,
+      targetMaxHp: target.maxHp
+    });
+
+    // Tell the victim
+    this.send(target.ws, {
+      type: "player_damaged",
+      attackerId: attacker.id,
+      attackerName: attacker.name,
+      damage,
+      hp: target.hp,
+      maxHp: target.maxHp,
+      isPvp: true
+    });
+
+    // Broadcast visual to everyone on the map
+    this.broadcastToMap(attacker.mapId, {
+      type: "pvp_combat_visual",
+      attackerId: attacker.id,
+      ax: attacker.x, ay: attacker.y,
+      targetId: target.id,
+      tx: target.x, ty: target.y,
+      weaponId: attacker.equipment?.mainHand?.id || null,
+      hitParticle: weaponDef?.hitParticle || "hit_spark",
+      hitSfx: weaponDef?.hitSfx || "sword_hit",
+      damage,
+      targetHp: target.hp,
+      targetMaxHp: target.maxHp
+    });
+
+    this._setPvpCombatTimer(attacker, "attack", now);
+
+    if (target.hp <= 0) {
+      target.hp = 0;
+      this._onPvpDeath(target, attacker, now);
+    }
+  }
+
+  /**
+   * Set the PVP combat timer (prevents safe zone entry).
+   * type: "attack" = short timer, "kill" = long timer
+   */
+  _setPvpCombatTimer(player, type, now) {
+    const sec = type === "kill"
+      ? (PVP_CONFIG.killTimerSec || 300)
+      : (PVP_CONFIG.combatTimerSec || 30);
+    const until = now + sec * 1000;
+    if (until > player.pvpCombatUntil) {
+      player.pvpCombatUntil = until;
+      this.send(player.ws, { type: "pvp_combat_timer", until, duration: sec });
+    }
+  }
+
+  /**
+   * Handle PVP death — different from PVE.
+   */
+  _onPvpDeath(victim, killer, now) {
+    victim.dead = true;
+    victim.deathUntil = now + 4200;
+    victim.lootingDropId = null;
+
+    // End any active duel on death
+    this._endDuel(victim);
+    this._clearDuelPending(victim);
+
+    // PVP death gold penalty (configurable, defaults to 5)
+    const goldLost = Math.min(victim.gold || 0, PVP_CONFIG.deathGoldPenalty || 5);
+    victim.gold = Math.max(0, (victim.gold || 0) - goldLost);
+
+    // Update PVP stats
+    victim.pvpDeaths = (victim.pvpDeaths || 0) + 1;
+    killer.pvpKills = (killer.pvpKills || 0) + 1;
+
+    // Set kill timer on the killer (longer, prevents safe zone entry)
+    this._setPvpCombatTimer(killer, "kill", now);
+
+    // Notify victim
+    this.send(victim.ws, {
+      type: "you_died",
+      goldLost,
+      pvp: true,
+      killerName: killer.name,
+      pvpDeaths: victim.pvpDeaths,
+      pvpKills: victim.pvpKills
+    });
+
+    // Notify killer
+    this.send(killer.ws, {
+      type: "pvp_kill",
+      victimName: victim.name,
+      pvpKills: killer.pvpKills,
+      pvpDeaths: killer.pvpDeaths
+    });
+
+    // Clear enemy aggro on victim
+    const mapEntry = this.maps.get(victim.mapId);
+    if (mapEntry) {
+      for (const e of mapEntry.enemies) {
+        if (e.targetPlayerId === victim.id) {
+          e.targetPlayerId = null;
+        }
+      }
+    }
+  }
+
+  /**
+   * Get map pvpMode for a player's current map.
+   */
+  _getMapPvpMode(player) {
+    const mapEntry = this.maps.get(player.mapId);
+    if (!mapEntry) return "none";
+    return mapEntry.data.pvpMode || "none";
+  }
+
+  /* ── Duel system ───────────────────────────────────── */
+
+  handleDuelChallenge(player, msg) {
+    const targetId = msg.targetId;
+    const target = this.players.get(targetId);
+    if (!target || target.dead || target.mapId !== player.mapId) {
+      this.send(player.ws, { type: "duel_result", error: "Player not found." });
+      return;
+    }
+    if (target.id === player.id) return;
+
+    // Can't duel on maps with pvpMode "none"
+    const pvpMode = this._getMapPvpMode(player);
+    if (pvpMode === "none") {
+      this.send(player.ws, { type: "duel_result", error: "PVP is not allowed in this area." });
+      return;
+    }
+
+    // Can't challenge if you're already in a duel
+    if (player._duelTarget) {
+      this.send(player.ws, { type: "duel_result", error: "You are already in a duel." });
+      return;
+    }
+    // Can't challenge someone already in a duel
+    if (target._duelTarget) {
+      this.send(player.ws, { type: "duel_result", error: `${target.name} is already in a duel.` });
+      return;
+    }
+    // Can't challenge someone who already has a pending challenge from you
+    if (player._pendingDuelTarget === target.id) {
+      this.send(player.ws, { type: "duel_result", error: "Challenge already sent." });
+      return;
+    }
+
+    // Track pending duel
+    player._pendingDuelTarget = target.id;
+    target._pendingDuelFrom = player.id;
+
+    // Notify target
+    this.send(target.ws, {
+      type: "duel_challenge_received",
+      fromId: player.id,
+      fromName: player.name
+    });
+
+    this.send(player.ws, { type: "duel_result", ok: true, message: `Duel challenge sent to ${target.name}.` });
+  }
+
+  handleDuelAccept(player, msg) {
+    const challengerId = player._pendingDuelFrom;
+    if (!challengerId) {
+      this.send(player.ws, { type: "duel_result", error: "No pending duel challenge." });
+      return;
+    }
+    const challenger = this.players.get(challengerId);
+    if (!challenger || challenger.dead || challenger.mapId !== player.mapId) {
+      this._clearDuelPending(player);
+      this.send(player.ws, { type: "duel_result", error: "Challenger is no longer available." });
+      return;
+    }
+
+    // Clear pending state
+    this._clearDuelPending(player);
+    this._clearDuelPending(challenger);
+
+    // Start duel
+    player._duelTarget = challenger.id;
+    challenger._duelTarget = player.id;
+
+    this.send(player.ws, { type: "duel_started", opponentId: challenger.id, opponentName: challenger.name });
+    this.send(challenger.ws, { type: "duel_started", opponentId: player.id, opponentName: player.name });
+  }
+
+  handleDuelDecline(player, msg) {
+    const challengerId = player._pendingDuelFrom;
+    if (!challengerId) return;
+    const challenger = this.players.get(challengerId);
+
+    this._clearDuelPending(player);
+    if (challenger) {
+      this._clearDuelPending(challenger);
+      this.send(challenger.ws, { type: "duel_result", error: `${player.name} declined your duel challenge.` });
+    }
+    this.send(player.ws, { type: "duel_result", ok: true, message: "Duel declined." });
+  }
+
+  handleDuelCancel(player) {
+    // Cancel outgoing challenge
+    const targetId = player._pendingDuelTarget;
+    if (targetId) {
+      const target = this.players.get(targetId);
+      if (target) {
+        this._clearDuelPending(target);
+        this.send(target.ws, { type: "duel_challenge_cancelled" });
+      }
+      this._clearDuelPending(player);
+    }
+    // End active duel
+    this._endDuel(player);
+  }
+
+  _clearDuelPending(player) {
+    player._pendingDuelTarget = null;
+    player._pendingDuelFrom = null;
+  }
+
+  _endDuel(player) {
+    const opponentId = player._duelTarget;
+    if (!opponentId) return;
+    player._duelTarget = null;
+    const opponent = this.players.get(opponentId);
+    if (opponent && opponent._duelTarget === player.id) {
+      opponent._duelTarget = null;
+      this.send(opponent.ws, { type: "duel_ended" });
+    }
+    this.send(player.ws, { type: "duel_ended" });
   }
 
   handleHeal(player) {
@@ -963,16 +1345,29 @@ class ServerWorld {
 
     // For enemy-targeted skills, validate target and range
     let enemy = null;
+    let pvpTarget = null;
     const targeting = skillDef.targeting;
     if (targeting === "enemy") {
       const mapEntry = this.maps.get(player.mapId);
       if (!mapEntry) return;
-      enemy = mapEntry.enemies.find(e => e.id === msg.enemyId);
-      if (!enemy || enemy.dead) return;
 
-      const d = dist(player.x, player.y, enemy.x, enemy.y);
-      const skillRange = skillDef.range || player.attackRange;
-      if (d > skillRange + 30) return;
+      // PVP target?
+      if (msg.targetPlayerId) {
+        pvpTarget = this.players.get(msg.targetPlayerId);
+        if (!pvpTarget || pvpTarget.dead || pvpTarget.mapId !== player.mapId) return;
+        if (!this._canPvpAttack(player, pvpTarget, mapEntry)) return;
+
+        const d = dist(player.x, player.y, pvpTarget.x, pvpTarget.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (d > skillRange + 30) return;
+      } else {
+        enemy = mapEntry.enemies.find(e => e.id === msg.enemyId);
+        if (!enemy || enemy.dead) return;
+
+        const d = dist(player.x, player.y, enemy.x, enemy.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (d > skillRange + 30) return;
+      }
     }
     // ground_aoe / directional — validate target position is in range
     if (targeting === "ground_aoe" || targeting === "directional") {
@@ -1003,6 +1398,7 @@ class ServerWorld {
         castY: player.y,
         // Store targeting data for resolution on complete
         enemyId: msg.enemyId || null,
+        targetPlayerId: msg.targetPlayerId || null,
         targetX: msg.targetX ?? null,
         targetY: msg.targetY ?? null,
       };
@@ -1015,6 +1411,12 @@ class ServerWorld {
         mana: player.mana,
         maxMana: player.maxMana,
       });
+      this.broadcastToMap(player.mapId, {
+        type: "player_cast_start",
+        playerId: player.id,
+        skillId,
+        castTime: castTimeSec,
+      }, player.id);
       return;
     }
 
@@ -1038,6 +1440,7 @@ class ServerWorld {
         castX: player.x,
         castY: player.y,
         enemyId: msg.enemyId || null,
+        targetPlayerId: msg.targetPlayerId || null,
         targetX: msg.targetX ?? null,
         targetY: msg.targetY ?? null,
         tickInterval: tickIntervalSec * 1000,
@@ -1055,6 +1458,12 @@ class ServerWorld {
         mana: player.mana,
         maxMana: player.maxMana,
       });
+      this.broadcastToMap(player.mapId, {
+        type: "player_channel_start",
+        playerId: player.id,
+        skillId,
+        channelDuration,
+      }, player.id);
       return;
     }
 
@@ -1062,14 +1471,78 @@ class ServerWorld {
     player.mana -= manaCost;
     player.skillCooldowns[skillId] = now;
 
-    this._resolveSkill(player, skillDef, skillId, enemy, now, msg);
+    this._resolveSkill(player, skillDef, skillId, enemy, now, msg, pvpTarget);
   }
 
   /**
    * Resolve skill effects — extracted so both instant and cast-time paths use it.
    */
-  _resolveSkill(player, skillDef, skillId, enemy, now, msg) {
+  _resolveSkill(player, skillDef, skillId, enemy, now, msg, pvpTarget) {
     const targeting = skillDef.targeting;
+
+    // ── PVP single-target skill ──
+    if (pvpTarget && (skillDef.type === "attack" || skillDef.type === "debuff") && targeting === "enemy") {
+      const mapEntry = this.maps.get(player.mapId);
+      if (!mapEntry) return;
+
+      // Ranged PVP skill — create projectile
+      if (skillDef.projectileSpeed > 0) {
+        const projId = this._nextProjId++;
+        mapEntry.projectiles.push({
+          id: projId, playerId: player.id, targetPlayerId: pvpTarget.id,
+          x: player.x, y: player.y, speed: skillDef.projectileSpeed,
+          type: "pvp_skill", skillId,
+          hitParticle: skillDef.hitParticle || skillDef.particle || null,
+          hitSfx: skillDef.sfx || null,
+          damageType: skillDef.damageType || "physical",
+          debuff: skillDef.debuff || null,
+        });
+        this.send(player.ws, { type: "skill_result", ok: true, skillId, mana: player.mana, maxMana: player.maxMana });
+        this.broadcastToMap(player.mapId, {
+          type: "projectile_spawn",
+          attackerId: player.id,
+          sx: player.x, sy: player.y,
+          tx: pvpTarget.x, ty: pvpTarget.y,
+          targetPlayerId: pvpTarget.id,
+          speed: skillDef.projectileSpeed,
+          skillId,
+          damageType: skillDef.damageType || "physical",
+        });
+        this._setPvpCombatTimer(player, "attack", now);
+        return;
+      }
+
+      // Melee PVP skill — instant damage
+      let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+      if (skillDef.damageType === "physical") baseDmg += player.damage;
+      const dmgMult = this._getPlayerDamageMultiplier(player);
+      const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult));
+      pvpTarget.hp -= damage;
+
+      this.send(player.ws, {
+        type: "skill_result", ok: true, skillId, mana: player.mana, maxMana: player.maxMana,
+        pvpHit: { targetPlayerId: pvpTarget.id, damage, targetHp: pvpTarget.hp, targetMaxHp: pvpTarget.maxHp }
+      });
+      this.send(pvpTarget.ws, {
+        type: "player_damaged", attackerId: player.id, attackerName: player.name,
+        damage, hp: pvpTarget.hp, maxHp: pvpTarget.maxHp, isPvp: true, skillId
+      });
+      this.broadcastToMap(player.mapId, {
+        type: "pvp_combat_visual",
+        attackerId: player.id, ax: player.x, ay: player.y,
+        targetId: pvpTarget.id, tx: pvpTarget.x, ty: pvpTarget.y,
+        skillId, hitParticle: skillDef.hitParticle || skillDef.particle || null,
+        hitSfx: skillDef.sfx || null, damage, targetHp: pvpTarget.hp, targetMaxHp: pvpTarget.maxHp
+      });
+      this._setPvpCombatTimer(player, "attack", now);
+      if (pvpTarget.hp <= 0) {
+        pvpTarget.hp = 0;
+        this._onPvpDeath(pvpTarget, player, now);
+      }
+      return;
+    }
+
+    // ── PVE path (existing) ──
 
     // Resolve skill effects by type
     if (skillDef.type === "attack" || skillDef.type === "debuff") {
@@ -1097,6 +1570,7 @@ class ServerWorld {
           type: "projectile_spawn",
           attackerId: player.id,
           sx: player.x, sy: player.y,
+          tx: enemy.x, ty: enemy.y,
           targetEnemyId: enemy.id,
           speed: skillDef.projectileSpeed,
           skillId,
@@ -1190,19 +1664,68 @@ class ServerWorld {
           }
         }
 
+        // ── AoE PVP: also hit players in the affected area ──
+        const pvpHits = [];
+        for (const [pid, p] of this.players) {
+          if (p.dead || p.mapId !== player.mapId || p.id === player.id) continue;
+          if ((p.floor || 0) !== (player.floor || 0)) continue;
+          if (!this._canPvpAttack(player, p, mapEntry)) continue;
+          const ptx = Math.floor(p.x / ts);
+          const pty = Math.floor(p.y / ts);
+          if (!affectedTiles.has(tileKey(ptx, pty))) continue;
+
+          const pvpDmg = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult));
+          p.hp -= pvpDmg;
+          pvpHits.push({ targetPlayerId: p.id, damage: pvpDmg, targetHp: p.hp, targetMaxHp: p.maxHp });
+
+          this.send(p.ws, {
+            type: "player_damaged", attackerId: player.id, attackerName: player.name,
+            damage: pvpDmg, hp: p.hp, maxHp: p.maxHp, isPvp: true, skillId,
+          });
+          this.broadcastToMap(player.mapId, {
+            type: "pvp_combat_visual",
+            attackerId: player.id, ax: player.x, ay: player.y,
+            targetId: p.id, tx: p.x, ty: p.y,
+            skillId,
+            hitParticle: skillDef.hitParticle || skillDef.particle || null,
+            hitSfx: skillDef.sfx || null,
+            damageType: skillDef.damageType || "physical",
+            damage: pvpDmg, targetHp: p.hp, targetMaxHp: p.maxHp,
+          });
+          this._setPvpCombatTimer(player, "attack", now);
+          this._setPvpCombatTimer(p, "defend", now);
+
+          if (p.hp <= 0) {
+            p.hp = 0;
+            this._onPvpDeath(p, player);
+          }
+        }
+
+        const aoeTileCoords = [...affectedTiles].map(k => {
+          const [tx, ty] = k.split(",").map(Number);
+          return [tx * ts + ts / 2, ty * ts + ts / 2];
+        });
         this.send(player.ws, {
           type: "skill_result",
           ok: true,
           skillId,
           aoe: true,
           hits,
-          aoeTiles: [...affectedTiles].map(k => {
-            const [tx, ty] = k.split(",").map(Number);
-            return [tx * ts + ts / 2, ty * ts + ts / 2];
-          }),
+          pvpHits: pvpHits.length > 0 ? pvpHits : undefined,
+          aoeTiles: aoeTileCoords,
           mana: player.mana,
           maxMana: player.maxMana,
         });
+        // Broadcast AoE ground effect to observers
+        if (skillDef.aoeParticleEffect) {
+          this.broadcastToMap(player.mapId, {
+            type: "skill_aoe_visual",
+            playerId: player.id,
+            skillId,
+            aoeParticleEffect: skillDef.aoeParticleEffect,
+            aoeTiles: aoeTileCoords,
+          }, player.id);
+        }
         return;
       }
 
@@ -2536,6 +3059,11 @@ class ServerWorld {
     } else if (cast.type === "channel") {
       this._completeCastChannel(player, cast);
     }
+    // Notify other players the cast/channel ended
+    this.broadcastToMap(player.mapId, {
+      type: "player_cast_end",
+      playerId: player.id,
+    }, player.id);
   }
 
   _completeCastHearthstone(player) {
@@ -2552,7 +3080,10 @@ class ServerWorld {
     const targetY = hs.ty * tileSize + tileSize / 2;
 
     if (player.mapId !== targetMapId) {
-      // Cross-map teleport
+      // Cross-map teleport — clean up duel
+      this._endDuel(player);
+      this._clearDuelPending(player);
+
       player.mapId = targetMapId;
       player.x = targetX;
       player.y = targetY;
@@ -2597,6 +3128,11 @@ class ServerWorld {
     } else if (castType === "channel") {
       this.send(player.ws, { type: "skill_channel_cancelled", skillId, reason: reason || "interrupted" });
     }
+    // Notify other players the cast/channel ended
+    this.broadcastToMap(player.mapId, {
+      type: "player_cast_end",
+      playerId: player.id,
+    }, player.id);
   }
 
   /**
@@ -2613,20 +3149,41 @@ class ServerWorld {
     const targeting = skillDef.targeting;
     const now = Date.now();
     let enemy = null;
+    let pvpTarget = null;
 
     if (targeting === "enemy") {
       const mapEntry = this.maps.get(player.mapId);
       if (!mapEntry) return;
-      enemy = mapEntry.enemies.find(e => e.id === cast.enemyId);
-      if (!enemy || enemy.dead) {
-        this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "target_lost" });
-        return;
-      }
-      const d = dist(player.x, player.y, enemy.x, enemy.y);
-      const skillRange = skillDef.range || player.attackRange;
-      if (d > skillRange + 30) {
-        this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "out_of_range" });
-        return;
+
+      if (cast.targetPlayerId) {
+        // PVP target
+        pvpTarget = this.players.get(cast.targetPlayerId);
+        if (!pvpTarget || pvpTarget.dead || pvpTarget.mapId !== player.mapId) {
+          this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "target_lost" });
+          return;
+        }
+        if (!this._canPvpAttack(player, pvpTarget, mapEntry)) {
+          this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "target_lost" });
+          return;
+        }
+        const d = dist(player.x, player.y, pvpTarget.x, pvpTarget.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (d > skillRange + 30) {
+          this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "out_of_range" });
+          return;
+        }
+      } else {
+        enemy = mapEntry.enemies.find(e => e.id === cast.enemyId);
+        if (!enemy || enemy.dead) {
+          this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "target_lost" });
+          return;
+        }
+        const d = dist(player.x, player.y, enemy.x, enemy.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (d > skillRange + 30) {
+          this.send(player.ws, { type: "skill_cast_cancelled", skillId, reason: "out_of_range" });
+          return;
+        }
       }
     }
 
@@ -2635,9 +3192,10 @@ class ServerWorld {
     // Build a synthetic msg and call the resolution path
     this._resolveSkill(player, skillDef, skillId, enemy, now, {
       enemyId: cast.enemyId,
+      targetPlayerId: cast.targetPlayerId,
       targetX: cast.targetX,
       targetY: cast.targetY,
-    });
+    }, pvpTarget);
   }
 
   _completeCastChannel(player, cast) {
@@ -2738,76 +3296,176 @@ class ServerWorld {
           }
         }
 
+        // ── AoE channel PVP: also hit players in the affected area ──
+        const pvpHits = [];
+        for (const [pid, p] of this.players) {
+          if (p.dead || p.mapId !== player.mapId || p.id === player.id) continue;
+          if ((p.floor || 0) !== (player.floor || 0)) continue;
+          if (!this._canPvpAttack(player, p, mapEntry)) continue;
+          const ptx = Math.floor(p.x / ts);
+          const pty = Math.floor(p.y / ts);
+          if (!affectedTiles.has(tileKey(ptx, pty))) continue;
+
+          const pvpDmg = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult));
+          p.hp -= pvpDmg;
+          pvpHits.push({ targetPlayerId: p.id, damage: pvpDmg, targetHp: p.hp, targetMaxHp: p.maxHp });
+
+          this.send(p.ws, {
+            type: "player_damaged", attackerId: player.id, attackerName: player.name,
+            damage: pvpDmg, hp: p.hp, maxHp: p.maxHp, isPvp: true, skillId,
+          });
+          this.broadcastToMap(player.mapId, {
+            type: "pvp_combat_visual",
+            attackerId: player.id, ax: player.x, ay: player.y,
+            targetId: p.id, tx: p.x, ty: p.y,
+            skillId,
+            hitParticle: skillDef.hitParticle || skillDef.particle || null,
+            hitSfx: skillDef.sfx || null,
+            damageType: skillDef.damageType || "physical",
+            damage: pvpDmg, targetHp: p.hp, targetMaxHp: p.maxHp,
+          });
+          this._setPvpCombatTimer(player, "attack", now);
+          this._setPvpCombatTimer(p, "defend", now);
+
+          if (p.hp <= 0) {
+            p.hp = 0;
+            this._onPvpDeath(p, player);
+          }
+        }
+
+        const aoeTileCoords = [...affectedTiles].map(k => {
+          const [tx, ty] = k.split(",").map(Number);
+          return [tx * ts + ts / 2, ty * ts + ts / 2];
+        });
         this.send(player.ws, {
           type: "skill_channel_tick",
           skillId,
           tickNum,
           aoe: true,
           hits,
-          aoeTiles: [...affectedTiles].map(k => {
-            const [tx, ty] = k.split(",").map(Number);
-            return [tx * ts + ts / 2, ty * ts + ts / 2];
-          }),
+          pvpHits: pvpHits.length > 0 ? pvpHits : undefined,
+          aoeTiles: aoeTileCoords,
         });
+        // Broadcast AoE ground effect to observers
+        if (skillDef.aoeParticleEffect) {
+          this.broadcastToMap(player.mapId, {
+            type: "skill_aoe_visual",
+            playerId: player.id,
+            skillId,
+            aoeParticleEffect: skillDef.aoeParticleEffect,
+            aoeTiles: aoeTileCoords,
+          }, player.id);
+        }
       } else {
         // Single-target channel tick
         const mapEntry = this.maps.get(player.mapId);
         if (!mapEntry) { this._interruptCast(player, "target_lost"); return; }
-        const enemy = mapEntry.enemies.find(e => e.id === cast.enemyId);
-        if (!enemy || enemy.dead) { this._interruptCast(player, "target_lost"); return; }
 
-        const d = dist(player.x, player.y, enemy.x, enemy.y);
-        const skillRange = skillDef.range || player.attackRange;
-        if (d > skillRange + 30) { this._interruptCast(player, "out_of_range"); return; }
+        // PVP target
+        if (cast.targetPlayerId) {
+          const pvpTarget = this.players.get(cast.targetPlayerId);
+          if (!pvpTarget || pvpTarget.dead || pvpTarget.mapId !== player.mapId) {
+            this._interruptCast(player, "target_lost"); return;
+          }
+          if (!this._canPvpAttack(player, pvpTarget, mapEntry)) {
+            this._interruptCast(player, "target_lost"); return;
+          }
+          const d = dist(player.x, player.y, pvpTarget.x, pvpTarget.y);
+          const skillRange = skillDef.range || player.attackRange;
+          if (d > skillRange + 30) { this._interruptCast(player, "out_of_range"); return; }
 
-        let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
-        if (!skillDef.range && skillDef.damageType === "physical") baseDmg += player.damage;
-        const dmgMult = this._getPlayerDamageMultiplier(player);
-        const takenMult = this._getEnemyDamageTakenMult(enemy);
-        const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
-        enemy.hp -= damage;
+          let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+          if (skillDef.damageType === "physical") baseDmg += player.damage;
+          const dmgMult = this._getPlayerDamageMultiplier(player);
+          const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult));
+          pvpTarget.hp -= damage;
 
-        let debuffApplied = null;
-        if (skillDef.debuff) {
-          if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
-          enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
-          enemy.activeDebuffs.push({
-            ...skillDef.debuff,
-            appliedAt: now,
-            expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
-            casterId: player.id,
+          this.send(player.ws, {
+            type: "skill_channel_tick",
+            skillId,
+            tickNum,
+            pvpHit: { targetPlayerId: pvpTarget.id, damage, targetHp: pvpTarget.hp, targetMaxHp: pvpTarget.maxHp },
           });
-          debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
-        }
+          this.send(pvpTarget.ws, {
+            type: "player_damaged", attackerId: player.id, attackerName: player.name,
+            damage, hp: pvpTarget.hp, maxHp: pvpTarget.maxHp, isPvp: true, skillId,
+          });
+          this.broadcastToMap(player.mapId, {
+            type: "pvp_combat_visual",
+            attackerId: player.id, ax: player.x, ay: player.y,
+            targetId: pvpTarget.id, tx: pvpTarget.x, ty: pvpTarget.y,
+            skillId,
+            hitParticle: skillDef.hitParticle || skillDef.particle || null,
+            hitSfx: skillDef.sfx || null,
+            damageType: skillDef.damageType || "physical",
+            damage, targetHp: pvpTarget.hp, targetMaxHp: pvpTarget.maxHp,
+          });
+          this._setPvpCombatTimer(player, "attack", now);
+          this._setPvpCombatTimer(pvpTarget, "defend", now);
 
-        this.send(player.ws, {
-          type: "skill_channel_tick",
-          skillId,
-          tickNum,
-          enemyId: enemy.id,
-          damage,
-          enemyHp: enemy.hp,
-          enemyMaxHp: enemy.maxHp,
-          debuff: debuffApplied,
-        });
+          if (pvpTarget.hp <= 0) {
+            pvpTarget.hp = 0;
+            this._onPvpDeath(pvpTarget, player);
+            this._interruptCast(player, "target_lost");
+          }
+        } else {
+          // PVE target
+          const enemy = mapEntry.enemies.find(e => e.id === cast.enemyId);
+          if (!enemy || enemy.dead) { this._interruptCast(player, "target_lost"); return; }
 
-        this.broadcastToMap(player.mapId, {
-          type: "combat_visual",
-          attackerId: player.id,
-          ax: player.x, ay: player.y,
-          enemyId: enemy.id, ex: enemy.x, ey: enemy.y,
-          skillId,
-          hitParticle: skillDef.hitParticle || skillDef.particle || null,
-          hitSfx: skillDef.sfx || null,
-          projectileSpeed: 0,
-          damageType: skillDef.damageType || "physical",
-          damage, enemyHp: enemy.hp, enemyMaxHp: enemy.maxHp,
-        }, player.id);
+          const d = dist(player.x, player.y, enemy.x, enemy.y);
+          const skillRange = skillDef.range || player.attackRange;
+          if (d > skillRange + 30) { this._interruptCast(player, "out_of_range"); return; }
 
-        if (enemy.hp <= 0) {
-          enemy.hp = 0;
-          this.killEnemy(enemy, player);
-          this._interruptCast(player, "target_lost");
+          let baseDmg = (skillDef.damage || 0) + (skillDef.damagePerLevel || 0) * (player.level - 1);
+          if (!skillDef.range && skillDef.damageType === "physical") baseDmg += player.damage;
+          const dmgMult = this._getPlayerDamageMultiplier(player);
+          const takenMult = this._getEnemyDamageTakenMult(enemy);
+          const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult * takenMult));
+          enemy.hp -= damage;
+
+          let debuffApplied = null;
+          if (skillDef.debuff) {
+            if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
+            enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== skillDef.debuff.id);
+            enemy.activeDebuffs.push({
+              ...skillDef.debuff,
+              appliedAt: now,
+              expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
+              casterId: player.id,
+            });
+            debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
+          }
+
+          this.send(player.ws, {
+            type: "skill_channel_tick",
+            skillId,
+            tickNum,
+            enemyId: enemy.id,
+            damage,
+            enemyHp: enemy.hp,
+            enemyMaxHp: enemy.maxHp,
+            debuff: debuffApplied,
+          });
+
+          this.broadcastToMap(player.mapId, {
+            type: "combat_visual",
+            attackerId: player.id,
+            ax: player.x, ay: player.y,
+            enemyId: enemy.id, ex: enemy.x, ey: enemy.y,
+            skillId,
+            hitParticle: skillDef.hitParticle || skillDef.particle || null,
+            hitSfx: skillDef.sfx || null,
+            projectileSpeed: 0,
+            damageType: skillDef.damageType || "physical",
+            damage, enemyHp: enemy.hp, enemyMaxHp: enemy.maxHp,
+          }, player.id);
+
+          if (enemy.hp <= 0) {
+            enemy.hp = 0;
+            this.killEnemy(enemy, player);
+            this._interruptCast(player, "target_lost");
+          }
         }
       }
     } else if (skillDef.type === "heal") {
@@ -3160,6 +3818,29 @@ class ServerWorld {
     let write = 0;
     for (let i = 0; i < projs.length; i++) {
       const proj = projs[i];
+
+      // PVP projectiles target a player
+      if (proj.targetPlayerId) {
+        const target = this.players.get(proj.targetPlayerId);
+        if (!target || target.dead || target.mapId !== mapEntry._mapId) continue;
+
+        const dx = target.x - proj.x;
+        const dy = target.y - proj.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        const step = proj.speed * dt;
+        const hitDist = 24 + 4;
+
+        if (d <= hitDist || step >= d) {
+          this._resolvePvpProjectileHit(proj, target, mapEntry);
+          continue;
+        }
+        proj.x += (dx / d) * step;
+        proj.y += (dy / d) * step;
+        projs[write++] = proj;
+        continue;
+      }
+
+      // PVE projectiles target an enemy
       const enemy = mapEntry.enemies.find(e => e.id === proj.targetEnemyId);
 
       // Enemy gone or dead — projectile fizzles
@@ -3274,6 +3955,66 @@ class ServerWorld {
     if (enemy.hp <= 0) {
       enemy.hp = 0;
       if (player) this.killEnemy(enemy, player);
+    }
+  }
+
+  _resolvePvpProjectileHit(proj, target, mapEntry) {
+    const attacker = this.players.get(proj.playerId);
+    const now = Date.now();
+
+    // Compute damage
+    let damage;
+    const dmgMult = attacker ? this._getPlayerDamageMultiplier(attacker) : 1;
+    if (proj.type === "pvp_attack") {
+      const dmgStat = attacker ? attacker.damage : 10;
+      damage = Math.max(2, Math.round((dmgStat + randInt(-2, 4)) * dmgMult));
+    } else {
+      // pvp_skill
+      const skillDef = SKILLS[proj.skillId];
+      const level = attacker ? attacker.level : 1;
+      const baseDmg = (skillDef?.damage || 0) + (skillDef?.damagePerLevel || 0) * (level - 1);
+      damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult));
+    }
+    target.hp -= damage;
+
+    // Notify attacker
+    if (attacker) {
+      this.send(attacker.ws, {
+        type: "pvp_attack_result",
+        targetId: target.id,
+        targetName: target.name,
+        damage, targetHp: target.hp, targetMaxHp: target.maxHp,
+        projectileHit: true
+      });
+    }
+    // Notify victim
+    this.send(target.ws, {
+      type: "player_damaged",
+      attackerId: proj.playerId,
+      attackerName: attacker?.name || "Unknown",
+      damage, hp: target.hp, maxHp: target.maxHp,
+      isPvp: true
+    });
+    // Broadcast visual
+    const skillDef = proj.skillId ? SKILLS[proj.skillId] : null;
+    this.broadcastToMap(mapEntry._mapId, {
+      type: "pvp_combat_visual",
+      projectileHit: true,
+      attackerId: proj.playerId,
+      targetId: target.id,
+      tx: target.x, ty: target.y,
+      skillId: proj.skillId || null,
+      hitParticle: proj.hitParticle || skillDef?.hitParticle || "hit_spark",
+      hitSfx: proj.hitSfx || skillDef?.sfx || "sword_hit",
+      damage, targetHp: target.hp, targetMaxHp: target.maxHp,
+    });
+
+    if (attacker) {
+      this._setPvpCombatTimer(attacker, "attack", now);
+    }
+    if (target.hp <= 0) {
+      target.hp = 0;
+      if (attacker) this._onPvpDeath(target, attacker, now);
     }
   }
 
@@ -3813,7 +4554,9 @@ class ServerWorld {
         mapId: p.mapId,
         posX: p.x,
         posY: p.y,
-        floor: p.floor || 0
+        floor: p.floor || 0,
+        pvpKills: p.pvpKills || 0,
+        pvpDeaths: p.pvpDeaths || 0
       });
     } catch (err) {
       console.error(`[ServerWorld] Save failed for ${p.name}:`, err.message);

@@ -1,6 +1,7 @@
 {
   "id": "stonegate",
   "name": "Stonegate",
+  "pvpMode": "none",
   "width": 128,
   "height": 128,
   "tileSize": 48,

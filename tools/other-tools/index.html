@@ -35,6 +35,9 @@
       <button class="tab" data-tab="resourceNodes">Resources</button>
       <button class="tab" data-tab="recipes">Recipes</button>
       <button class="tab" data-tab="aoePatterns">AoE Patterns</button>
+      <button class="tab" data-tab="rarities">Rarities</button>
+      <button class="tab" data-tab="party">Party</button>
+      <button class="tab" data-tab="theme">Theme</button>
     </nav>
 
     <main class="workspace tool-workspace">
@@ -582,6 +585,7 @@
                 </section>
 
                 <div class="split-grid five-columns">
+                  <label class="field"><span>Level</span><input id="enemyLevelInput" type="number" step="1" min="1" /></label>
                   <label class="field"><span>Max HP</span><input id="enemyMaxHpInput" type="number" step="1" /></label>
                   <label class="field"><span>Damage</span><input id="enemyDamageInput" type="number" step="1" /></label>
                   <label class="field"><span>Speed</span><input id="enemySpeedInput" type="number" step="1" /></label>
@@ -595,6 +599,17 @@
                   <label class="field"><span>Radius</span><input id="enemyRadiusInput" type="number" step="1" /></label>
                   <label class="field"><span>Aggro Range</span><input id="enemyAggroRangeInput" type="number" step="1" /></label>
                   <label class="field color-picker-field"><span>Color</span><input id="enemyColorInput" class="color-picker color-picker-sm" type="color" /></label>
+                </div>
+
+                <div class="split-grid four-columns">
+                  <label class="field">
+                    <span>Tile Size <span class="subtle">(optional)</span></span>
+                    <select id="enemyTileSizeInput">
+                      <option value="">1 — default (48×48)</option>
+                      <option value="2">2 — large (96×96)</option>
+                      <option value="3">3 — huge (144×144)</option>
+                    </select>
+                  </label>
                 </div>
 
                 <div class="split-grid two-columns">
@@ -722,6 +737,8 @@
                       <option value="vendor">vendor</option>
                       <option value="banker">banker</option>
                       <option value="crafting_station">crafting_station</option>
+                      <option value="npc">npc</option>
+                      <option value="gathering">gathering</option>
                     </select>
                   </label>
                   <label class="field">
@@ -778,6 +795,13 @@
                   </div>
                   <div id="npcShopEditor" class="linked-list-editor"></div>
                   <p id="npcShopEmptyState" class="subtle linked-empty">No linked shop items.</p>
+                </section>
+                <section class="field-group" data-npc-field="dialogTree">
+                  <div class="inline-json-header row-between">
+                    <h4>Dialog Tree <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">optional — lore/conversation nodes</span></h4>
+                    <button id="npcDialogTreeAddNodeButton" type="button" class="button secondary small">Add Node</button>
+                  </div>
+                  <div id="npcDialogTreeStack" class="dialog-state-stack"></div>
                 </section>
                 <section class="inline-json">
                   <div class="inline-json-header">
@@ -919,35 +943,11 @@
                 </section>
 
                 <section class="field-group">
-                  <div class="inline-json-header">
-                    <h4>Dialog States</h4>
+                  <div class="inline-json-header row-between">
+                    <h4>Dialog Nodes <span class="subtle" style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">4 required states + any extra lore nodes</span></h4>
+                    <button id="questDialogAddNodeButton" type="button" class="button secondary small">Add Node</button>
                   </div>
-                  <div class="dialog-state-stack">
-                    <div class="dialog-state-card">
-                      <div class="inline-json-header row-between"><h4>not_started</h4><button id="questDialogNotStartedAddButton" type="button" class="button secondary small">Add Option</button></div>
-                      <label class="field"><span>Text</span><textarea id="questDialogNotStartedTextInput" rows="2"></textarea></label>
-                      <div id="questDialogNotStartedOptionsEditor" class="dialog-options-editor"></div>
-                      <p id="questDialogNotStartedOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
-                    </div>
-                    <div class="dialog-state-card">
-                      <div class="inline-json-header row-between"><h4>active</h4><button id="questDialogActiveAddButton" type="button" class="button secondary small">Add Option</button></div>
-                      <label class="field"><span>Text</span><textarea id="questDialogActiveTextInput" rows="2"></textarea></label>
-                      <div id="questDialogActiveOptionsEditor" class="dialog-options-editor"></div>
-                      <p id="questDialogActiveOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
-                    </div>
-                    <div class="dialog-state-card">
-                      <div class="inline-json-header row-between"><h4>ready_to_turn_in</h4><button id="questDialogReadyAddButton" type="button" class="button secondary small">Add Option</button></div>
-                      <label class="field"><span>Text</span><textarea id="questDialogReadyTextInput" rows="2"></textarea></label>
-                      <div id="questDialogReadyOptionsEditor" class="dialog-options-editor"></div>
-                      <p id="questDialogReadyOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
-                    </div>
-                    <div class="dialog-state-card">
-                      <div class="inline-json-header row-between"><h4>completed</h4><button id="questDialogCompletedAddButton" type="button" class="button secondary small">Add Option</button></div>
-                      <label class="field"><span>Text</span><textarea id="questDialogCompletedTextInput" rows="2"></textarea></label>
-                      <div id="questDialogCompletedOptionsEditor" class="dialog-options-editor"></div>
-                      <p id="questDialogCompletedOptionsEmptyState" class="subtle linked-empty">No dialog options.</p>
-                    </div>
-                  </div>
+                  <div id="questDialogNodeStack" class="dialog-state-stack"></div>
                 </section>
 
                 <section class="inline-json">
@@ -2238,6 +2238,205 @@
                 <span id="aoePatternValidationSummary" class="subtle">No validation run yet</span>
               </div>
               <div id="aoePatternDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <!-- ═══ RARITIES ═══════════════════════════════════════════════════════ -->
+      <section class="tool-view tool-view--full" data-view="rarities">
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Rarities Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/rarities.json</code> — rarity tier colors for item names and inventory glow effects</p>
+            </div>
+            <div class="inline-actions">
+              <button id="addRarityButton" class="button secondary small">Add</button>
+              <button id="deleteRarityButton" class="button danger small">Delete</button>
+              <button id="validateRaritiesButton" class="button secondary">Validate</button>
+              <button id="reloadRaritiesButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body single-panel-grid">
+            <section class="card editor-form-card" style="overflow-y:auto">
+              <div id="raritiesEditorContainer"></div>
+              <section class="inline-json" style="margin-top:16px">
+                <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                <pre id="raritiesJsonPreview" class="json-preview"></pre>
+              </section>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="raritiesValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="raritiesDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <!-- ═══ PARTY ═══════════════════════════════════════════════════════════ -->
+      <section class="tool-view tool-view--full" data-view="party">
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Party Config</h2>
+              <p class="panel-subtitle">Edit <code>public/data/party.json</code> — party size, XP sharing, and quest kill sharing</p>
+            </div>
+            <div class="inline-actions">
+              <button id="reloadPartyButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body single-panel-grid">
+            <section class="card editor-form-card">
+              <form id="partyForm" class="editor-form" autocomplete="off">
+                <div class="split-grid two-columns">
+                  <label class="field">
+                    <span>Max Party Size</span>
+                    <input id="partyMaxSizeInput" type="number" step="1" min="1" max="20" />
+                  </label>
+                </div>
+
+                <section class="field-group" style="margin-top:12px">
+                  <div class="inline-json-header"><h4>XP Sharing</h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field checkbox-field">
+                      <input id="partyXpShareEnabledInput" type="checkbox" />
+                      <span>Enabled</span>
+                    </label>
+                    <label class="field"><span>Range (tiles)</span><input id="partyXpShareRangeInput" type="number" step="1" min="0" /></label>
+                    <label class="field"><span>Level Diff (±)</span><input id="partyXpShareLevelDiffInput" type="number" step="1" min="0" /></label>
+                  </div>
+                  <div class="split-grid two-columns" style="margin-top:6px">
+                    <label class="field">
+                      <span>Split Mode</span>
+                      <select id="partyXpShareSplitModeInput">
+                        <option value="equal">equal</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="field-group" style="margin-top:12px">
+                  <div class="inline-json-header"><h4>Quest Kill Sharing</h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field checkbox-field">
+                      <input id="partyQuestShareEnabledInput" type="checkbox" />
+                      <span>Enabled</span>
+                    </label>
+                    <label class="field"><span>Range (tiles)</span><input id="partyQuestShareRangeInput" type="number" step="1" min="0" /></label>
+                    <label class="field"><span>Level Diff (±)</span><input id="partyQuestShareLevelDiffInput" type="number" step="1" min="0" /></label>
+                  </div>
+                </section>
+
+                <section class="inline-json" style="margin-top:16px">
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                  <pre id="partyJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="partyValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="partyDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <!-- ═══ THEME ════════════════════════════════════════════════════════════ -->
+      <section class="tool-view tool-view--full" data-view="theme">
+        <section class="panel editor-main">
+          <div class="panel-header">
+            <div>
+              <h2>Theme Editor</h2>
+              <p class="panel-subtitle">Edit <code>public/data/theme.json</code> — game branding, UI colors, fonts, and login screen</p>
+            </div>
+            <div class="inline-actions">
+              <button id="reloadThemeButton" class="button secondary">Reload from Disk</button>
+            </div>
+          </div>
+          <div class="panel-body single-panel-grid">
+            <section class="card editor-form-card">
+              <form id="themeForm" class="editor-form" autocomplete="off">
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Branding</h4></div>
+                  <div class="split-grid two-columns">
+                    <label class="field"><span>Game Name</span><input id="themeGameNameInput" type="text" /></label>
+                    <label class="field"><span>Subtitle</span><input id="themeGameSubtitleInput" type="text" /></label>
+                    <label class="field"><span>Tagline</span><input id="themeTaglineInput" type="text" /></label>
+                    <label class="field"><span>Welcome Message</span><input id="themeWelcomeMessageInput" type="text" /></label>
+                    <label class="field"><span>Default Map</span><input id="themeDefaultMapInput" type="text" /></label>
+                    <label class="field"><span>Version Text</span><input id="themeVersionTextInput" type="text" /></label>
+                  </div>
+                  <div class="split-grid two-columns" style="margin-top:6px">
+                    <label class="field">
+                      <span>Logo Glyph Path</span>
+                      <input id="themeLogoGlyphInput" type="text" placeholder="assets/icons/logo.png" />
+                    </label>
+                    <div style="display:flex;align-items:center;gap:10px;padding-top:18px">
+                      <img id="themeLogoPreviewImage" style="max-width:64px;max-height:64px;display:none;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);padding:4px" alt="Logo preview" />
+                      <span id="themeLogoPreviewFallback" class="subtle" style="font-size:11px">No preview</span>
+                    </div>
+                  </div>
+                  <label class="field" style="margin-top:6px">
+                    <span>Char Select Title</span><input id="themeCharSelectTitleInput" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Create Char Title</span><input id="themeCreateCharTitleInput" type="text" />
+                  </label>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>UI — Font &amp; Shape</h4></div>
+                  <div class="split-grid three-columns">
+                    <label class="field"><span>Font Family</span><input id="themeUiFontFamilyInput" type="text" /></label>
+                    <label class="field"><span>Font Size</span><input id="themeUiFontSizeInput" type="text" placeholder="e.g. 15px" /></label>
+                    <label class="field"><span>Border Radius</span><input id="themeUiBorderRadiusInput" type="text" placeholder="e.g. 6px" /></label>
+                  </div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>UI — Colors</h4></div>
+                  <div id="themeColorsEditor" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px"></div>
+                </section>
+
+                <section class="field-group">
+                  <div class="inline-json-header"><h4>Login Screen</h4></div>
+                  <div class="split-grid two-columns">
+                    <label class="field"><span>Container Border Radius</span><input id="themeLoginContainerBorderRadiusInput" type="text" /></label>
+                    <label class="field"><span>Container Padding</span><input id="themeLoginContainerPaddingInput" type="text" /></label>
+                    <label class="field"><span>Title Font Size</span><input id="themeLoginTitleFontSizeInput" type="text" /></label>
+                    <label class="field"><span>Tagline Font Size</span><input id="themeLoginTaglineFontSizeInput" type="text" /></label>
+                    <label class="field"><span>Input Font Size</span><input id="themeLoginInputFontSizeInput" type="text" /></label>
+                    <label class="field"><span>Input Border Radius</span><input id="themeLoginInputBorderRadiusInput" type="text" /></label>
+                    <label class="field"><span>Input Padding</span><input id="themeLoginInputPaddingInput" type="text" /></label>
+                    <label class="field"><span>Button Font Size</span><input id="themeLoginButtonFontSizeInput" type="text" /></label>
+                    <label class="field"><span>Button Border Radius</span><input id="themeLoginButtonBorderRadiusInput" type="text" /></label>
+                    <label class="field"><span>Button Padding</span><input id="themeLoginButtonPaddingInput" type="text" /></label>
+                  </div>
+                  <label class="field" style="margin-top:6px">
+                    <span>Backdrop Gradient</span>
+                    <textarea id="themeLoginBackdropGradientInput" rows="3" style="font-family:var(--font-mono);font-size:11px"></textarea>
+                  </label>
+                </section>
+
+                <section class="inline-json">
+                  <div class="inline-json-header"><h4>JSON Preview</h4></div>
+                  <pre id="themeJsonPreview" class="json-preview"></pre>
+                </section>
+              </form>
+            </section>
+            <section class="card diagnostics-card">
+              <div class="card-header">
+                <h3>Diagnostics</h3>
+                <span id="themeValidationSummary" class="subtle">No validation run yet</span>
+              </div>
+              <div id="themeDiagnosticsList" class="diagnostics-list empty-diagnostics"><p>No messages yet.</p></div>
             </section>
           </div>
         </section>

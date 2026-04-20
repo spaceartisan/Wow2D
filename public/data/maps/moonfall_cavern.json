@@ -1,6 +1,8 @@
 {
   "id": "moonfall_cavern",
   "name": "Moonfall Cavern",
+  "pvpMode": "ffa",
+  "pvpSafeZoneProtection": true,
   "width": 96,
   "height": 96,
   "tileSize": 48,

@@ -1,6 +1,8 @@
 {
   "id": "darkwood",
   "name": "The Darkwood",
+  "pvpMode": "ffa",
+  "pvpSafeZoneProtection": true,
   "width": 80,
   "height": 80,
   "tileSize": 48,

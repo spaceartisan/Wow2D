@@ -61,6 +61,7 @@ export class ProjectileSystem {
       tx: opts.tx,
       ty: opts.ty,
       targetId: opts.targetId || null,
+      targetPlayerId: opts.targetPlayerId || null,
       dirX: dx / dist,
       dirY: dy / dist,
       speed: opts.speed || 300,
@@ -96,6 +97,21 @@ export class ProjectileSystem {
           p.tx = enemy.x;
           p.ty = enemy.y;
           // Recalculate direction
+          const dx = p.tx - p.x;
+          const dy = p.ty - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          p.dirX = dx / dist;
+          p.dirY = dy / dist;
+        }
+      }
+
+      // If tracking a player (PVP), update target position
+      if (p.targetPlayerId) {
+        const tp = this.game.entities.remotePlayers.find(rp => rp.id === p.targetPlayerId)
+          || (this.game.entities.player && this.game.entities.player.id === p.targetPlayerId ? this.game.entities.player : null);
+        if (tp && !tp.dead) {
+          p.tx = tp.x;
+          p.ty = tp.y;
           const dx = p.tx - p.x;
           const dy = p.ty - p.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;

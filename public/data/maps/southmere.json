@@ -1,6 +1,8 @@
 {
   "id": "southmere",
   "name": "Southmere",
+  "pvpMode": "ffa",
+  "pvpSafeZoneProtection": true,
   "width": 128,
   "height": 128,
   "tileSize": 48,

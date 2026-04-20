@@ -87,7 +87,7 @@ export class CombatSystem {
   }
 
   useAttackAbility() {
-    if (!this.targetEnemyId) {
+    if (!this.targetEnemyId && !this.targetPlayerId) {
       this.game.ui.addMessage("No target.");
       return;
     }
@@ -139,20 +139,35 @@ export class CombatSystem {
 
     // Targeting check for enemy-targeted skills
     if (skillDef.targeting === "enemy") {
-      if (!this.targetEnemyId) {
+      if (!this.targetEnemyId && !this.targetPlayerId) {
         this.game.ui.addMessage("No target.");
         return;
       }
-      const enemy = this.game.entities.getEnemyById(this.targetEnemyId);
-      if (!enemy || enemy.dead) {
-        this.game.ui.addMessage("Invalid target.");
-        return;
-      }
-      const dist = distance(player.x, player.y, enemy.x, enemy.y);
-      const skillRange = skillDef.range || player.attackRange;
-      if (dist > skillRange) {
-        this.game.ui.addMessage("Out of range.");
-        return;
+      if (this.targetPlayerId) {
+        // PVP player target
+        const tp = this.game.entities.remotePlayers.find(p => p.id === this.targetPlayerId);
+        if (!tp || tp.dead) {
+          this.game.ui.addMessage("Invalid target.");
+          return;
+        }
+        const dist = distance(player.x, player.y, tp.x, tp.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (dist > skillRange) {
+          this.game.ui.addMessage("Out of range.");
+          return;
+        }
+      } else {
+        const enemy = this.game.entities.getEnemyById(this.targetEnemyId);
+        if (!enemy || enemy.dead) {
+          this.game.ui.addMessage("Invalid target.");
+          return;
+        }
+        const dist = distance(player.x, player.y, enemy.x, enemy.y);
+        const skillRange = skillDef.range || player.attackRange;
+        if (dist > skillRange) {
+          this.game.ui.addMessage("Out of range.");
+          return;
+        }
       }
     }
 
@@ -175,7 +190,7 @@ export class CombatSystem {
     if (skillDef.targeting === "self_aoe") {
       this.game.network.sendSkill(skillId, null, null, null);
     } else {
-      this.game.network.sendSkill(skillId, this.targetEnemyId, null, null);
+      this.game.network.sendSkill(skillId, this.targetEnemyId, null, null, this.targetPlayerId);
     }
 
     // For channeled or cast-time skills, let the server response handle SFX/particles
@@ -230,6 +245,40 @@ export class CombatSystem {
 
   tryPlayerAttack(forceAttack = false, dt = 0) {
     const player = this.game.entities.player;
+
+    // PVP target
+    if (this.targetPlayerId) {
+      const pvpMode = this.game.pvpMode || "none";
+      if (pvpMode === "none") return;
+      if (pvpMode === "duel" && !this.game._duelOpponent) return;
+
+      const targetPlayer = this.game.entities.remotePlayers.find(p => p.id === this.targetPlayerId);
+      if (!targetPlayer || targetPlayer.dead) {
+        this.clearTarget();
+        return;
+      }
+      const d = distance(player.x, player.y, targetPlayer.x, targetPlayer.y);
+      const now = performance.now();
+      const cooldownMs = player.attackCooldown * 1000;
+
+      const manualMove = this.game.input.isDown("w","a","s","d","arrowup","arrowdown","arrowleft","arrowright");
+      if (d > player.attackRange && !manualMove && dt > 0) {
+        this.game.entities.nudgePlayerToward(targetPlayer.x, targetPlayer.y, dt, 0.82);
+      }
+      if (d > player.attackRange) return;
+      if (!forceAttack && now - this.lastPlayerAttackAt < cooldownMs) return;
+
+      this.lastPlayerAttackAt = now;
+      this.game.network.sendPvpAttack(this.targetPlayerId);
+
+      const weapon = player.equipment?.mainHand;
+      const weaponDef = weapon ? this.game.data.items[weapon.id] : null;
+      const swingSfx = weaponDef?.swingSfx || PLAYER_BASE.swingSfx || "sword_swing";
+      this.game.audio.play(swingSfx);
+      return;
+    }
+
+    // PVE target
     const enemy = this.targetEnemyId ? this.game.entities.getEnemyById(this.targetEnemyId) : null;
 
     if (!enemy || enemy.dead) {

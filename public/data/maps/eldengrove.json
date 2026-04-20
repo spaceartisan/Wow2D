@@ -1,6 +1,7 @@
 {
   "id": "eldengrove",
   "name": "Eldengrove Village",
+  "pvpMode": "duel",
   "width": 128,
   "height": 128,
   "tileSize": 48,

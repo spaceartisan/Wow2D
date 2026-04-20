@@ -1,6 +1,7 @@
 {
   "id": "magical_tower",
   "name": "Magical Tower",
+  "pvpMode": "none",
   "width": 80,
   "height": 80,
   "tileSize": 48,

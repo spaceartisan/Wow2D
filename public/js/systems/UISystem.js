@@ -101,6 +101,9 @@ export class UISystem {
     this._pendingPartyInvite = null;
     this._partyPendingInvites = [];
 
+    /* ── Duel state ── */
+    this._pendingDuelChallenge = null;
+
     /* ── DOM listener tracking (cleaned up in destroy()) ── */
     this._domHandlers = [];
 
@@ -565,6 +568,7 @@ export class UISystem {
     this.updateCastBar();
     this.updateCraftingBar();
     this.updateGatherBar();
+    this.updatePvpTimer();
 
     // Render player buff icons
     this._renderBuffStrip(this.el.playerBuffs, player.activeBuffs || [], true);
@@ -2100,6 +2104,33 @@ export class UISystem {
     if (fill) fill.style.width = `${pct}%`;
   }
 
+  updatePvpTimer() {
+    let el = document.getElementById("pvp-combat-indicator");
+    const combatUntil = this.game.pvpCombatUntil || 0;
+    const now = Date.now();
+    const mode = this.game.pvpMode || "none";
+
+    if (combatUntil > now) {
+      const remaining = Math.ceil((combatUntil - now) / 1000);
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "pvp-combat-indicator";
+        el.style.cssText = "position:fixed;top:60px;left:50%;transform:translateX(-50%);" +
+          "background:rgba(180,20,20,0.85);color:#fff;padding:4px 14px;border-radius:4px;" +
+          "font-size:13px;font-weight:bold;z-index:200;pointer-events:none;";
+        document.body.appendChild(el);
+      }
+      el.textContent = `⚔ PVP Combat: ${remaining}s`;
+      el.classList.remove("hidden");
+    } else if (el) {
+      el.classList.add("hidden");
+    }
+
+    // Clean up old PVP mode indicator if it exists
+    let modeEl = document.getElementById("pvp-mode-indicator");
+    if (modeEl) modeEl.remove();
+  }
+
   /* ── Character Sheet ────────────────────────────────── */
 
   toggleCharSheet() {
@@ -2532,6 +2563,13 @@ export class UISystem {
       this.game.network?.sendBlockPlayer(player.name);
     });
 
+    const pvpMode = this.game.pvpMode || "none";
+    if (pvpMode !== "none") {
+      addOption("Challenge to Duel", () => {
+        this.game.network?.send({ type: "duel_challenge", targetId: player.id });
+      });
+    }
+
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
     document.body.append(menu);
@@ -2655,13 +2693,24 @@ export class UISystem {
       this.renderSocialContent();
     });
 
-    tabs.append(friendsTab, partyTab, blockedTab);
+    const pvpTab = document.createElement("button");
+    pvpTab.className = `social-tab ${this._socialTab === "pvp" ? "active" : ""}`;
+    pvpTab.textContent = "PVP";
+    pvpTab.addEventListener("click", () => {
+      this._socialTab = "pvp";
+      this.game.network?.send({ type: "pvp_stats" });
+      this.renderSocialContent();
+    });
+
+    tabs.append(friendsTab, partyTab, blockedTab, pvpTab);
     body.append(tabs);
 
     if (this._socialTab === "friends") {
       this._renderFriendsTab(body);
     } else if (this._socialTab === "party") {
       this._renderPartyTab(body);
+    } else if (this._socialTab === "pvp") {
+      this._renderPvpTab(body);
     } else {
       this._renderBlockedTab(body);
     }
@@ -3135,6 +3184,132 @@ export class UISystem {
 
       actions.append(unblockBtn);
       row.append(name, actions);
+      body.append(row);
+    }
+  }
+
+  _renderPvpTab(body) {
+    const player = this.game.entities.player;
+    const kills = player.pvpKills || 0;
+    const deaths = player.pvpDeaths || 0;
+    const kd = deaths === 0 ? kills.toFixed(1) : (kills / deaths).toFixed(2);
+
+    /* ── Map PVP Mode indicator ── */
+    const modeRow = document.createElement("div");
+    modeRow.className = "friends-section-header";
+    const mode = this.game.pvpMode || "none";
+    const modeLabel = mode === "ffa" ? "Free-for-All" : mode === "duel" ? "Duel" : "Safe";
+    modeRow.textContent = `Current Zone: ${modeLabel}`;
+    body.append(modeRow);
+
+    /* ── Combat timer ── */
+    const now = Date.now();
+    const combatUntil = this.game.pvpCombatUntil || 0;
+    if (combatUntil > now) {
+      const remaining = Math.ceil((combatUntil - now) / 1000);
+      const timerRow = document.createElement("div");
+      timerRow.className = "pvp-combat-timer";
+      timerRow.style.cssText = "color:#ff4444;padding:6px 10px;font-size:13px;";
+      timerRow.textContent = `⚔ PVP Combat: ${remaining}s (cannot enter safe zones)`;
+      body.append(timerRow);
+    }
+
+    /* ── Active Duel ── */
+    const duelOpponent = this.game._duelOpponent;
+    if (duelOpponent) {
+      const duelRow = document.createElement("div");
+      duelRow.className = "party-invite-row";
+      duelRow.style.cssText = "border:1px solid #cc3333;border-radius:4px;padding:6px 10px;margin:6px 0;";
+
+      const text = document.createElement("span");
+      text.className = "friend-name";
+      text.textContent = `Dueling: ${duelOpponent.name}`;
+
+      const actions = document.createElement("span");
+      actions.className = "friend-actions";
+
+      const forfeitBtn = document.createElement("button");
+      forfeitBtn.className = "friend-btn friend-reject-btn";
+      forfeitBtn.style.cssText = "padding:2px 4px;display:flex;align-items:center;justify-content:center;";
+      const forfeitIcon = document.createElement("img");
+      forfeitIcon.src = "/assets/sprites/ui/forfeit.png";
+      forfeitIcon.alt = "Forfeit";
+      forfeitIcon.style.cssText = "width:20px;height:20px;image-rendering:pixelated;";
+      forfeitBtn.appendChild(forfeitIcon);
+      forfeitBtn.addEventListener("click", () => {
+        this.game.network?.send({ type: "duel_cancel" });
+      });
+
+      actions.append(forfeitBtn);
+      duelRow.append(text, actions);
+      body.append(duelRow);
+    }
+
+    /* ── Pending Duel Challenge ── */
+    const duelChallenge = this._pendingDuelChallenge;
+    if (duelChallenge) {
+      const inviteRow = document.createElement("div");
+      inviteRow.className = "party-invite-row";
+      inviteRow.style.cssText = "border:1px solid #cc8833;border-radius:4px;padding:6px 10px;margin:6px 0;";
+
+      const text = document.createElement("span");
+      text.className = "friend-name";
+      text.textContent = `${duelChallenge.fromName} challenged you to a duel`;
+
+      const actions = document.createElement("span");
+      actions.className = "friend-actions";
+
+      const acceptBtn = document.createElement("button");
+      acceptBtn.className = "friend-btn friend-accept-btn";
+      acceptBtn.textContent = "✓";
+      acceptBtn.title = "Accept";
+      acceptBtn.addEventListener("click", () => {
+        this.game.network?.send({ type: "duel_accept" });
+        this._pendingDuelChallenge = null;
+        this.renderSocialContent();
+      });
+
+      const declineBtn = document.createElement("button");
+      declineBtn.className = "friend-btn friend-reject-btn";
+      declineBtn.textContent = "✕";
+      declineBtn.title = "Decline";
+      declineBtn.addEventListener("click", () => {
+        this.game.network?.send({ type: "duel_decline" });
+        this._pendingDuelChallenge = null;
+        this.renderSocialContent();
+      });
+
+      actions.append(acceptBtn, declineBtn);
+      inviteRow.append(text, actions);
+      body.append(inviteRow);
+    }
+
+    /* ── Stats ── */
+    const statsHeader = document.createElement("div");
+    statsHeader.className = "friends-section-header";
+    statsHeader.textContent = "PVP Statistics";
+    body.append(statsHeader);
+
+    const stats = [
+      { label: "Kills", value: kills },
+      { label: "Deaths", value: deaths },
+      { label: "K/D Ratio", value: kd },
+    ];
+
+    for (const s of stats) {
+      const row = document.createElement("div");
+      row.className = "friend-row";
+      row.style.cssText = "justify-content:space-between;";
+
+      const label = document.createElement("span");
+      label.className = "friend-name";
+      label.textContent = s.label;
+
+      const val = document.createElement("span");
+      val.style.cssText = "color:var(--color-gold);font-weight:bold;";
+      val.textContent = s.value;
+
+      row.append(label, val);
       body.append(row);
     }
   }

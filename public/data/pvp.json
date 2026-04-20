@@ -1,0 +1,6 @@
+{
+  "combatTimerSec": 30,
+  "killTimerSec": 300,
+  "deathGoldPenalty": 5,
+  "friendlyFireParty": false
+}
