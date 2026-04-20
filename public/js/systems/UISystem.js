@@ -142,6 +142,12 @@ export class UISystem {
     // Close all visible panels before removing listeners
     this.closeAllPanels();
     this._closeContextMenu();
+    this._closeSplitPopup();
+    // Clear trade request timeout
+    if (this._tradeRequestTimeout) {
+      clearTimeout(this._tradeRequestTimeout);
+      this._tradeRequestTimeout = null;
+    }
     // Remove ALL tracked DOM listeners so they don't stack on re-enter
     for (const { el, evt, fn } of this._domHandlers) {
       el.removeEventListener(evt, fn);
@@ -544,24 +550,24 @@ export class UISystem {
       }
     }
 
-    this.el.playerLevel.textContent = `Level ${player.level}`;
+    if (this.el.playerLevel) this.el.playerLevel.textContent = `Level ${player.level}`;
 
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
     const manaRatio = player.maxMana > 0 ? player.mana / player.maxMana : 0;
     const xpRatio = player.xpToLevel > 0 ? player.xp / player.xpToLevel : 0;
 
-    this.el.hpFill.style.width = `${Math.max(0, hpRatio) * 100}%`;
-    this.el.manaFill.style.width = `${Math.max(0, manaRatio) * 100}%`;
-    this.el.xpFill.style.width = `${Math.max(0, xpRatio) * 100}%`;
+    if (this.el.hpFill) this.el.hpFill.style.width = `${Math.max(0, hpRatio) * 100}%`;
+    if (this.el.manaFill) this.el.manaFill.style.width = `${Math.max(0, manaRatio) * 100}%`;
+    if (this.el.xpFill) this.el.xpFill.style.width = `${Math.max(0, xpRatio) * 100}%`;
 
-    this.el.hpText.textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
-    this.el.manaText.textContent = `${Math.round(player.mana)} / ${player.maxMana}`;
-    this.el.goldValue.textContent = player.gold;
+    if (this.el.hpText) this.el.hpText.textContent = `${Math.round(player.hp)} / ${player.maxHp}`;
+    if (this.el.manaText) this.el.manaText.textContent = `${Math.round(player.mana)} / ${player.maxMana}`;
+    if (this.el.goldValue) this.el.goldValue.textContent = player.gold;
 
-    this.el.questTracker.textContent = this.game.quests.getTrackerText();
+    if (this.el.questTracker) this.el.questTracker.textContent = this.game.quests.getTrackerText();
     const qp = document.getElementById("quest-panel");
     if (qp) qp.classList.toggle("hidden", !this.game.quests.showTracker);
-    this.el.deathOverlay.classList.toggle("hidden", !player.dead);
+    if (this.el.deathOverlay) this.el.deathOverlay.classList.toggle("hidden", !player.dead);
 
     // Floor indicator
     const floorEl = document.getElementById("floor-indicator");
@@ -1099,21 +1105,26 @@ export class UISystem {
 
     document.getElementById("trade-accept-btn").addEventListener("click", () => {
       this.game.network?.send({ type: "trade_accept" });
+      clearTimeout(this._tradeRequestTimeout);
+      this._tradeRequestTimeout = null;
       popup.remove();
     });
     document.getElementById("trade-decline-btn").addEventListener("click", () => {
       this.game.network?.send({ type: "trade_decline" });
       this._pendingTradeRequest = null;
+      clearTimeout(this._tradeRequestTimeout);
+      this._tradeRequestTimeout = null;
       popup.remove();
     });
 
     // Auto-decline after 30 seconds
-    setTimeout(() => {
+    this._tradeRequestTimeout = setTimeout(() => {
       if (document.getElementById("trade-request-popup")) {
         this.game.network?.send({ type: "trade_decline" });
         this._pendingTradeRequest = null;
         popup.remove();
       }
+      this._tradeRequestTimeout = null;
     }, 30000);
   }
 
@@ -2727,7 +2738,7 @@ export class UISystem {
         const iName = tpl?.name || itemId;
         const enough = have >= qtyNeeded;
         if (!enough) canCraft = false;
-        inputParts.push(`<span style="color:${enough ? "var(--text-main)" : "#cc4444"}">${have}/${qtyNeeded} ${iName}</span>`);
+        inputParts.push(`<span style="color:${enough ? "var(--text-main)" : "#cc4444"}">${have}/${qtyNeeded} ${this._escapeHtml(iName)}</span>`);
       }
       inputLine.innerHTML = inputParts.join(", ");
 

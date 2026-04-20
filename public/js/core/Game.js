@@ -32,6 +32,7 @@ export class Game {
     this.lastFrame = performance.now();
     this._destroyed = false;
     this._rafId = null;
+    this._changingMap = false;
 
     this.quests = null;
     this.entities = null;

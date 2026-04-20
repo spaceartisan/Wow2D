@@ -363,6 +363,11 @@ export class QuestSystem {
       const objectives = def.objectives || [];
       let allComplete = true;
 
+      // Ensure progress array exists (may be missing if loaded from DB)
+      if (!Array.isArray(questState.progress)) {
+        questState.progress = objectives.map(() => 0);
+      }
+
       for (let i = 0; i < objectives.length; i++) {
         const obj = objectives[i];
         if (obj.type === "kill" && obj.target === enemyType) {

@@ -137,7 +137,10 @@ const startServer = (port) => {
 
         // first message must be "join" with token + charData
         if (!playerId) {
-          if (msg.type !== "join") return;
+          if (msg.type !== "join") {
+            ws.close(4001, "First message must be join");
+            return;
+          }
 
           const token = msg.token;
           const username = database.validateSession(token);
@@ -169,8 +172,9 @@ const startServer = (port) => {
             charRecord = database.loadCharacter(charId, username);
           }
           if (!charRecord) {
-            // Fallback: use client charData but sanitize
-            charRecord = msg.charData || {};
+            ws.send(JSON.stringify({ type: "auth_error", error: "Character not found or does not belong to this account." }));
+            ws.close();
+            return;
           }
 
           playerId = world.addPlayer(ws, charRecord, username);
@@ -554,9 +558,15 @@ const startServer = (port) => {
       const mapEntry = world.maps.get(mapId);
       if (!mapEntry) return res.status(400).json({ error: "Invalid map" });
       const ts = mapEntry.collision.tileSize || 48;
+      const tx = Number(tileX);
+      const ty = Number(tileY);
+      if (!Number.isFinite(tx) || !Number.isFinite(ty) || tx < 0 || ty < 0 ||
+          tx >= (mapEntry.collision.mapWidth || 200) || ty >= (mapEntry.collision.mapHeight || 200)) {
+        return res.status(400).json({ error: "Coordinates out of bounds" });
+      }
       const oldMap = player.mapId;
-      player.x = tileX * ts;
-      player.y = tileY * ts;
+      player.x = tx * ts;
+      player.y = ty * ts;
       player.floor = 0;
       if (oldMap !== mapId) {
         player.mapId = mapId;

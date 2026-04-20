@@ -310,8 +310,8 @@ export class WorldSystem {
     const lx = tileX - bld.ox;
     const ly = tileY - bld.oy;
     const floorGrid = bld.upperFloors[this.currentFloor - 1];
-    if (!floorGrid) return null;
-    if (ly < 0 || ly >= floorGrid.length || lx < 0 || lx >= floorGrid[0].length) return null;
+    if (!floorGrid || floorGrid.length === 0) return null;
+    if (ly < 0 || ly >= floorGrid.length || lx < 0 || lx >= (floorGrid[0]?.length || 0)) return null;
     const idx = floorGrid[ly][lx];
     if (idx < 0) return null; // skip tile (void)
     return this.tilePalette[idx] || null;

@@ -374,6 +374,7 @@ export class CombatSystem {
 
     let originX, originY;
     if (targeting === "ground_aoe") {
+      if (mouse.worldX == null || mouse.worldY == null) return;
       originX = mouse.worldX;
       originY = mouse.worldY;
     } else {

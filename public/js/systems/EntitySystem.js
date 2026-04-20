@@ -34,6 +34,7 @@ export class EntitySystem {
       baseDamage: cs.damage,
       attackRange: cs.attackRange,
       attackCooldown: cs.attackCooldown,
+      defense: 0,
       _baseHitParticle: cs.hitParticle || "hit_spark",
       _baseHitSfx: cs.hitSfx || "sword_hit",
       _baseSwingSfx: cs.swingSfx || "sword_swing",
@@ -166,7 +167,7 @@ export class EntitySystem {
     let speedMult = 1;
     if (player.activeBuffs) {
       for (const b of player.activeBuffs) {
-        if (b.stat === 'moveSpeed') speedMult += b.modifier;
+        if (b && b.stat === 'moveSpeed') speedMult += b.modifier;
       }
     }
     this.moveEntityWithCollision(player, dir.x * player.moveSpeed * speedMult, dir.y * player.moveSpeed * speedMult, dt);
@@ -180,14 +181,16 @@ export class EntitySystem {
   moveEntityWithCollision(entity, velocityX, velocityY, dt) {
     const stepX = velocityX * dt;
     const stepY = velocityY * dt;
+    const world = this.game.world;
+    if (!world || !world.isBlockedPoint) return;
 
     const newX = entity.x + stepX;
-    if (!this.game.world.isBlockedPoint(newX, entity.y, entity.radius)) {
+    if (!world.isBlockedPoint(newX, entity.y, entity.radius)) {
       entity.x = newX;
     }
 
     const newY = entity.y + stepY;
-    if (!this.game.world.isBlockedPoint(entity.x, newY, entity.radius)) {
+    if (!world.isBlockedPoint(entity.x, newY, entity.radius)) {
       entity.y = newY;
     }
   }

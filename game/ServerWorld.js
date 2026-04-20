@@ -776,7 +776,10 @@ class ServerWorld {
 
     // basic validation: don't teleport too far per tick
     // Allow larger jump when floor changes (stair teleport to partner stairs)
+    // but only allow changing by 1 floor at a time
     const spdMult = this._getPlayerSpeedMult(player);
+    const floorDiff = Math.abs(floor - player.floor);
+    if (floorDiff > 1) return; // only allow adjacent floor changes
     const maxDist = (floor !== player.floor) ? 300 : Math.ceil(80 * spdMult);
     const d = dist(player.x, player.y, x, y);
     if (d > maxDist) return;
@@ -813,6 +816,8 @@ class ServerWorld {
     const portals = mapEntry.data.portals || [];
     const nearPortal = portals.some(portal => {
       if (portal.targetMap !== targetMapId) return false;
+      // Portals only accessible from ground floor (floor 0)
+      if ((player.floor || 0) !== (portal.floor || 0)) return false;
       const portalCenterX = (portal.x + portal.w / 2) * tileSize;
       const portalCenterY = (portal.y + portal.h / 2) * tileSize;
       return dist(player.x, player.y, portalCenterX, portalCenterY) < tileSize * 5;
@@ -1992,6 +1997,7 @@ class ServerWorld {
               appliedAt: now,
               expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
               casterId: player.id,
+              casterLevel: player.level,
             });
             debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
           }
@@ -2100,7 +2106,8 @@ class ServerWorld {
           ...skillDef.debuff,
           appliedAt: now,
           expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
-          casterId: player.id
+          casterId: player.id,
+          casterLevel: player.level
         };
         enemy.activeDebuffs.push(debuffEntry);
         debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
@@ -2411,6 +2418,7 @@ class ServerWorld {
 
   handleUseItem(player, msg) {
     if (player.dead) return;
+    if (player._tradeWith) return; // Block item use during active trade
     const index = Number(msg.index);
     if (!Number.isInteger(index) || index < 0 || index >= 20) return;
 
@@ -2696,6 +2704,7 @@ class ServerWorld {
 
   handleEquipItem(player, msg) {
     if (player.dead) return;
+    if (player._tradeWith) return; // Block equip during active trade
     const index = Number(msg.index);
     if (!Number.isInteger(index) || index < 0 || index >= 20) return;
 
@@ -2802,6 +2811,7 @@ class ServerWorld {
 
   handleUnequipItem(player, msg) {
     if (player.dead) return;
+    if (player._tradeWith) return; // Block unequip during active trade
     const slot = msg.slot;
     if (!ServerWorld.EQUIPMENT_SLOTS.includes(slot)) return;
 
@@ -3119,6 +3129,7 @@ class ServerWorld {
 
   handleSplitStack(player, msg) {
     if (player.dead) return;
+    if (player._tradeWith) return; // Block split during active trade
     const container = String(msg.container || "inventory").slice(0, 20);
     const index = Number(msg.index);
     const splitQty = Number(msg.qty);
@@ -3251,6 +3262,7 @@ class ServerWorld {
 
   handleDropItem(player, msg) {
     if (player.dead) return;
+    if (player._tradeWith) return; // Block drop during active trade
     const index = Number(msg.index);
     if (!Number.isInteger(index) || index < 0 || index >= 20) return;
 
@@ -3625,6 +3637,7 @@ class ServerWorld {
               appliedAt: now,
               expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
               casterId: player.id,
+              casterLevel: player.level,
             });
             debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
           }
@@ -3802,6 +3815,7 @@ class ServerWorld {
               appliedAt: now,
               expiresAt: now + (skillDef.debuff.duration || 0) * 1000,
               casterId: player.id,
+              casterLevel: player.level,
             });
             debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
           }
@@ -4274,11 +4288,13 @@ class ServerWorld {
       const now = Date.now();
       if (!enemy.activeDebuffs) enemy.activeDebuffs = [];
       enemy.activeDebuffs = enemy.activeDebuffs.filter(d => d.id !== proj.debuff.id);
+      const caster = this.players.get(proj.playerId);
       const debuffEntry = {
         ...proj.debuff,
         appliedAt: now,
         expiresAt: now + (proj.debuff.duration || 0) * 1000,
-        casterId: proj.playerId
+        casterId: proj.playerId,
+        casterLevel: caster ? caster.level : 1
       };
       enemy.activeDebuffs.push(debuffEntry);
       debuffApplied = {
@@ -5455,7 +5471,7 @@ class ServerWorld {
             if (!debuff._lastTickAt) debuff._lastTickAt = debuff.appliedAt;
             if (now - debuff._lastTickAt >= interval) {
               debuff._lastTickAt = now;
-              const dmg = debuff.tickDamage + (debuff.tickDamagePerLevel || 0);
+              const dmg = debuff.tickDamage + (debuff.tickDamagePerLevel || 0) * ((debuff.casterLevel || 1) - 1);
               enemy.hp -= dmg;
               if (enemy.hp <= 0) {
                 enemy.hp = 0;

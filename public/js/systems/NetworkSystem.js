@@ -1082,7 +1082,7 @@ export class NetworkSystem {
       this.game.ui.addMessage(`Loot: +${msg.gold} gold`);
       this.game.audio.play("pickup");
     }
-    if (msg.item && msg.index >= 0) {
+    if (msg.item && msg.index >= 0 && msg.index < player.inventorySlots.length) {
       // Use server-authoritative slot state (includes stack qty)
       player.inventorySlots[msg.index] = msg.slotItem ? { ...msg.slotItem } : { ...msg.item };
       this.game.ui.addMessage(`Loot: ${msg.item.name}`);
@@ -1535,6 +1535,8 @@ export class NetworkSystem {
   }
 
   onPlayerLeft(msg) {
+    // Clean up any remote cast interval for this player
+    this._clearRemoteCastInterval(msg.playerId);
     // find name in remotePlayers before removing
     const rp = this.game.entities.remotePlayers.find((p) => p.id === msg.playerId);
     const name = rp ? rp.name : "A player";
