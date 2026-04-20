@@ -24,8 +24,12 @@ export class InputSystem {
       this.keys.delete(event.key.toLowerCase());
     };
 
+    this._cachedRect = canvas.getBoundingClientRect();
+    this._onResize = () => { this._cachedRect = canvas.getBoundingClientRect(); };
+    window.addEventListener("resize", this._onResize);
+
     this._onMouseMove = (event) => {
-      const rect = canvas.getBoundingClientRect();
+      const rect = this._cachedRect;
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       this.mouse.x = (event.clientX - rect.left) * scaleX;

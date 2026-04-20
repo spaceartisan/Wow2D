@@ -34,5 +34,14 @@ screenManager.onEnterWorld = (charData, credentials) => {
     screenManager.fullLogout();
   };
 
-  game.init().catch(err => console.error("Game init failed:", err));
+  game.init().catch(err => {
+    console.error("Game init failed:", err);
+    const hud = document.getElementById("hud");
+    if (hud) {
+      const msg = document.createElement("div");
+      msg.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff4444;background:#111;padding:24px;border:1px solid #ff4444;border-radius:8px;z-index:9999;font-size:16px;text-align:center;";
+      msg.textContent = "Failed to initialize game. Please refresh the page.";
+      hud.appendChild(msg);
+    }
+  });
 };

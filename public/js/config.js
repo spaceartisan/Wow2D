@@ -2,7 +2,16 @@
 
 // Fetch is async; for simplicity we keep the import synchronous and just
 // ensure the JSON stays in sync.  The server reads the same file at startup.
-const _pb = await fetch("/data/playerBase.json").then(r => r.json());
+let _pb;
+try {
+  _pb = await fetch("/data/playerBase.json").then(r => {
+    if (!r.ok) throw new Error(`playerBase.json HTTP ${r.status}`);
+    return r.json();
+  });
+} catch (e) {
+  console.error("Failed to load playerBase.json:", e);
+  _pb = { defaults: {}, classes: {} };
+}
 
 export const PLAYER_BASE_DATA = _pb;
 export const CLASSES = _pb.classes || {};
@@ -17,7 +26,16 @@ export function classStats(classId) {
 export const PLAYER_BASE = _pb.defaults;
 
 /* ── Theme / branding — loaded from public/data/theme.json ── */
-const _theme = await fetch("/data/theme.json").then(r => r.json());
+let _theme;
+try {
+  _theme = await fetch("/data/theme.json").then(r => {
+    if (!r.ok) throw new Error(`theme.json HTTP ${r.status}`);
+    return r.json();
+  });
+} catch (e) {
+  console.error("Failed to load theme.json:", e);
+  _theme = {};
+}
 export const THEME = _theme;
 
 /** Apply theme.json CSS custom-properties + login-specific overrides to :root */

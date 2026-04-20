@@ -60,7 +60,8 @@ export class EntitySystem {
         ring2: null,
         amulet: null
       },
-      gatheringSkills: {}
+      gatheringSkills: {},
+      hearthstone: null
     };
   }
 
@@ -251,7 +252,7 @@ export class EntitySystem {
     let bestDist = Infinity;
 
     for (const npc of this.npcs) {
-      if (npc.floor !== this.game.world.currentFloor) continue;
+      if ((npc.floor || 0) !== this.game.world.currentFloor) continue;
       const dist = distance(player.x, player.y, npc.x, npc.y);
       if (dist < range && dist < bestDist) {
         closest = npc;
@@ -268,7 +269,7 @@ export class EntitySystem {
     let bestDist = Infinity;
 
     for (const node of this.resourceNodes) {
-      if (node.floor !== this.game.world.currentFloor) continue;
+      if ((node.floor || 0) !== this.game.world.currentFloor) continue;
       const d = distance(player.x, player.y, node.x, node.y);
       if (d < range && d < bestDist) {
         closest = node;
@@ -278,9 +279,6 @@ export class EntitySystem {
 
     return closest;
   }
-
-  // Drop creation + enemy kills are now handled by the server via NetworkSystem.
-  // killEnemy, createLootForEnemy, damagePlayer, onPlayerDeath removed.
 
   grantXp(amount) {
     const player = this.player;
@@ -342,7 +340,7 @@ export class EntitySystem {
     const item = slots[index];
 
     if (this.player.dead) return;
-    if (!item || !EntitySystem.EQUIPPABLE_TYPES.has(item.type)) return;
+    if (!item || !item.type || !EntitySystem.EQUIPPABLE_TYPES.has(item.type)) return;
 
     const slot = this._equipSlotForItem(item);
     if (!slot) return;
@@ -364,7 +362,7 @@ export class EntitySystem {
     slots[index] = oldItem || null;
 
     this.recalculateDerivedStats();
-    this.game.ui.addMessage(`${item.name} equipped.`);
+    this.game.ui.addMessage(`${item.name || "Item"} equipped.`);
   }
 
   recalculateDerivedStats() {
@@ -434,7 +432,7 @@ export class EntitySystem {
     // Draw resource nodes
     const currentFloor = this.game.world.currentFloor;
     for (const node of this.resourceNodes) {
-      if (node.floor !== currentFloor) continue;
+      if ((node.floor || 0) !== currentFloor) continue;
       const x = node.x - camera.x;
       const y = node.y - camera.y;
 
@@ -468,7 +466,7 @@ export class EntitySystem {
     }
 
     for (const npc of this.npcs) {
-      if (npc.floor !== this.game.world.currentFloor) continue;
+      if ((npc.floor || 0) !== this.game.world.currentFloor) continue;
       const x = npc.x - camera.x;
       const y = npc.y - camera.y;
 
@@ -635,14 +633,16 @@ export class EntitySystem {
   }
 
   _drawHoverName(ctx, camera) {
-    const mx = this.game.input.mouse.x;
-    const my = this.game.input.mouse.y;
+    const mouse = this.game.input.mouse;
+    if (!mouse) return;
+    const mx = mouse.x;
+    const my = mouse.y;
     const currentFloor = this.game.world.currentFloor;
 
     // Check NPCs
     if (!this.game.labelToggles.npcs) {
       for (const npc of this.npcs) {
-        if (npc.floor !== currentFloor) continue;
+        if ((npc.floor || 0) !== currentFloor) continue;
         const x = npc.x - camera.x;
         const y = npc.y - camera.y;
         if (Math.abs(mx - x) < 16 && Math.abs(my - y) < 16) {

@@ -107,7 +107,8 @@ export class ProjectileSystem {
 
       // If tracking a player (PVP), update target position
       if (p.targetPlayerId) {
-        const tp = this.game.entities.remotePlayers.find(rp => rp.id === p.targetPlayerId)
+        const rp = this.game.entities.remotePlayers;
+        const tp = (rp && rp.find(r => r.id === p.targetPlayerId))
           || (this.game.entities.player && this.game.entities.player.id === p.targetPlayerId ? this.game.entities.player : null);
         if (tp && !tp.dead) {
           p.tx = tp.x;
@@ -133,7 +134,8 @@ export class ProjectileSystem {
       const dx = p.tx - p.x;
       const dy = p.ty - p.y;
       const distSq = dx * dx + dy * dy;
-      const hitRadius = p.size + 8; // generous hit area
+      const HIT_RADIUS_PADDING = 8;
+      const hitRadius = p.size + HIT_RADIUS_PADDING;
 
       if (distSq <= hitRadius * hitRadius || step * step >= distSq) {
         // Arrived — fire callback

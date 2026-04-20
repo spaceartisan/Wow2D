@@ -199,11 +199,11 @@ export class ParticleSystem {
 
     for (let i = 0; i < this._particles.length; i++) {
       const p = this._particles[i];
-      const t = 1 - p.life / p.maxLife; // 0 → 1 over lifetime
+      const t = p.maxLife > 0 ? (1 - p.life / p.maxLife) : 1; // 0 → 1 over lifetime
       const size = p.size + (p.sizeEnd - p.size) * t;
       if (size <= 0) continue;
 
-      const alpha = p.fadeOut ? p.life / p.maxLife : 1;
+      const alpha = p.fadeOut && p.maxLife > 0 ? p.life / p.maxLife : 1;
       const sx = p.x - camera.x;
       const sy = p.y - camera.y;
 

@@ -53,17 +53,22 @@ export class ScreenManager {
       loginForm.classList.add("hidden");
       registerForm.classList.remove("hidden");
       registerError.textContent = "";
+      document.getElementById("login-password").value = "";
     });
 
     showLogin.addEventListener("click", () => {
       registerForm.classList.add("hidden");
       loginForm.classList.remove("hidden");
       loginError.textContent = "";
+      document.getElementById("reg-password").value = "";
+      document.getElementById("reg-password2").value = "";
     });
 
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       loginError.textContent = "";
+      const btn = loginForm.querySelector("button");
+      if (btn) btn.disabled = true;
 
       const username = document.getElementById("login-username").value.trim();
       const password = document.getElementById("login-password").value;
@@ -76,6 +81,8 @@ export class ScreenManager {
         this.goToCharSelect();
       } catch (err) {
         loginError.textContent = err.message;
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
 
@@ -92,6 +99,9 @@ export class ScreenManager {
         return;
       }
 
+      const btn = registerForm.querySelector("button");
+      if (btn) btn.disabled = true;
+
       try {
         await this.api("/api/register", { username, password });
         // auto-login after register
@@ -102,6 +112,8 @@ export class ScreenManager {
         this.goToCharSelect();
       } catch (err) {
         registerError.textContent = err.message;
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
   }

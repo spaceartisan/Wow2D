@@ -86,7 +86,7 @@ export class AudioManager {
 
   /** Play a one-shot SFX by name (e.g. "sword_hit"). */
   play(name) {
-    if (!this._loaded || this.muted) return;
+    if (!this._loaded || !this.ctx || this.muted) return;
     const buffer = this._sfxBuffers[name];
     if (!buffer) return;
 
@@ -127,6 +127,9 @@ export class AudioManager {
       this._bgmElement.pause();
       this._bgmElement.src = "";
       this._bgmElement = null;
+    }
+    if (this._bgmSource) {
+      try { this._bgmSource.disconnect(); } catch (_) {}
     }
     this._bgmSource = null;
     this._currentBgm = null;
@@ -169,6 +172,9 @@ export class AudioManager {
     try {
       const v = localStorage.getItem('audio_' + key);
       return v !== null ? JSON.parse(v) : fallback;
-    } catch (e) { return fallback; }
+    } catch (e) {
+      console.warn("AudioManager: failed to load preference", key, e.message);
+      return fallback;
+    }
   }
 }

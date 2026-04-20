@@ -11,22 +11,32 @@ const path = require("path");
 
 const dataDir = path.join(__dirname, "..", "public", "data");
 
-const ITEMS = JSON.parse(fs.readFileSync(path.join(dataDir, "items.json"), "utf8"));
-const ENEMY_TYPES = JSON.parse(fs.readFileSync(path.join(dataDir, "enemies.json"), "utf8"));
-const QUEST_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "quests.json"), "utf8"));
-const SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "skills.json"), "utf8"));
-const GLOBAL_PALETTE = JSON.parse(fs.readFileSync(path.join(dataDir, "tilePalette.json"), "utf8"));
-const PROP_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "props.json"), "utf8"));
-const RESOURCE_NODE_DEFS = JSON.parse(fs.readFileSync(path.join(dataDir, "resourceNodes.json"), "utf8"));
-const GATHERING_SKILLS = JSON.parse(fs.readFileSync(path.join(dataDir, "gatheringSkills.json"), "utf8"));
-const RECIPES = JSON.parse(fs.readFileSync(path.join(dataDir, "recipes.json"), "utf8"));
-const AOE_PATTERNS = JSON.parse(fs.readFileSync(path.join(dataDir, "aoePatterns.json"), "utf8"));
-const PARTY_CONFIG = JSON.parse(fs.readFileSync(path.join(dataDir, "party.json"), "utf8"));
-const PVP_CONFIG = JSON.parse(fs.readFileSync(path.join(dataDir, "pvp.json"), "utf8"));
-const THEME = JSON.parse(fs.readFileSync(path.join(dataDir, "theme.json"), "utf8"));
+function loadDataFile(filename) {
+  const filePath = path.join(dataDir, filename);
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (err) {
+    console.error(`[ServerWorld] Failed to load ${filename}: ${err.message}`);
+    throw new Error(`Data file '${filename}' is missing or corrupted.`);
+  }
+}
+
+const ITEMS = loadDataFile("items.json");
+const ENEMY_TYPES = loadDataFile("enemies.json");
+const QUEST_DEFS = loadDataFile("quests.json");
+const SKILLS = loadDataFile("skills.json");
+const GLOBAL_PALETTE = loadDataFile("tilePalette.json");
+const PROP_DEFS = loadDataFile("props.json");
+const RESOURCE_NODE_DEFS = loadDataFile("resourceNodes.json");
+const GATHERING_SKILLS = loadDataFile("gatheringSkills.json");
+const RECIPES = loadDataFile("recipes.json");
+const AOE_PATTERNS = loadDataFile("aoePatterns.json");
+const PARTY_CONFIG = loadDataFile("party.json");
+const PVP_CONFIG = loadDataFile("pvp.json");
+const THEME = loadDataFile("theme.json");
 
 /* Shared player base stats — single source of truth for client + server */
-const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(dataDir, "playerBase.json"), "utf8"));
+const PLAYER_BASE_DATA = loadDataFile("playerBase.json");
 const PLAYER_BASE = PLAYER_BASE_DATA.defaults;
 const CLASSES = PLAYER_BASE_DATA.classes || {};
 
@@ -87,16 +97,17 @@ function tileKey(x, y) {
  * Direction 0 = north (no rotation), increments clockwise by 45°.
  */
 function rotateTileOffset(dx, dy, dirIndex) {
-  // 90° rotations are exact; 45° rotations use rounded approximation
+  // 90° rotations are exact; 45° rotations use √2/2 with rounding
+  const S = Math.SQRT2 / 2; // 0.7071067811865476
   switch (dirIndex) {
     case 0: return [dx, dy];                                                       // N
-    case 1: return [Math.round((dx - dy) * 0.7071), Math.round((dx + dy) * 0.7071)]; // NE
+    case 1: return [Math.round((dx - dy) * S), Math.round((dx + dy) * S)]; // NE
     case 2: return [-dy, dx];                                                      // E
-    case 3: return [Math.round((-dx - dy) * 0.7071), Math.round((dx - dy) * 0.7071)]; // SE  (= 90+45)
+    case 3: return [Math.round((-dx - dy) * S), Math.round((dx - dy) * S)]; // SE  (= 90+45)
     case 4: return [-dx, -dy];                                                     // S
-    case 5: return [Math.round((-dx + dy) * 0.7071), Math.round((-dx - dy) * 0.7071)]; // SW
+    case 5: return [Math.round((-dx + dy) * S), Math.round((-dx - dy) * S)]; // SW
     case 6: return [dy, -dx];                                                      // W
-    case 7: return [Math.round((dx + dy) * 0.7071), Math.round((-dx + dy) * 0.7071)]; // NW  (= 270+45)
+    case 7: return [Math.round((dx + dy) * S), Math.round((-dx + dy) * S)]; // NW  (= 270+45)
     default: return [dx, dy];
   }
 }
@@ -141,9 +152,11 @@ class CollisionMap {
     this.mapWidth = mapData.width;
     this.mapHeight = mapData.height;
 
-    // Spawn point (tile coords → world coords)
+    // Spawn point (tile coords → world coords, validated)
     const sp = mapData.spawnPoint || [0, 0];
-    this.spawnPoint = { x: sp[0] * this.tileSize + this.tileSize / 2, y: sp[1] * this.tileSize + this.tileSize / 2 };
+    const spx = Math.max(0, Math.min(sp[0], (this.mapWidth || 1) - 1));
+    const spy = Math.max(0, Math.min(sp[1], (this.mapHeight || 1) - 1));
+    this.spawnPoint = { x: spx * this.tileSize + this.tileSize / 2, y: spy * this.tileSize + this.tileSize / 2 };
 
     // Safe zones from map data (tile coords: x1, y1, x2, y2)
     this.safeZones = (mapData.safeZones || []).map(sz => ({
@@ -295,6 +308,7 @@ class ServerWorld {
 
     this.defaultMapId = THEME.defaultMap || "eldengrove";
     this.players = new Map();   // playerId → PlayerState
+    this._usernameIndex = new Map(); // username → PlayerState (O(1) lookup)
     this._nextPartyId = 1;
     this.parties = new Map();   // partyId → { id, leader, members: Set<playerId>, pendingInvites: Map<targetId, targetName> }
     this._nextProjId = 1;
@@ -475,6 +489,7 @@ class ServerWorld {
     };
 
     this.players.set(id, state);
+    if (state.username) this._usernameIndex.set(state.username, state);
 
     // Ensure player has a hearthstone (grant if missing)
     if (!state.inventory.some(s => s && s.id === "hearthstone")) {
@@ -567,6 +582,7 @@ class ServerWorld {
     }
 
     this.players.delete(id);
+    if (p && p.username) this._usernameIndex.delete(p.username);
     if (mapId) {
       this.broadcastToMap(mapId, { type: "player_left", playerId: id });
     } else {
@@ -585,6 +601,17 @@ class ServerWorld {
   handleMessage(playerId, msg) {
     const player = this.players.get(playerId);
     if (!player) return;
+
+    // Global message rate limit (120 messages/sec per player, excluding moves)
+    if (msg.type !== "move") {
+      const now = Date.now();
+      if (!player._msgRateStart || now - player._msgRateStart > 1000) {
+        player._msgRateStart = now;
+        player._msgRateCount = 0;
+      }
+      player._msgRateCount++;
+      if (player._msgRateCount > 120) return;
+    }
 
     switch (msg.type) {
       case "move":
@@ -769,6 +796,7 @@ class ServerWorld {
 
     const x = Number(msg.x);
     const y = Number(msg.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const floor = Math.max(0, Math.min(10, Number(msg.floor) || 0));
 
     // Track sequence for client-side prediction reconciliation
@@ -787,6 +815,12 @@ class ServerWorld {
     // Don't allow moving into blocked tiles (use player's current map)
     const mapEntry = this.maps.get(player.mapId);
     if (mapEntry && !mapEntry.collision.isBlocked(x, y, 16, floor)) {
+      // Also check that the path doesn't clip through walls diagonally
+      if (floor === player.floor && d > 2) {
+        const midX = (player.x + x) / 2;
+        const midY = (player.y + y) / 2;
+        if (mapEntry.collision.isBlocked(midX, midY, 16, floor)) return;
+      }
       // PVP combat timer: prevent entering safe zones
       if (player.pvpCombatUntil > Date.now() && mapEntry.collision.isSafeZone(x, y)) {
         this.send(player.ws, { type: "pvp_safe_zone_blocked" });
@@ -1126,27 +1160,27 @@ class ServerWorld {
 
     // Update PVP stats
     victim.pvpDeaths = (victim.pvpDeaths || 0) + 1;
-    killer.pvpKills = (killer.pvpKills || 0) + 1;
 
-    // Set kill timer on the killer (longer, prevents safe zone entry)
-    this._setPvpCombatTimer(killer, "kill", now);
+    // Killer may have disconnected between fatal blow and death processing
+    if (killer && this.players.has(killer.id)) {
+      killer.pvpKills = (killer.pvpKills || 0) + 1;
+      this._setPvpCombatTimer(killer, "kill", now);
+      this.send(killer.ws, {
+        type: "pvp_kill",
+        victimName: victim.name,
+        pvpKills: killer.pvpKills,
+        pvpDeaths: killer.pvpDeaths
+      });
+    }
 
     // Notify victim
     this.send(victim.ws, {
       type: "you_died",
       goldLost,
       pvp: true,
-      killerName: killer.name,
+      killerName: killer ? killer.name : "Unknown",
       pvpDeaths: victim.pvpDeaths,
       pvpKills: victim.pvpKills
-    });
-
-    // Notify killer
-    this.send(killer.ws, {
-      type: "pvp_kill",
-      victimName: victim.name,
-      pvpKills: killer.pvpKills,
-      pvpDeaths: killer.pvpDeaths
     });
 
     // Clear enemy aggro on victim
@@ -1650,7 +1684,7 @@ class ServerWorld {
     if (player.dead) return;
     if (player.casting) return; // Already casting something
 
-    const skillId = String(msg.skillId || "");
+    const skillId = String(msg.skillId || "").slice(0, 64);
     const skillDef = SKILLS[skillId];
     if (!skillDef) return;
 
@@ -2207,8 +2241,8 @@ class ServerWorld {
       let buffApplied = null;
       if (skillDef.buff) {
         if (!player.activeBuffs) player.activeBuffs = [];
-        // Replace existing buff of same id
-        player.activeBuffs = player.activeBuffs.filter(b => b.id !== skillDef.buff.id);
+        // Replace existing buff of same id OR same stat (prevents stacking e.g. mana shields)
+        player.activeBuffs = player.activeBuffs.filter(b => b.id !== skillDef.buff.id && b.stat !== skillDef.buff.stat);
         const buffEntry = {
           ...skillDef.buff,
           appliedAt: now,
@@ -2851,10 +2885,25 @@ class ServerWorld {
     for (const [questId, state] of Object.entries(msg.quests)) {
       if (typeof questId !== "string" || questId.length > 64) continue;
       if (!state || typeof state !== "object") continue;
+      // Only allow quests that exist in QUEST_DEFS
+      if (!QUEST_DEFS[questId]) continue;
       // Only allow non-completed states to be synced from client
       const existing = player.quests[questId];
       if (existing && existing.state === "completed") continue;
       if (state.state === "completed") continue; // client can't force completion
+      // Validate progress array against quest definition objectives
+      const def = QUEST_DEFS[questId];
+      const objectives = def.objectives || [];
+      if (state.progress) {
+        if (!Array.isArray(state.progress)) continue;
+        // Clamp progress to valid range per objective
+        state.progress = state.progress.slice(0, objectives.length).map((val, i) => {
+          const count = objectives[i]?.count || 0;
+          return clamp(Number(val) || 0, 0, count);
+        });
+      }
+      // Only allow known state values
+      if (!["active", "ready_to_turn_in", "not_started"].includes(state.state)) continue;
       player.quests[questId] = state;
     }
   }
@@ -3115,9 +3164,10 @@ class ServerWorld {
           player.hotbar[i] = { type: "skill", skillId: sid };
         }
       } else if (s && s.type === "item" && typeof s.itemId === "string") {
-        // Validate item exists in items DB
-        if (ITEMS[s.itemId]) {
-          player.hotbar[i] = { type: "item", itemId: s.itemId.slice(0, 64) };
+        // Validate item exists in items DB AND player owns it
+        const itemId = s.itemId.slice(0, 64);
+        if (ITEMS[itemId] && player.inventory.some(it => it && it.id === itemId)) {
+          player.hotbar[i] = { type: "item", itemId };
         }
       }
     }
@@ -3341,11 +3391,20 @@ class ServerWorld {
   }
 
   handleLootTake(player, msg) {
-    if (player.dead) return;
+    if (player.dead) {
+      this.send(player.ws, { type: "loot_take_result", ok: false, reason: "You are dead." });
+      return;
+    }
     const dropId = msg.dropId;
     const what = msg.what; // "gold", "item", "all"
-    if (typeof dropId !== "string") return;
-    if (!["gold", "item", "all"].includes(what)) return;
+    if (typeof dropId !== "string") {
+      this.send(player.ws, { type: "loot_take_result", ok: false, reason: "Invalid request." });
+      return;
+    }
+    if (!["gold", "item", "all"].includes(what)) {
+      this.send(player.ws, { type: "loot_take_result", ok: false, reason: "Invalid loot action." });
+      return;
+    }
 
     const mapEntry = this.maps.get(player.mapId);
     if (!mapEntry) return;
@@ -3453,7 +3512,7 @@ class ServerWorld {
       player.mapId = targetMapId;
       player.x = targetX;
       player.y = targetY;
-      player.floor = 0;
+      player.floor = hs.floor || 0;
 
       this.send(player.ws, {
         type: "hearthstone_teleport",
@@ -3469,7 +3528,7 @@ class ServerWorld {
       // Same-map teleport
       player.x = targetX;
       player.y = targetY;
-      player.floor = 0;
+      player.floor = hs.floor || 0;
 
       this.send(player.ws, {
         type: "hearthstone_teleport",
@@ -3959,9 +4018,7 @@ class ServerWorld {
   }
 
   _xpToLevelForLevel(level) {
-    let xpToLevel = 160;
-    for (let i = 1; i < level; i++) xpToLevel = Math.round(xpToLevel * 1.28);
-    return xpToLevel;
+    return Math.round(160 * Math.pow(1.28, level - 1));
   }
 
   _grantXp(player, amount) {
@@ -4029,16 +4086,18 @@ class ServerWorld {
       return;
     }
 
-    // Split evenly
-    const share = Math.max(1, Math.floor(totalXp / eligible.length));
+    // Split evenly, but scale by member's level relative to killer
     for (const m of eligible) {
-      this._grantXp(m, share);
+      // Reduce XP for members much lower level than killer (anti-power-leveling)
+      const lvlRatio = m.level / Math.max(1, killer.level);
+      const scaledShare = Math.max(1, Math.floor((totalXp / eligible.length) * Math.min(1, lvlRatio)));
+      this._grantXp(m, scaledShare);
       // Notify non-killers they received shared XP
       if (m.id !== killer.id) {
         this.send(m.ws, {
           type: "chat",
           channel: "system",
-          message: `You received ${share} shared XP.`
+          message: `You received ${scaledShare} shared XP.`
         });
       }
     }
@@ -4458,10 +4517,7 @@ class ServerWorld {
   /* ── friends system ─────────────────────────────────── */
 
   _findPlayerByUsername(username) {
-    for (const [, p] of this.players) {
-      if (p.username === username) return p;
-    }
-    return null;
+    return this._usernameIndex.get(username) || null;
   }
 
   _buildFriendEntry(f) {
@@ -5197,8 +5253,15 @@ class ServerWorld {
       if (!enemy.dead || now < enemy.deadUntil) continue;
       enemy.dead = false;
       enemy.hp = enemy.maxHp;
-      enemy.x = enemy.spawnX + randInt(-12, 12);
-      enemy.y = enemy.spawnY + randInt(-12, 12);
+      // Try a random offset from spawn; fall back to exact spawn if blocked
+      let rx = enemy.spawnX + randInt(-12, 12);
+      let ry = enemy.spawnY + randInt(-12, 12);
+      if (mapEntry.collision && mapEntry.collision.isBlocked(rx, ry, 16, 0)) {
+        rx = enemy.spawnX;
+        ry = enemy.spawnY;
+      }
+      enemy.x = rx;
+      enemy.y = ry;
       enemy.targetPlayerId = null;
       enemy.wanderTimer = 0;
     }
@@ -5703,9 +5766,10 @@ class ServerWorld {
   handleGather(player, msg) {
     if (player.dead) return;
 
-    // Server-side gather cooldown (2.5s = 150 ticks at 60Hz)
-    const GATHER_COOLDOWN_TICKS = 150;
-    if (player.lastGatherTick && (this.tickCount - player.lastGatherTick) < GATHER_COOLDOWN_TICKS) {
+    // Server-side gather cooldown (2.5s)
+    const GATHER_COOLDOWN_MS = 2500;
+    const now = Date.now();
+    if (player.lastGatherTime && (now - player.lastGatherTime) < GATHER_COOLDOWN_MS) {
       return; // silently ignore — client timer should prevent this
     }
 
@@ -5806,7 +5870,7 @@ class ServerWorld {
     }
 
     // Record gather timestamp for cooldown
-    player.lastGatherTick = this.tickCount;
+    player.lastGatherTime = Date.now();
 
     // Send result
     this.send(player.ws, {

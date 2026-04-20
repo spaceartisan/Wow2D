@@ -27,6 +27,7 @@ export class DragManager {
    * @param {HTMLElement} [handle] — the drag handle element (defaults to .panel-header or first h3/h4)
    */
   makeDraggable(panel, handle) {
+    if (!panel) return;
     if (!handle) {
       handle = panel.querySelector(".panel-header") ||
                panel.querySelector("#chat-tabs") ||

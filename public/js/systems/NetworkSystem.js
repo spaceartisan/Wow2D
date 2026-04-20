@@ -75,6 +75,7 @@ export class NetworkSystem {
      */
     this._tickTimeMap = [];     // [{tick, time}]  – last ~16 entries
     this._tickTimeMapLen = 16;
+    this._tickTimeMapStart = 0;  // circular-buffer read index
 
     /** Latest server tick received. */
     this._serverTick = 0;
@@ -146,7 +147,8 @@ export class NetworkSystem {
       let msg;
       try {
         msg = JSON.parse(event.data);
-      } catch (_) {
+      } catch (e) {
+        console.warn("NetworkSystem: failed to parse message", e.message);
         return;
       }
       this.onMessage(msg);
@@ -190,6 +192,13 @@ export class NetworkSystem {
     this._intentionalClose = true;
     clearTimeout(this._reconnectTimer);
     clearInterval(this.positionSendInterval);
+    clearInterval(this._skillCastInterval);
+    this._skillCastInterval = null;
+    // Clean up any remote cast intervals
+    for (const intervalId of this._remoteCastIntervals.values()) {
+      clearInterval(intervalId);
+    }
+    this._remoteCastIntervals.clear();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -667,6 +676,7 @@ export class NetworkSystem {
         this.onSkillAoeVisual(msg);
         break;
       default:
+        console.warn("NetworkSystem: unhandled message type", msg.type);
         break;
     }
   }
@@ -694,6 +704,7 @@ export class NetworkSystem {
 
     // Reset tick-time mapping
     this._tickTimeMap.length = 0;
+    this._tickTimeMapStart = 0;
     this._tickTimeMap.push({ tick, time: now });
     this._serverTick = tick;
 
@@ -838,9 +849,11 @@ export class NetworkSystem {
     this._serverTick = tick;
 
     // Record tick → client-time mapping for interpolation
-    this._tickTimeMap.push({ tick, time: now });
-    if (this._tickTimeMap.length > this._tickTimeMapLen) {
-      this._tickTimeMap.shift();
+    if (this._tickTimeMap.length < this._tickTimeMapLen) {
+      this._tickTimeMap.push({ tick, time: now });
+    } else {
+      this._tickTimeMap[this._tickTimeMapStart] = { tick, time: now };
+      this._tickTimeMapStart = (this._tickTimeMapStart + 1) % this._tickTimeMapLen;
     }
 
     // Push enemy snapshots into per-entity ring buffers
@@ -2410,8 +2423,10 @@ export class NetworkSystem {
       return;
     }
     const player = this.game.entities.player;
-    const applyX = this._correctionX * this._correctionRate;
-    const applyY = this._correctionY * this._correctionRate;
+    // Scale correction rate by frame time so it's fps-independent
+    const rate = Math.min(1, this._correctionRate * (this.game._lastDt || 1/60) * 60);
+    const applyX = this._correctionX * rate;
+    const applyY = this._correctionY * rate;
     player.x += applyX;
     player.y += applyY;
     this._correctionX -= applyX;

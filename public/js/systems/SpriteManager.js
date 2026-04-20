@@ -21,17 +21,17 @@ export class SpriteManager {
     const promises = [];
 
     // Tiles — one per palette entry
-    for (const name of Object.keys(tilePalette)) {
+    for (const name of Object.keys(tilePalette || {})) {
       promises.push(this._loadOne(`tiles/${name}`));
     }
 
     // Enemies
-    for (const id of enemyIds) {
+    for (const id of (enemyIds || [])) {
       promises.push(this._loadOne(`entities/${id}`));
     }
 
     // NPCs
-    for (const id of npcIds) {
+    for (const id of (npcIds || [])) {
       promises.push(this._loadOne(`entities/${id}`));
     }
 

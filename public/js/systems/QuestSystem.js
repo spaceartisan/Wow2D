@@ -4,6 +4,7 @@ export class QuestSystem {
     this.showTracker = true;    // whether the quest tracker panel is visible
     this.questDefs = {};        // quest definitions loaded from JSON
     this.quests = {};           // active quest states keyed by quest id
+    this._trackerDirty = true;  // dirty flag for UI tracker updates
   }
 
   /**
@@ -72,7 +73,7 @@ export class QuestSystem {
    * Handles quest dialog flow for multi-quest NPCs + non-quest NPCs.
    */
   interactWithNPC(npc) {
-    this.game.ui._interactNpc = npc;
+    if (this.game.ui) this.game.ui._interactNpc = npc;
     const questIds = npc.questIds || [];
 
     // Priority 1: quests ready to turn in
@@ -147,19 +148,19 @@ export class QuestSystem {
             this._handleDialogAction(opt.action, ctx?.questId, ctx?.questDef, ctx?.questState, npc);
           }
           // Handle NPC service actions
-          if (opt.action === "open_shop") {
-            this.game.ui.closeNpcDialog();
-            this.game.ui.openShop(npc.id, npc.shop);
+          if (opt.action === "open_shop" && npc.shop) {
+            this.game.ui?.closeNpcDialog();
+            this.game.ui?.openShop(npc.id, npc.shop);
             return;
           }
           if (opt.action === "open_bank") {
-            this.game.ui.closeNpcDialog();
-            this.game.ui.openBank();
+            this.game.ui?.closeNpcDialog();
+            this.game.ui?.openBank();
             return;
           }
-          if (opt.action === "open_crafting") {
-            this.game.ui.closeNpcDialog();
-            this.game.ui.openCraftingStation(npc.craftingSkill);
+          if (opt.action === "open_crafting" && npc.craftingSkill) {
+            this.game.ui?.closeNpcDialog();
+            this.game.ui?.openCraftingStation(npc.craftingSkill);
             return;
           }
           // Branch to next node
@@ -181,7 +182,7 @@ export class QuestSystem {
       this._appendServiceActions(npc, actions);
     }
 
-    this.game.ui.showNpcDialog(npc.name, text, actions);
+    this.game.ui?.showNpcDialog(npc.name, text, actions);
   }
 
   /**
@@ -198,7 +199,8 @@ export class QuestSystem {
     }
     if (cond.questNotStarted) {
       const s = this.quests[cond.questNotStarted]?.state;
-      if (s && s !== "not_started") return false;
+      // undefined/null = never started (passes), "not_started" = explicitly not started (passes)
+      if (s !== undefined && s !== null && s !== "not_started") return false;
     }
     if (cond.minLevel) {
       if ((this.game.entities?.player?.level || 1) < cond.minLevel) return false;
@@ -219,7 +221,7 @@ export class QuestSystem {
     // Legacy fallback: plain defaultDialog with auto service buttons
     const actions = [];
     this._appendServiceActions(npc, actions);
-    this.game.ui.showNpcDialog(npc.name, npc.dialog || npc.defaultDialog || "...", actions);
+    this.game.ui?.showNpcDialog(npc.name, npc.dialog || npc.defaultDialog || "...", actions);
   }
 
   /**
@@ -230,8 +232,8 @@ export class QuestSystem {
       actions.push({
         label: "Browse Wares",
         callback: () => {
-          this.game.ui.closeNpcDialog();
-          this.game.ui.openShop(npc.id, npc.shop);
+          this.game.ui?.closeNpcDialog();
+          this.game.ui?.openShop(npc.id, npc.shop);
         },
         closesDialog: false
       });
@@ -240,20 +242,20 @@ export class QuestSystem {
       actions.push({
         label: "Open Bank",
         callback: () => {
-          this.game.ui.closeNpcDialog();
-          this.game.ui.openBank();
+          this.game.ui?.closeNpcDialog();
+          this.game.ui?.openBank();
         },
         closesDialog: false
       });
     }
     if (npc.type === "crafting_station" && npc.craftingSkill) {
-      const skillDef = this.game.data.gatheringSkills?.[npc.craftingSkill];
+      const skillDef = this.game.data?.gatheringSkills?.[npc.craftingSkill];
       const stationLabel = skillDef ? skillDef.name : npc.craftingSkill;
       actions.push({
         label: `Open ${stationLabel}`,
         callback: () => {
-          this.game.ui.closeNpcDialog();
-          this.game.ui.openCraftingStation(npc.craftingSkill);
+          this.game.ui?.closeNpcDialog();
+          this.game.ui?.openCraftingStation(npc.craftingSkill);
         },
         closesDialog: false
       });
@@ -276,6 +278,10 @@ export class QuestSystem {
     // Replace {progress} with current objective progress
     const objectives = def.objectives || [];
     const progressParts = [];
+
+    if (objectives.length === 0) {
+      return text.replace(/\{progress\}/g, "No objectives");
+    }
 
     for (let i = 0; i < objectives.length; i++) {
       const obj = objectives[i];
@@ -312,9 +318,10 @@ export class QuestSystem {
       progress: objectives.map(() => 0)
     };
 
-    this.game.ui.addChatMessage("system", `Quest accepted: ${def.name}`);
+    this.game.ui?.addChatMessage("system", `Quest accepted: ${def.name}`);
+    this._trackerDirty = true;
     for (const obj of objectives) {
-      this.game.ui.addChatMessage("system", `Objective: ${obj.label} (0/${obj.count})`);
+      this.game.ui?.addChatMessage("system", `Objective: ${obj.label} (0/${obj.count})`);
     }
 
     // Sync quest state to server for persistence
@@ -325,6 +332,7 @@ export class QuestSystem {
 
   _completeQuest(questId, def, questState) {
     questState.state = "completed";
+    this._trackerDirty = true;
 
     // Send to server for authoritative reward granting
     if (this.game.network) {
@@ -345,8 +353,8 @@ export class QuestSystem {
       }
     }
 
-    this.game.ui.addChatMessage("system", `Quest complete: ${rewardParts.join(", ")}`);
-    this.game.audio.play("quest_complete");
+    this.game.ui?.addChatMessage("system", `Quest complete: ${rewardParts.join(", ")}`);
+    this.game.audio?.play("quest_complete");
   }
 
   /**
@@ -372,7 +380,8 @@ export class QuestSystem {
         const obj = objectives[i];
         if (obj.type === "kill" && obj.target === enemyType) {
           questState.progress[i] = Math.min((questState.progress[i] || 0) + 1, obj.count);
-          this.game.ui.addMessage(`Quest update: ${obj.label} ${questState.progress[i]}/${obj.count}`);
+          this._trackerDirty = true;
+          this.game.ui?.addMessage(`Quest update: ${obj.label} ${questState.progress[i]}/${obj.count}`);
         }
         if ((questState.progress[i] || 0) < obj.count) {
           allComplete = false;
@@ -381,9 +390,10 @@ export class QuestSystem {
 
       if (allComplete) {
         questState.state = "ready_to_turn_in";
+        this._trackerDirty = true;
         const giverNpc = this.game.data?.npcs?.[def.giver];
         const giverName = giverNpc?.name || def.giver;
-        this.game.ui.addMessage(`Return to ${giverName} for your reward.`);
+        this.game.ui?.addMessage(`Return to ${giverName} for your reward.`);
       }
     }
 

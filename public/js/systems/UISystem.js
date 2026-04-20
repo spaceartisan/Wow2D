@@ -350,6 +350,7 @@ export class UISystem {
    * @param {string} text
    */
   addChatMessage(channel, text) {
+    if (text && text.length > 500) text = text.slice(0, 500) + "…";
     this.chatMessages.push({ channel, text, timestamp: Date.now() });
     if (this.chatMessages.length > this.maxChatMessages) {
       this.chatMessages.shift();
@@ -564,7 +565,10 @@ export class UISystem {
     if (this.el.manaText) this.el.manaText.textContent = `${Math.round(player.mana)} / ${player.maxMana}`;
     if (this.el.goldValue) this.el.goldValue.textContent = player.gold;
 
-    if (this.el.questTracker) this.el.questTracker.textContent = this.game.quests.getTrackerText();
+    if (this.el.questTracker && this.game.quests._trackerDirty) {
+      this.el.questTracker.textContent = this.game.quests.getTrackerText();
+      this.game.quests._trackerDirty = false;
+    }
     const qp = document.getElementById("quest-panel");
     if (qp) qp.classList.toggle("hidden", !this.game.quests.showTracker);
     if (this.el.deathOverlay) this.el.deathOverlay.classList.toggle("hidden", !player.dead);
@@ -1233,6 +1237,7 @@ export class UISystem {
     const maxGold = this.game.entities.player.gold || 0;
     let gold = Math.max(0, Math.min(Math.floor(Number(goldInput.value) || 0), maxGold));
     goldInput.value = gold;
+    this._tradeMyGold = gold;
 
     this.game.network?.send({
       type: "trade_offer_update",
@@ -2341,9 +2346,10 @@ export class UISystem {
     this._castChannel = !!isChannel;
 
     // Cancel button: clicking the cast bar cancels current cast
-    container.onclick = () => {
+    this._castBarClickHandler = () => {
       if (this.game.network) this.game.network.sendCancelCast();
     };
+    container.onclick = this._castBarClickHandler;
   }
 
   hideCastBar() {
@@ -2353,6 +2359,7 @@ export class UISystem {
     if (container) {
       container.classList.add("hidden");
       container.classList.remove("channeling");
+      container.onclick = null;
     }
   }
 
@@ -2391,7 +2398,7 @@ export class UISystem {
 
         const name = document.createElement("div");
         name.className = "party-frame-name";
-        name.textContent = (m.isLeader ? "★ " : "") + m.name;
+        name.textContent = (m.isLeader ? "★ " : "") + (m.name || "Unknown");
 
         const hpBar = document.createElement("div");
         hpBar.className = "party-frame-hp-bar";
@@ -2399,8 +2406,8 @@ export class UISystem {
         const hpFill = document.createElement("div");
         hpFill.className = "party-frame-hp-fill";
         const rp = this.game.entities.remotePlayers.find(p => p.id === m.id);
-        const hp = rp ? rp.hp : m.hp;
-        const maxHp = rp ? rp.maxHp : m.maxHp;
+        const hp = rp ? rp.hp : (m.hp ?? 0);
+        const maxHp = rp ? rp.maxHp : (m.maxHp ?? 1);
         const ratio = maxHp > 0 ? hp / maxHp : 1;
         hpFill.style.width = `${Math.max(0, ratio) * 100}%`;
 
@@ -2427,8 +2434,8 @@ export class UISystem {
         const hpFill = frame.querySelector(".party-frame-hp-fill");
         if (hpFill) {
           const rp = this.game.entities.remotePlayers.find(p => p.id === m.id);
-          const hp = rp ? rp.hp : m.hp;
-          const maxHp = rp ? rp.maxHp : m.maxHp;
+          const hp = rp ? rp.hp : (m.hp ?? 0);
+          const maxHp = rp ? rp.maxHp : (m.maxHp ?? 1);
           const ratio = maxHp > 0 ? hp / maxHp : 1;
           hpFill.style.width = `${Math.max(0, ratio) * 100}%`;
         }
@@ -2699,6 +2706,7 @@ export class UISystem {
     skillRecipes.sort((a, b) => a.requiredLevel - b.requiredLevel);
 
     for (const recipe of skillRecipes) {
+      if (!recipe.output) continue;
       const row = document.createElement("div");
       row.className = "crafting-item";
 
@@ -2849,7 +2857,8 @@ export class UISystem {
       document.getElementById("hud")?.append(container);
     }
     container.classList.remove("hidden");
-    document.getElementById("gather-bar-label").textContent = label;
+    const lbl = document.getElementById("gather-bar-label");
+    if (lbl) lbl.textContent = label;
     const fill = document.getElementById("gather-bar-fill");
     if (fill) fill.style.width = "0%";
   }
@@ -3596,7 +3605,7 @@ export class UISystem {
 
     /* ── Pending Duel Challenge ── */
     const duelChallenge = this._pendingDuelChallenge;
-    if (duelChallenge) {
+    if (duelChallenge && duelChallenge.fromName) {
       const inviteRow = document.createElement("div");
       inviteRow.className = "party-invite-row";
       inviteRow.style.cssText = "border:1px solid #cc8833;border-radius:4px;padding:6px 10px;margin:6px 0;";

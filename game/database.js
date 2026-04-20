@@ -38,7 +38,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS characters (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     username    TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
+    name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
     char_class  TEXT NOT NULL,
     level       INTEGER NOT NULL DEFAULT 1,
     created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
@@ -73,23 +73,26 @@ db.exec(`
   const alter = (name, def) => {
     if (!cols.includes(name)) db.exec(`ALTER TABLE characters ADD COLUMN ${name} ${def}`);
   };
-  alter("xp", "INTEGER NOT NULL DEFAULT 0");
-  alter("gold", "INTEGER NOT NULL DEFAULT 12");
-  alter("hp", "INTEGER NOT NULL DEFAULT 120");
-  alter("mana", "INTEGER NOT NULL DEFAULT 80");
-  alter("inventory", "TEXT NOT NULL DEFAULT '[]'");
-  alter("equipment", "TEXT NOT NULL DEFAULT '{}'");
-  alter("quests", "TEXT NOT NULL DEFAULT '{}'");
-  alter("hearthstone", "TEXT NOT NULL DEFAULT 'null'");
-  alter("bank", "TEXT NOT NULL DEFAULT '[]'");
-  alter("hotbar", "TEXT NOT NULL DEFAULT '[]'");
-  alter("gathering_skills", "TEXT NOT NULL DEFAULT '{}'");
-  alter("map_id", "TEXT NOT NULL DEFAULT 'eldengrove'");
-  alter("pos_x", "REAL NOT NULL DEFAULT -1");
-  alter("pos_y", "REAL NOT NULL DEFAULT -1");
-  alter("floor", "INTEGER NOT NULL DEFAULT 0");
-  alter("pvp_kills", "INTEGER NOT NULL DEFAULT 0");
-  alter("pvp_deaths", "INTEGER NOT NULL DEFAULT 0");
+  const runMigrations = db.transaction(() => {
+    alter("xp", "INTEGER NOT NULL DEFAULT 0");
+    alter("gold", "INTEGER NOT NULL DEFAULT 12");
+    alter("hp", "INTEGER NOT NULL DEFAULT 120");
+    alter("mana", "INTEGER NOT NULL DEFAULT 80");
+    alter("inventory", "TEXT NOT NULL DEFAULT '[]'");
+    alter("equipment", "TEXT NOT NULL DEFAULT '{}'");
+    alter("quests", "TEXT NOT NULL DEFAULT '{}'");
+    alter("hearthstone", "TEXT NOT NULL DEFAULT 'null'");
+    alter("bank", "TEXT NOT NULL DEFAULT '[]'");
+    alter("hotbar", "TEXT NOT NULL DEFAULT '[]'");
+    alter("gathering_skills", "TEXT NOT NULL DEFAULT '{}'");
+    alter("map_id", "TEXT NOT NULL DEFAULT 'eldengrove'");
+    alter("pos_x", "REAL NOT NULL DEFAULT -1");
+    alter("pos_y", "REAL NOT NULL DEFAULT -1");
+    alter("floor", "INTEGER NOT NULL DEFAULT 0");
+    alter("pvp_kills", "INTEGER NOT NULL DEFAULT 0");
+    alter("pvp_deaths", "INTEGER NOT NULL DEFAULT 0");
+  });
+  runMigrations();
 }
 
 /* ── add expires_at to sessions if missing ──── */
@@ -230,7 +233,14 @@ function createCharacter(token, charName, charClass) {
   }
 
   const displayName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1).toLowerCase();
-  stmts.insertCharacter.run(username, displayName, cls);
+  try {
+    stmts.insertCharacter.run(username, displayName, cls);
+  } catch (err) {
+    if (err.message && err.message.includes("UNIQUE constraint failed")) {
+      return { error: "Character name is already taken." };
+    }
+    throw err;
+  }
 
   const characters = stmts.getCharacters.all(username);
   return { ok: true, characters };
@@ -256,7 +266,13 @@ function deleteCharacter(token, charId) {
 }
 
 function loadCharacter(charId, username) {
-  const char = stmts.getCharacterById.get(charId, username);
+  let char;
+  try {
+    char = stmts.getCharacterById.get(charId, username);
+  } catch (err) {
+    console.error(`[DB] loadCharacter query failed for charId=${charId}:`, err.message);
+    return null;
+  }
   if (!char) return null;
   // Parse JSON fields
   try { char.inventory = JSON.parse(char.inventory || "[]"); } catch (_) { char.inventory = []; }
@@ -266,6 +282,10 @@ function loadCharacter(charId, username) {
   try { char.bank = JSON.parse(char.bank || "[]"); } catch (_) { char.bank = []; }
   try { char.hotbar = JSON.parse(char.hotbar || "[]"); } catch (_) { char.hotbar = []; }
   try { char.gatheringSkills = JSON.parse(char.gatheringSkills || "{}"); } catch (_) { char.gatheringSkills = {}; }
+  // Validate mapId has a value; fall back to default if empty/null
+  if (!char.mapId || typeof char.mapId !== "string") {
+    char.mapId = "eldengrove";
+  }
   return char;
 }
 
@@ -277,6 +297,7 @@ function saveCharacterProgress(charId, data) {
   const bank = JSON.stringify(data.bank || []);
   const hotbar = JSON.stringify(data.hotbar || []);
   const gatheringSkills = JSON.stringify(data.gatheringSkills || {});
+  try {
   stmts.saveCharacter.run(
     data.level || 1,
     data.xp || 0,
@@ -290,7 +311,7 @@ function saveCharacterProgress(charId, data) {
     bank,
     hotbar,
     gatheringSkills,
-    data.mapId || "eldengrove",  // fallback; runtime default from theme.json
+    (data.mapId && typeof data.mapId === "string") ? data.mapId : "eldengrove",
     data.posX ?? -1,
     data.posY ?? -1,
     data.floor ?? 0,
@@ -298,6 +319,9 @@ function saveCharacterProgress(charId, data) {
     data.pvpDeaths ?? 0,
     charId
   );
+  } catch (err) {
+    console.error(`[DB] saveCharacterProgress failed for charId=${charId}:`, err.message);
+  }
 }
 
 function cleanExpiredSessions() {
@@ -306,13 +330,7 @@ function cleanExpiredSessions() {
 
 /* ── friends API ──────────────────────────────────────── */
 
-function sendFriendRequest(username, targetCharName) {
-  // Look up account by character name
-  const row = stmts.findAccountByCharName.get(targetCharName);
-  if (!row) return { error: "Player not found." };
-  const friendUsername = row.username;
-  if (friendUsername === username) return { error: "You cannot add yourself." };
-
+const _sendFriendRequestTxn = db.transaction((username, friendUsername) => {
   // Check if either party has blocked the other
   if (stmts.getBlock.get(username, friendUsername)) return { error: "You have blocked that player." };
   if (stmts.getBlock.get(friendUsername, username)) return { error: "Unable to send friend request." };
@@ -336,6 +354,16 @@ function sendFriendRequest(username, targetCharName) {
 
   stmts.insertFriend.run(username, friendUsername, "pending");
   return { ok: true, friendUsername };
+});
+
+function sendFriendRequest(username, targetCharName) {
+  // Look up account by character name
+  const row = stmts.findAccountByCharName.get(targetCharName);
+  if (!row) return { error: "Player not found." };
+  const friendUsername = row.username;
+  if (friendUsername === username) return { error: "You cannot add yourself." };
+
+  return _sendFriendRequestTxn(username, friendUsername);
 }
 
 function acceptFriendRequest(username, fromUsername) {

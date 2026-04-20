@@ -24,6 +24,7 @@ export class WorldSystem {
     this.currentFloor = 0;        // 0 = ground, 1 = 2nd floor, etc.
     this.insideBuilding = null;    // reference to the building the player is upstairs in
     this._onStairs = false;        // track if player is on stairs (must step off to re-use)
+    this._globalPaletteLoaded = false;
   }
 
   /**
@@ -140,6 +141,12 @@ export class WorldSystem {
 
     // Block props based on propDefs
     const propDefs = this.propDefs || {};
+    // Clear previous floor-blocking data to help GC old Sets
+    if (this.blockedByFloor) {
+      for (const key of Object.keys(this.blockedByFloor)) {
+        this.blockedByFloor[key].clear();
+      }
+    }
     this.blockedByFloor = {};   // floor → Set of tileKeys (for non-ground floors)
     for (const p of (data.props || [])) {
       const def = propDefs[p.type];
@@ -311,7 +318,7 @@ export class WorldSystem {
     const ly = tileY - bld.oy;
     const floorGrid = bld.upperFloors[this.currentFloor - 1];
     if (!floorGrid || floorGrid.length === 0) return null;
-    if (ly < 0 || ly >= floorGrid.length || lx < 0 || lx >= (floorGrid[0]?.length || 0)) return null;
+    if (ly < 0 || ly >= floorGrid.length || lx < 0 || lx >= (floorGrid[ly]?.length || 0)) return null;
     const idx = floorGrid[ly][lx];
     if (idx < 0) return null; // skip tile (void)
     return this.tilePalette[idx] || null;
@@ -410,6 +417,7 @@ export class WorldSystem {
   }
 
   drawObjects(ctx, camera, canvas, sprites) {
+    if (!canvas) return;
     const minX = camera.x - this.tileSize;
     const maxX = camera.x + canvas.width + this.tileSize;
     const minY = camera.y - this.tileSize;

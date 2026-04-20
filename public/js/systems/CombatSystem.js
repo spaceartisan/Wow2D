@@ -9,6 +9,7 @@ export class CombatSystem {
     this.engaged = false;
     this.lastPlayerAttackAt = 0;
     this.lastHealCastAt = 0;
+    this._skillCooldowns = {};
     /** @type {{ skillId: string, pattern: object, targeting: string } | null} */
     this.aoeTargeting = null;
   }
@@ -184,7 +185,6 @@ export class CombatSystem {
     }
 
     // Record cooldown & send to server
-    if (!this._skillCooldowns) this._skillCooldowns = {};
     this._skillCooldowns[skillId] = now;
 
     if (skillDef.targeting === "self_aoe") {
@@ -429,27 +429,20 @@ export class CombatSystem {
 
   /** Rotate a tile offset by direction index (0=N, 1=NE, 2=E, ... 7=NW). */
   _rotateTile(dx, dy, dirIdx) {
+    const c = Math.SQRT1_2; // ≈ 0.7071
     switch (dirIdx) {
       case 0: return [dx, dy];       // N  (identity)
-      case 1: {                       // NE (45°)
-        const c = 0.7071;
+      case 1:                         // NE (45°)
         return [Math.round((dx - dy) * c), Math.round((dx + dy) * c)];
-      }
       case 2: return [-dy, dx];      // E  (90°)
-      case 3: {                       // SE (135°)
-        const c = 0.7071;
+      case 3:                         // SE (135°)
         return [Math.round((-dx - dy) * c), Math.round((dx - dy) * c)];
-      }
       case 4: return [-dx, -dy];     // S  (180°)
-      case 5: {                       // SW (225°)
-        const c = 0.7071;
+      case 5:                         // SW (225°)
         return [Math.round((-dx + dy) * c), Math.round((-dx - dy) * c)];
-      }
       case 6: return [dy, -dx];      // W  (270°)
-      case 7: {                       // NW (315°)
-        const c = 0.7071;
+      case 7:                         // NW (315°)
         return [Math.round((dx + dy) * c), Math.round((-dx + dy) * c)];
-      }
       default: return [dx, dy];
     }
   }

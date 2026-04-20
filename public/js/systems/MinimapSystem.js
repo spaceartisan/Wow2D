@@ -47,9 +47,14 @@ export class MinimapSystem {
 
     const w = world.width;
     const h = world.height;
-    const cvs = document.createElement("canvas");
-    cvs.width = w;
-    cvs.height = h;
+    // Reuse existing canvas element if dimensions match
+    let cvs = this._terrainCanvas;
+    if (!cvs || cvs.width !== w || cvs.height !== h) {
+      cvs = document.createElement("canvas");
+      cvs.width = w;
+      cvs.height = h;
+      this._terrainCanvas = cvs;
+    }
     const ctx = cvs.getContext("2d");
     const imgData = ctx.createImageData(w, h);
     const d = imgData.data;
@@ -69,7 +74,7 @@ export class MinimapSystem {
       const floorGrid = bld.upperFloors[world.currentFloor - 1];
       if (floorGrid) {
         for (let ly = 0; ly < floorGrid.length; ly++) {
-          for (let lx = 0; lx < floorGrid[0].length; lx++) {
+          for (let lx = 0; lx < (floorGrid[ly]?.length || 0); lx++) {
             const idx = floorGrid[ly][lx];
             if (idx < 0) continue;
             const tile = world.tilePalette[idx];

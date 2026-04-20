@@ -74,7 +74,7 @@ app.post("/api/login", rateLimit, (req, res) => {
   res.json(result);
 });
 
-app.post("/api/logout", (req, res) => {
+app.post("/api/logout", rateLimit, (req, res) => {
   const { token } = req.body || {};
   if (token) database.logout(token);
   res.json({ ok: true });
@@ -293,12 +293,15 @@ const startServer = (port) => {
       res.json({ players: online });
     });
 
-    // All accounts
+    // All accounts (paginated)
     app.get("/admin/api/accounts", adminAuth, (req, res) => {
+      const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+      const offset = Math.max(0, Number(req.query.offset) || 0);
       const accounts = database.db.prepare(
-        "SELECT username, created_at AS createdAt FROM accounts ORDER BY created_at DESC"
-      ).all();
-      res.json({ accounts });
+        "SELECT username, created_at AS createdAt FROM accounts ORDER BY created_at DESC LIMIT ? OFFSET ?"
+      ).all(limit, offset);
+      const total = database.db.prepare("SELECT COUNT(*) AS cnt FROM accounts").get().cnt;
+      res.json({ accounts, total, limit, offset });
     });
 
     // Characters for an account
@@ -309,12 +312,15 @@ const startServer = (port) => {
       res.json({ characters: chars });
     });
 
-    // All characters
+    // All characters (paginated)
     app.get("/admin/api/characters", adminAuth, (req, res) => {
+      const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+      const offset = Math.max(0, Number(req.query.offset) || 0);
       const chars = database.db.prepare(
-        "SELECT c.id, c.name, c.char_class AS charClass, c.level, c.xp, c.gold, c.hp, c.mana, c.username, c.created_at AS createdAt FROM characters c ORDER BY c.level DESC"
-      ).all();
-      res.json({ characters: chars });
+        "SELECT c.id, c.name, c.char_class AS charClass, c.level, c.xp, c.gold, c.hp, c.mana, c.username, c.created_at AS createdAt FROM characters c ORDER BY c.level DESC LIMIT ? OFFSET ?"
+      ).all(limit, offset);
+      const total = database.db.prepare("SELECT COUNT(*) AS cnt FROM characters").get().cnt;
+      res.json({ characters: chars, total, limit, offset });
     });
 
     // Character detail
@@ -400,11 +406,12 @@ const startServer = (port) => {
       res.json({ ok: true, online: false });
     });
 
-    // Items catalog
+    // Items catalog (cached — data doesn't change at runtime)
+    const _cachedItems = JSON.parse(require("fs").readFileSync(
+      path.join(__dirname, "public", "data", "items.json"), "utf8"
+    ));
     app.get("/admin/api/items", adminAuth, (req, res) => {
-      const itemsPath = path.join(__dirname, "public", "data", "items.json");
-      const items = JSON.parse(require("fs").readFileSync(itemsPath, "utf8"));
-      res.json({ items });
+      res.json({ items: _cachedItems });
     });
 
     // Waystones catalog (from all maps)
@@ -459,6 +466,12 @@ const startServer = (port) => {
       const charId = Number(req.params.id);
       const inventory = req.body.inventory;
       if (!Array.isArray(inventory)) return res.status(400).json({ error: "inventory must be an array" });
+      // Sanitize: only allow items that exist in ITEMS db
+      for (const item of inventory) {
+        if (item && typeof item === "object" && item.id && !_cachedItems[item.id]) {
+          return res.status(400).json({ error: `Unknown item id: ${String(item.id).slice(0, 64)}` });
+        }
+      }
 
       // Online player
       for (const [pid, p] of world.players) {
@@ -493,6 +506,12 @@ const startServer = (port) => {
       const charId = Number(req.params.id);
       const bank = req.body.bank;
       if (!Array.isArray(bank)) return res.status(400).json({ error: "bank must be an array" });
+      // Sanitize: only allow items that exist in ITEMS db
+      for (const item of bank) {
+        if (item && typeof item === "object" && item.id && !_cachedItems[item.id]) {
+          return res.status(400).json({ error: `Unknown item id: ${String(item.id).slice(0, 64)}` });
+        }
+      }
 
       // Online player
       for (const [pid, p] of world.players) {
@@ -520,6 +539,15 @@ const startServer = (port) => {
       };
       database.saveCharacterProgress(charId, data);
       res.json({ ok: true, online: false });
+    });
+
+    // Validate player ID format (e.g. "p123") for admin endpoints
+    const PLAYER_ID_RE = /^p\d+$/;
+    app.param("id", (req, res, next, val) => {
+      if (req.path.startsWith("/admin/api/players/") && !PLAYER_ID_RE.test(val)) {
+        return res.status(400).json({ error: "Invalid player ID format" });
+      }
+      next();
     });
 
     // Kick player

@@ -47,6 +47,9 @@ export class Game {
     this.gathering = { active: false, nodeId: null, timer: 0, cooldown: 2.5 };
     this.crafting = { active: false, recipeId: null, timer: 0, duration: 0, continuous: false };
 
+    // Map particle emitter IDs for floor-synced emitters
+    this._mapEmitterIds = [];
+
     // Label visibility toggles (all off by default)
     this.labelToggles = {
       players: false,
@@ -106,7 +109,11 @@ export class Game {
     await this.particles.load();
 
     // Init audio (needs user gesture — canvas click counts)
-    this.audio.init();
+    try {
+      this.audio.init();
+    } catch (e) {
+      console.warn("AudioManager init failed:", e);
+    }
 
     // Play initial map BGM (loadMap ran before audio.init)
     if (this.world.mapData && this.world.mapData.bgm) {
@@ -191,6 +198,7 @@ export class Game {
   }
 
   update(dt) {
+    this._lastDt = dt;
     this.handleHotkeys();
 
     this.input.mouse.worldX = this.camera.x + this.input.mouse.x;
@@ -204,7 +212,7 @@ export class Game {
     }
 
     // Close loot window on movement
-    if (this.ui._lootDropId &&
+    if (this.ui?._lootDropId &&
         (this.input.isDown("w","arrowup") || this.input.isDown("a","arrowleft") ||
          this.input.isDown("s","arrowdown") || this.input.isDown("d","arrowright"))) {
       this.ui.closeLootWindow();
@@ -263,44 +271,10 @@ export class Game {
       this.minimap.toggle();
     }
 
-    if (this.input.wasPressed("1")) {
-      this.ui.activateHotbarSlot(0);
-    }
-
-    if (this.input.wasPressed("2")) {
-      this.ui.activateHotbarSlot(1);
-    }
-
-    if (this.input.wasPressed("3")) {
-      this.ui.activateHotbarSlot(2);
-    }
-
-    if (this.input.wasPressed("4")) {
-      this.ui.activateHotbarSlot(3);
-    }
-
-    if (this.input.wasPressed("5")) {
-      this.ui.activateHotbarSlot(4);
-    }
-
-    if (this.input.wasPressed("6")) {
-      this.ui.activateHotbarSlot(5);
-    }
-
-    if (this.input.wasPressed("7")) {
-      this.ui.activateHotbarSlot(6);
-    }
-
-    if (this.input.wasPressed("8")) {
-      this.ui.activateHotbarSlot(7);
-    }
-
-    if (this.input.wasPressed("9")) {
-      this.ui.activateHotbarSlot(8);
-    }
-
-    if (this.input.wasPressed("0")) {
-      this.ui.activateHotbarSlot(9);
+    for (let i = 0; i < 10; i++) {
+      if (this.input.wasPressed(String(i === 9 ? 0 : i + 1))) {
+        this.ui.activateHotbarSlot(i);
+      }
     }
 
     if (this.input.wasPressed("e")) {
@@ -444,7 +418,7 @@ export class Game {
    */
   _syncMapParticles() {
     // Stop all existing map emitters
-    for (const id of (this._mapEmitterIds || [])) {
+    for (const id of this._mapEmitterIds) {
       this.particles.stopContinuous(id);
     }
     this._mapEmitterIds = [];
@@ -471,6 +445,7 @@ export class Game {
   }
 
   clampCamera() {
+    if (!this.world.width || !this.world.height) return;
     const maxX = this.world.getWorldWidth() - this.canvas.width;
     const maxY = this.world.getWorldHeight() - this.canvas.height;
 
