@@ -104,6 +104,18 @@ export class UISystem {
     /* ── Duel state ── */
     this._pendingDuelChallenge = null;
 
+    /* ── Trade state ── */
+    this._pendingTradeRequest = null;
+    this.tradeOpen = false;
+    this._tradePartnerId = null;
+    this._tradePartnerName = null;
+    this._tradeMyGold = 0;
+    this._tradeMyItems = [];          // slot indices
+    this._tradePartnerGold = 0;
+    this._tradePartnerItems = [];     // item objects from server
+    this._tradeMyConfirmed = false;
+    this._tradePartnerConfirmed = false;
+
     /* ── DOM listener tracking (cleaned up in destroy()) ── */
     this._domHandlers = [];
 
@@ -760,6 +772,20 @@ export class UISystem {
         btnRow.append(depositBtn);
       }
 
+      // Trade toggle button (when trade window is open)
+      if (this.tradeOpen && !this.game.data?.items?.[item.id]?.permanent) {
+        const inTrade = this._tradeMyItems.includes(index);
+        const tradeBtn = document.createElement("button");
+        tradeBtn.textContent = inTrade ? "Remove" : "Trade";
+        tradeBtn.className = inTrade ? "btn-sell" : "btn-buy";
+        tradeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._toggleTradeItem(index);
+        });
+        btnRow.append(tradeBtn);
+        if (inTrade) slot.classList.add("trade-selected");
+      }
+
       slot.append(btnRow);
       this.el.inventoryGrid.append(slot);
     });
@@ -1047,6 +1073,314 @@ export class UISystem {
     if (panel) panel.classList.add("hidden");
     this._inventoryDirty = true; // re-render inventory to hide sell buttons
     if (!this.npcDialogOpen && !this.bankOpen && !this.craftingOpen) this._interactNpc = null;
+  }
+
+  /* ── Trade UI ───────────────────────────────────────── */
+
+  showTradeRequestPopup(fromName) {
+    // Remove any existing popup
+    const old = document.getElementById("trade-request-popup");
+    if (old) old.remove();
+
+    const popup = document.createElement("div");
+    popup.id = "trade-request-popup";
+    popup.className = "hud-card trade-request-popup";
+    popup.innerHTML = `
+      <div class="panel-header"><span>Trade Request</span></div>
+      <div class="trade-request-body">
+        <p><strong>${this._escapeHtml(fromName)}</strong> wants to trade with you.</p>
+        <div class="trade-request-btns">
+          <button id="trade-accept-btn" class="btn-buy">Accept</button>
+          <button id="trade-decline-btn" class="btn-buy">Decline</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("hud").appendChild(popup);
+
+    document.getElementById("trade-accept-btn").addEventListener("click", () => {
+      this.game.network?.send({ type: "trade_accept" });
+      popup.remove();
+    });
+    document.getElementById("trade-decline-btn").addEventListener("click", () => {
+      this.game.network?.send({ type: "trade_decline" });
+      this._pendingTradeRequest = null;
+      popup.remove();
+    });
+
+    // Auto-decline after 30 seconds
+    setTimeout(() => {
+      if (document.getElementById("trade-request-popup")) {
+        this.game.network?.send({ type: "trade_decline" });
+        this._pendingTradeRequest = null;
+        popup.remove();
+      }
+    }, 30000);
+  }
+
+  openTradeWindow(partnerId, partnerName) {
+    this._tradePartnerId = partnerId;
+    this._tradePartnerName = partnerName;
+    this._tradeMyGold = 0;
+    this._tradeMyItems = [];
+    this._tradePartnerGold = 0;
+    this._tradePartnerItems = [];
+    this._tradeMyConfirmed = false;
+    this._tradePartnerConfirmed = false;
+    this.tradeOpen = true;
+    this._inventoryDirty = true;
+
+    // Remove pending request popup
+    const popup = document.getElementById("trade-request-popup");
+    if (popup) popup.remove();
+
+    let panel = document.getElementById("trade-panel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "trade-panel";
+      panel.className = "hud-card";
+      panel.innerHTML = `
+        <div class="panel-header">
+          <span id="trade-title">Trade</span>
+          <button class="panel-close" id="trade-close-btn">X</button>
+        </div>
+        <div id="trade-body" class="trade-body">
+          <div class="trade-column trade-my-column">
+            <div class="trade-col-header">Your Offer</div>
+            <div class="trade-gold-row">
+              <label>Gold: </label>
+              <input type="number" id="trade-my-gold" min="0" value="0" class="trade-gold-input" />
+            </div>
+            <div id="trade-my-items" class="trade-items-grid"></div>
+            <button id="trade-confirm-btn" class="trade-confirm-btn">Confirm</button>
+            <div id="trade-my-status" class="trade-status">Not confirmed</div>
+          </div>
+          <div class="trade-divider"></div>
+          <div class="trade-column trade-partner-column">
+            <div class="trade-col-header" id="trade-partner-header">Their Offer</div>
+            <div class="trade-gold-row">
+              <span id="trade-partner-gold-display">Gold: 0</span>
+            </div>
+            <div id="trade-partner-items" class="trade-items-grid"></div>
+            <div id="trade-partner-status" class="trade-status">Not confirmed</div>
+          </div>
+        </div>
+        <button id="trade-cancel-btn" class="trade-cancel-btn">Cancel Trade</button>
+      `;
+      document.getElementById("hud").appendChild(panel);
+      if (this.dragManager) this.dragManager.makeDraggable(panel);
+
+      document.getElementById("trade-close-btn").addEventListener("click", () => this._sendTradeCancel());
+      document.getElementById("trade-cancel-btn").addEventListener("click", () => this._sendTradeCancel());
+
+      document.getElementById("trade-confirm-btn").addEventListener("click", () => {
+        this.game.network?.send({ type: "trade_confirm" });
+      });
+
+      document.getElementById("trade-my-gold").addEventListener("change", () => this._sendTradeOfferUpdate());
+      document.getElementById("trade-my-gold").addEventListener("input", () => this._sendTradeOfferUpdate());
+    }
+
+    panel.classList.remove("hidden");
+    document.getElementById("trade-title").textContent = `Trade with ${this._escapeHtml(partnerName)}`;
+    document.getElementById("trade-partner-header").textContent = `${this._escapeHtml(partnerName)}'s Offer`;
+    document.getElementById("trade-my-gold").value = "0";
+    document.getElementById("trade-my-gold").max = this.game.entities.player.gold || 0;
+
+    // Open inventory if not open
+    if (!this.inventoryOpen) this.toggleInventory();
+
+    this.renderTradeWindow();
+  }
+
+  closeTradeWindow() {
+    this.tradeOpen = false;
+    this._tradePartnerId = null;
+    this._tradePartnerName = null;
+    this._tradeMyGold = 0;
+    this._tradeMyItems = [];
+    this._tradePartnerGold = 0;
+    this._tradePartnerItems = [];
+    this._tradeMyConfirmed = false;
+    this._tradePartnerConfirmed = false;
+    this._inventoryDirty = true;
+
+    const panel = document.getElementById("trade-panel");
+    if (panel) panel.classList.add("hidden");
+
+    // Also remove request popup if present
+    const popup = document.getElementById("trade-request-popup");
+    if (popup) popup.remove();
+  }
+
+  _sendTradeCancel() {
+    this.game.network?.send({ type: "trade_cancel" });
+    this.closeTradeWindow();
+  }
+
+  _sendTradeOfferUpdate() {
+    const goldInput = document.getElementById("trade-my-gold");
+    const maxGold = this.game.entities.player.gold || 0;
+    let gold = Math.max(0, Math.min(Math.floor(Number(goldInput.value) || 0), maxGold));
+    goldInput.value = gold;
+
+    this.game.network?.send({
+      type: "trade_offer_update",
+      gold,
+      items: this._tradeMyItems
+    });
+  }
+
+  _toggleTradeItem(slotIndex) {
+    const idx = this._tradeMyItems.indexOf(slotIndex);
+    if (idx >= 0) {
+      this._tradeMyItems.splice(idx, 1);
+    } else {
+      if (this._tradeMyItems.length >= 10) return;
+      this._tradeMyItems.push(slotIndex);
+    }
+    this._sendTradeOfferUpdate();
+    this._inventoryDirty = true;
+    this.renderTradeMyItems();
+  }
+
+  updateTradePartnerOffer(gold, items) {
+    this._tradePartnerGold = gold || 0;
+    this._tradePartnerItems = items || [];
+    this.renderTradePartnerOffer();
+  }
+
+  updateTradeMyOffer(gold, items, confirmed, partnerConfirmed) {
+    this._tradeMyGold = gold;
+    this._tradeMyItems = items || [];
+    this._tradeMyConfirmed = confirmed;
+    this._tradePartnerConfirmed = partnerConfirmed;
+    this._inventoryDirty = true;
+    this.renderTradeMyItems();
+    this._renderTradeStatus();
+  }
+
+  updateTradeConfirmState(confirmed, partnerConfirmed) {
+    this._tradeMyConfirmed = confirmed;
+    this._tradePartnerConfirmed = partnerConfirmed;
+    this._renderTradeStatus();
+  }
+
+  renderTradeWindow() {
+    this.renderTradeMyItems();
+    this.renderTradePartnerOffer();
+    this._renderTradeStatus();
+  }
+
+  renderTradeMyItems() {
+    const grid = document.getElementById("trade-my-items");
+    if (!grid) return;
+    grid.textContent = "";
+
+    const slots = this.game.entities.player.inventorySlots;
+    const sprites = this.game.sprites;
+
+    for (const slotIdx of this._tradeMyItems) {
+      const item = slots[slotIdx];
+      if (!item) continue;
+      const el = this._createTradeItemSlot(item, sprites, () => {
+        this._toggleTradeItem(slotIdx);
+      });
+      grid.append(el);
+    }
+
+    // Show empty slots if less than items offered
+    if (this._tradeMyItems.length === 0) {
+      const hint = document.createElement("div");
+      hint.className = "trade-hint";
+      hint.textContent = "Click items in inventory to add";
+      grid.append(hint);
+    }
+  }
+
+  renderTradePartnerOffer() {
+    const grid = document.getElementById("trade-partner-items");
+    if (!grid) return;
+    grid.textContent = "";
+
+    const goldDisplay = document.getElementById("trade-partner-gold-display");
+    if (goldDisplay) goldDisplay.textContent = `Gold: ${this._tradePartnerGold}`;
+
+    const sprites = this.game.sprites;
+
+    for (const item of this._tradePartnerItems) {
+      const el = this._createTradeItemSlot(item, sprites);
+      grid.append(el);
+    }
+
+    if (this._tradePartnerItems.length === 0 && !this._tradePartnerGold) {
+      const hint = document.createElement("div");
+      hint.className = "trade-hint";
+      hint.textContent = "Waiting for offer...";
+      grid.append(hint);
+    }
+  }
+
+  _createTradeItemSlot(item, sprites, onClick) {
+    const slot = document.createElement("div");
+    slot.className = "trade-item-slot";
+    if (onClick) slot.style.cursor = "pointer";
+
+    this._applyRarity(slot, item.rarity || this.game.data?.items?.[item.id]?.rarity);
+
+    const icon = sprites && sprites.get(`icons/${item.icon || item.id}`);
+    if (icon) {
+      const img = document.createElement("img");
+      img.src = icon.src;
+      img.className = "item-icon";
+      img.width = 28;
+      img.height = 28;
+      slot.append(img);
+    }
+
+    if (item.qty && item.qty > 1) {
+      const qtySpan = document.createElement("span");
+      qtySpan.className = "stack-qty";
+      qtySpan.textContent = item.qty;
+      slot.append(qtySpan);
+    }
+
+    slot.title = this._itemTooltipText(item);
+
+    if (onClick) {
+      const removeHint = document.createElement("span");
+      removeHint.className = "trade-remove-hint";
+      removeHint.textContent = "✕";
+      slot.append(removeHint);
+      slot.addEventListener("click", onClick);
+    }
+
+    return slot;
+  }
+
+  _renderTradeStatus() {
+    const myStatus = document.getElementById("trade-my-status");
+    const partnerStatus = document.getElementById("trade-partner-status");
+    const confirmBtn = document.getElementById("trade-confirm-btn");
+
+    if (myStatus) {
+      myStatus.textContent = this._tradeMyConfirmed ? "✓ Confirmed" : "Not confirmed";
+      myStatus.classList.toggle("confirmed", this._tradeMyConfirmed);
+    }
+    if (partnerStatus) {
+      partnerStatus.textContent = this._tradePartnerConfirmed ? "✓ Confirmed" : "Not confirmed";
+      partnerStatus.classList.toggle("confirmed", this._tradePartnerConfirmed);
+    }
+    if (confirmBtn) {
+      confirmBtn.textContent = this._tradeMyConfirmed ? "Confirmed ✓" : "Confirm";
+      confirmBtn.disabled = this._tradeMyConfirmed;
+      confirmBtn.classList.toggle("trade-confirmed", this._tradeMyConfirmed);
+    }
+  }
+
+  _escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   /* ── Bank UI ────────────────────────────────────────── */
@@ -2561,6 +2895,10 @@ export class UISystem {
 
     addOption("Block", () => {
       this.game.network?.sendBlockPlayer(player.name);
+    });
+
+    addOption("Trade", () => {
+      this.game.network?.send({ type: "trade_request", targetId: player.id });
     });
 
     const pvpMode = this.game.pvpMode || "none";

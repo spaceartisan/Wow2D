@@ -54,6 +54,7 @@ http://localhost:3000
 | Left-click enemy | Select target (does not attack) |
 | Left-click player | Select target (friendly) |
 | Right-click enemy | Select target and engage auto-attack |
+| Right-click other player | Context menu: Whisper, Invite to Party, Add Friend, Block, Trade |
 | Right-click inventory item | Context menu: Equip, Use, Dismantle, or Drop |
 | Click equipment slot | Unequip item back to inventory |
 | `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
@@ -145,7 +146,15 @@ http://localhost:3000
   - Party chat channel (`/p`) with blue-styled messages
 - Social window (O key) with Friends, Party, and Blocked tabs
   - Friends list with online/offline status, whisper buttons, add/remove/block
-  - Right-click context menu on other players: Whisper, Invite to Party, Add Friend, Block
+  - Right-click context menu on other players: Whisper, Invite to Party, Add Friend, Block, Trade
+- Player-to-player trading system
+  - Right-click another player and select "Trade" to send a trade request (must be within 300 px)
+  - Target receives an accept/decline popup with 30-second auto-decline timer
+  - Two-column trade window: offer gold and up to 10 inventory items each
+  - Both players must confirm before the trade executes; changing an offer resets both confirmations
+  - Server validates inventory space for both parties before completing the swap
+  - Blocked players cannot send trade requests
+  - Trades auto-cancel on disconnect, death, or map change
 - Duplicate login detection (kicks old session)
 - Heartbeat-based dead connection cleanup
 

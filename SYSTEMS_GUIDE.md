@@ -37,8 +37,9 @@ All values are sourced directly from the codebase. If something below disagrees 
 28. [Branching Dialog System](#28-branching-dialog-system)
 29. [Party System](#29-party-system)
 30. [Social / Friends System](#30-social--friends-system)
-31. [End-to-End Flow Examples](#31-end-to-end-flow-examples)
-32. [Glossary](#32-glossary)
+31. [Trading System](#31-trading-system)
+32. [End-to-End Flow Examples](#32-end-to-end-flow-examples)
+33. [Glossary](#33-glossary)
 
 ---
 
@@ -1210,7 +1211,7 @@ A clear breakdown of what runs where and who has the final say.
 
 Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
 
-### Client → Server (26 types)
+### Client → Server (32 types)
 
 | `type` | Payload | Handler |
 |--------|---------|---------|
@@ -1240,8 +1241,14 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `craft` | `recipeId` | `handleCraft()` |
 | `dismantle_item` | `index` | `handleDismantleItem()` |
 | `respawn` | *(none)* | *(no-op — death timer auto-respawns)* |
+| `trade_request` | `targetId` | `handleTradeRequest()` |
+| `trade_accept` | `fromId` | `handleTradeAccept()` |
+| `trade_decline` | `fromId` | `handleTradeDecline()` |
+| `trade_offer_update` | `gold`, `items[]` | `handleTradeOfferUpdate()` |
+| `trade_confirm` | *(none)* | `handleTradeConfirm()` |
+| `trade_cancel` | *(none)* | `handleTradeCancel()` |
 
-### Server → Client — Unicast (33 types)
+### Server → Client — Unicast (41 types)
 
 | `type` | Key payload fields | Sent by |
 |--------|--------------------|---------|
@@ -1278,6 +1285,14 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `auth_error` | `error` | `server.js` auth |
 | `kicked` | `reason` | `server.js` duplicate-login / admin |
 | `chat` | `channel`, `from`, `text`, `playerId?`, `to?` | `handleChat()` / admin |
+| `trade_request_received` | `fromId`, `fromName` | `handleTradeRequest()` |
+| `trade_result` | `ok`, `error?` | `handleTradeRequest/Accept/Decline()` |
+| `trade_opened` | `partnerId`, `partnerName` | `handleTradeAccept()` |
+| `trade_partner_offer` | `gold`, `items[]` | `handleTradeOfferUpdate()` |
+| `trade_offer_accepted` | `ok` | `handleTradeOfferUpdate()` |
+| `trade_confirm_update` | `confirmed`, `partnerConfirmed` | `handleTradeConfirm/OfferUpdate()` |
+| `trade_completed` | `inventory[]`, `gold` | `_executeTrade()` |
+| `trade_cancelled` | `reason` | `_cancelTrade()` |
 
 ### Server → Broadcast (all players on map)
 
@@ -1495,7 +1510,7 @@ Opened via the social icon (two-person group icon) in the HUD. Has three tabs:
 
 ### Right-Click Context Menu
 
-Right-clicking another player in the world shows: Whisper, Invite to Party, Add Friend, Block.
+Right-clicking another player in the world shows: Whisper, Invite to Party, Add Friend, Block, Trade.
 
 ### Whisper
 
@@ -1503,7 +1518,79 @@ Chat command `/w PlayerName message`. Whisper tab in the chat window. Styled wit
 
 ---
 
-## 31. End-to-End Flow Examples
+## 31. Trading System
+
+**Files:** `game/ServerWorld.js` (server), `public/js/systems/NetworkSystem.js` (client net), `public/js/systems/UISystem.js` (client UI)
+
+Player-to-player trading allows two players to exchange gold and inventory items in a secure, server-authoritative window.
+
+### Initiating a Trade
+
+1. Right-click another player in the world and select **Trade** from the context menu.
+2. Client sends `trade_request` with the target player's ID.
+3. Server validates:
+   - Both players are alive and on the same map
+   - Distance ≤ 300 px
+   - Neither player is already in a trade or has a pending trade request
+   - The target has not blocked the requester (`database.isBlocked()` check)
+4. Target receives `trade_request_received` → a popup with Accept/Decline and a 30-second auto-decline timer.
+
+### Trade Window
+
+When the target accepts (`trade_accept`):
+- Both players receive `trade_opened` with partner info.
+- A two-column trade window appears: **Your Offer** (left) and **Partner's Offer** (right).
+- Each side has a gold input field and a 10-slot item grid.
+
+### Updating Offers
+
+- Clicking an inventory item adds/removes it from the trade (up to 10 items).
+- Changing the gold input or clicking items sends `trade_offer_update` with the full current offer (`gold`, `items[]`).
+- The server relays the offer to the partner via `trade_partner_offer`.
+- **Any offer change resets both players' confirmations** — server sends `trade_confirm_update` with `confirmed: false, partnerConfirmed: false` to both.
+
+### Confirmation & Execution
+
+| Step | Message | Result |
+|------|---------|--------|
+| Player clicks Confirm | `trade_confirm` | Server sets that player's `_tradeConfirmed = true`, sends `trade_confirm_update` to both |
+| Both confirmed | — | Server calls `_executeTrade()` |
+| Execution | — | Server validates inventory space for both parties, swaps gold and items atomically, saves both characters, sends `trade_completed` with updated `inventory[]` and `gold` |
+
+### Validation (`_executeTrade`)
+
+Before swapping, the server:
+1. Clones both players' inventory slots.
+2. Removes offered items from the cloned slots (verifies they still exist).
+3. Attempts to add received items to the cloned slots via `_addItemToSlots()`.
+4. If either player lacks space, both receive `trade_cancelled` with reason `"Not enough inventory space"`.
+5. On success, the real inventories are updated and both players are saved to the database.
+
+### Auto-Cancel Conditions
+
+Trades (both pending requests and open windows) are automatically cancelled when:
+- Either player **disconnects** (`removePlayer` cleanup)
+- Either player **dies** (PvE `onPlayerDeath` or PvP `_onPvpDeath`)
+- Either player **changes map** (`handleMapChange`)
+- Either player clicks **Cancel** (`trade_cancel`)
+
+The other party receives `trade_cancelled` with a descriptive reason.
+
+### Trade State (Server)
+
+Active trades are tracked in-memory on each player object:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_tradePendingFrom` | `playerId \| null` | Incoming trade request sender |
+| `_tradePendingTo` | `playerId \| null` | Outgoing trade request target |
+| `_tradePartner` | `playerId \| null` | Active trade partner |
+| `_tradeOffer` | `{ gold, items[] }` | This player's current offer |
+| `_tradeConfirmed` | `boolean` | Whether this player has confirmed |
+
+---
+
+## 32. End-to-End Flow Examples
 
 Step-by-step traces of common game actions from input to pixels on screen.
 
@@ -1927,7 +2014,7 @@ When a player changes floors via stairs, their position is snapped to the center
 
 ---
 
-## 32. Glossary
+## 33. Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -1961,4 +2048,5 @@ When a player changes floors via stairs, their position is snapped to the center
 | **Sequence number (`seq`)** | Integer tagged on each move message. Server acks it so the client can identify which prediction to compare against. |
 | **blendMode** | Canvas compositing mode. Most particles use `"lighter"` (additive blending) for glow effects. |
 | **Tile modifier** | An invisible map zone defined in `tileModifiers` that applies a buff, debuff, DoT, or HoT to players standing on it. |
-| **Context menu** | Right-click popup on inventory items offering Equip, Use, or Drop actions depending on item type. |
+| **Context menu** | Right-click popup on inventory items offering Equip, Use, or Drop actions depending on item type. Also appears on other players with Whisper, Invite to Party, Add Friend, Block, and Trade options. |
+| **Trade window** | Two-column UI panel where two players exchange gold and items. Both must confirm; any offer change resets confirmations. |

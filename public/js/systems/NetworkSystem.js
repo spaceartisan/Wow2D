@@ -630,6 +630,30 @@ export class NetworkSystem {
       case "duel_ended":
         this.onDuelEnded(msg);
         break;
+      case "trade_request_received":
+        this.onTradeRequestReceived(msg);
+        break;
+      case "trade_result":
+        this.onTradeResult(msg);
+        break;
+      case "trade_opened":
+        this.onTradeOpened(msg);
+        break;
+      case "trade_partner_offer":
+        this.onTradePartnerOffer(msg);
+        break;
+      case "trade_offer_accepted":
+        this.onTradeOfferAccepted(msg);
+        break;
+      case "trade_confirm_update":
+        this.onTradeConfirmUpdate(msg);
+        break;
+      case "trade_completed":
+        this.onTradeCompleted(msg);
+        break;
+      case "trade_cancelled":
+        this.onTradeCancelled(msg);
+        break;
       case "player_cast_start":
         this.onPlayerCastStart(msg);
         break;
@@ -1300,10 +1324,31 @@ export class NetworkSystem {
       const hit = msg.pvpHit;
       const tp = this.game.entities.remotePlayers.find(p => p.id === hit.targetPlayerId)
         || (this.game.entities.player.id === hit.targetPlayerId ? this.game.entities.player : null);
-      if (tp) {
-        if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, tp.x, tp.y);
+
+      if (skillDef?.projectileSpeed > 0) {
+        // Spawn visual projectile — defer hit effects to onHit
+        const pColors = NetworkSystem._PROJ_COLORS[skillDef.damageType] || NetworkSystem._PROJ_COLORS.physical;
+        this.game.projectiles.spawn({
+          sx: player.x, sy: player.y,
+          tx: tp ? tp.x : player.x, ty: tp ? tp.y : player.y,
+          targetPlayerId: hit.targetPlayerId,
+          speed: skillDef.projectileSpeed,
+          color: pColors.color, trail: pColors.trail, size: pColors.size,
+          onHit: () => {
+            const t = this.game.entities.remotePlayers.find(p => p.id === hit.targetPlayerId)
+              || (this.game.entities.player.id === hit.targetPlayerId ? this.game.entities.player : null);
+            if (t) {
+              if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, t.x, t.y);
+            }
+            if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+          }
+        });
+      } else {
+        if (tp) {
+          if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, tp.x, tp.y);
+        }
+        if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
       }
-      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
       this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: ${hit.damage} damage.`);
     } else if (msg.damage != null && msg.enemyId != null) {
       // Single-target PVE damage tick
@@ -1311,10 +1356,30 @@ export class NetworkSystem {
       if (enemy) {
         enemy.hp = msg.enemyHp;
         enemy.maxHp = msg.enemyMaxHp;
-        if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, enemy.x, enemy.y);
       }
       this.enemyOverrides.set(msg.enemyId, { hp: msg.enemyHp, maxHp: msg.enemyMaxHp });
-      if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+
+      if (skillDef?.projectileSpeed > 0) {
+        // Spawn visual projectile — defer hit effects to onHit
+        const pColors = NetworkSystem._PROJ_COLORS[skillDef.damageType] || NetworkSystem._PROJ_COLORS.physical;
+        this.game.projectiles.spawn({
+          sx: player.x, sy: player.y,
+          tx: enemy ? enemy.x : player.x, ty: enemy ? enemy.y : player.y,
+          targetId: msg.enemyId,
+          speed: skillDef.projectileSpeed,
+          color: pColors.color, trail: pColors.trail, size: pColors.size,
+          onHit: () => {
+            const e = this.game.entities.getEnemyById(msg.enemyId);
+            if (e) {
+              if (skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, e.x, e.y);
+            }
+            if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+          }
+        });
+      } else {
+        if (enemy && skillDef?.hitParticle) this.game.particles.emit(skillDef.hitParticle, enemy.x, enemy.y);
+        if (skillDef?.sfx) this.game.audio.play(skillDef.sfx);
+      }
       this.game.ui.addMessage(`${skillDef?.name || msg.skillId} tick ${msg.tickNum}: ${msg.damage} damage.`);
     } else if (msg.aoe && msg.hits) {
       // AoE damage tick
@@ -2108,6 +2173,9 @@ export class NetworkSystem {
   }
 
   onPvpCombatVisual(msg) {
+    // If a projectile is in flight, it handles hit effects — just skip
+    if (msg.projectileHit) return;
+
     // Third-party observers see PVP combat between two other players
     const attacker = this.game.entities.remotePlayers.find(p => p.id === msg.attackerId);
     const target = this.game.entities.remotePlayers.find(p => p.id === msg.targetId)
@@ -2191,6 +2259,54 @@ export class NetworkSystem {
     if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
       this.game.ui.renderSocialContent();
     }
+  }
+
+  /* ── Trade handlers ─────────────────────────────────── */
+
+  onTradeRequestReceived(msg) {
+    this.game.ui.addMessage(`[Trade] ${msg.fromName} wants to trade with you.`, "system");
+    this.game.ui._pendingTradeRequest = { fromId: msg.fromId, fromName: msg.fromName };
+    this.game.ui.showTradeRequestPopup(msg.fromName);
+  }
+
+  onTradeResult(msg) {
+    if (msg.error) {
+      this.game.ui.addMessage(`[Trade] ${msg.error}`, "error");
+    } else if (msg.message) {
+      this.game.ui.addMessage(`[Trade] ${msg.message}`, "system");
+    }
+  }
+
+  onTradeOpened(msg) {
+    this.game.ui._pendingTradeRequest = null;
+    this.game.ui.openTradeWindow(msg.partnerId, msg.partnerName);
+  }
+
+  onTradePartnerOffer(msg) {
+    this.game.ui.updateTradePartnerOffer(msg.gold, msg.items);
+  }
+
+  onTradeOfferAccepted(msg) {
+    this.game.ui.updateTradeMyOffer(msg.gold, msg.items, msg.confirmed, msg.partnerConfirmed);
+  }
+
+  onTradeConfirmUpdate(msg) {
+    this.game.ui.updateTradeConfirmState(msg.confirmed, msg.partnerConfirmed);
+  }
+
+  onTradeCompleted(msg) {
+    // Update local inventory and gold
+    this.game.entities.player.inventorySlots = msg.inventory;
+    this.game.entities.player.gold = msg.gold;
+    this.game.ui.closeTradeWindow();
+    this.game.ui.addMessage("[Trade] Trade completed successfully!", "system");
+    this.game.ui._inventoryDirty = true;
+  }
+
+  onTradeCancelled() {
+    this.game.ui._pendingTradeRequest = null;
+    this.game.ui.closeTradeWindow();
+    this.game.ui.addMessage("[Trade] Trade cancelled.", "system");
   }
 
   /* ── Remote player cast/channel visual handlers ─── */

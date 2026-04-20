@@ -205,6 +205,12 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `craft` | `recipeId` | Craft an item at a crafting station (proximity, skill level, materials validated) |
 | `dismantle_item` | `index` | Dismantle an equipment item into materials (must be near vendor NPC) |
 | `respawn` | — | Signal ready to respawn (actual respawn is tick-driven) |
+| `trade_request` | `targetId` | Send a trade request to another player (proximity + block validated) |
+| `trade_accept` | `fromId` | Accept a pending trade request |
+| `trade_decline` | `fromId` | Decline a pending trade request |
+| `trade_offer_update` | `gold, items[]` | Update your trade offer (gold amount + up to 10 item indices) |
+| `trade_confirm` | — | Confirm your side of the trade |
+| `trade_cancel` | — | Cancel the active trade |
 
 ### Server → Client Messages
 
@@ -252,6 +258,14 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `you_respawned` | Auto-respawn | `x, y, hp, maxHp, mana, maxMana` |
 | `combat_visual` | Combat effect | Polymorphic: melee/skill hit, self-target, enemy attack, projectile hit (broadcast to map, excludes source) |
 | `projectile_spawn` | Ranged launch | `attackerId, sx, sy, targetEnemyId, speed, weaponId?, skillId?, damageType?` (broadcast) |
+| `trade_request_received` | Trade incoming | `fromId, fromName` |
+| `trade_result` | Trade action result | `ok, error?` |
+| `trade_opened` | Trade window opens | `partnerId, partnerName` |
+| `trade_partner_offer` | Partner offer update | `gold, items[]` |
+| `trade_offer_accepted` | Offer acknowledged | `ok` |
+| `trade_confirm_update` | Confirm state | `confirmed, partnerConfirmed` |
+| `trade_completed` | Trade executed | `inventory[], gold` |
+| `trade_cancelled` | Trade ended | `reason` |
 | `party_result` | Party action result | `ok?, error?, message?` |
 | `party_invite_received` | Incoming invite | `fromId, from` (inviter's name) |
 | `party_update` | Party state changed | `partyId, leader, members[], pendingInvites[]` |
@@ -344,7 +358,12 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
     milling: { level: 1, xp: 0 },
     cooking: { level: 1, xp: 0 }
   },
-  lastGatherTick: 0              // Tick of last successful gather (cooldown)
+  lastGatherTick: 0,             // Tick of last successful gather (cooldown)
+  _tradePendingFrom: null,       // Incoming trade request sender ID
+  _tradePendingTo: null,         // Outgoing trade request target ID
+  _tradePartner: null,           // Active trade partner ID
+  _tradeOffer: null,             // { gold, items[] } — this player's current offer
+  _tradeConfirmed: false         // Whether this player has confirmed their offer
 }
 ```
 
@@ -567,6 +586,54 @@ Right-clicking another player in the game world opens a context menu with:
 - **Invite to Party** — Send a party invite (only when you are in a party as leader)
 - **Add Friend** — Send a friend request
 - **Block** — Block the player
+- **Trade** — Send a trade request (must be within 300 px)
+
+---
+
+## Trading System
+
+Player-to-player trading is fully server-authoritative. All trade state is in-memory on the player objects.
+
+### Trade-Related Messages
+
+| Direction | type | Fields | Description |
+|-----------|------|--------|-------------|
+| C→S | `trade_request` | `targetId` | Initiate trade (distance ≤ 300 px, block check, no existing trade) |
+| C→S | `trade_accept` | `fromId` | Accept pending trade request |
+| C→S | `trade_decline` | `fromId` | Decline pending trade request |
+| C→S | `trade_offer_update` | `gold`, `items[]` | Update offer (max 10 items); resets both confirmations |
+| C→S | `trade_confirm` | — | Confirm current offer |
+| C→S | `trade_cancel` | — | Cancel trade |
+| S→C | `trade_request_received` | `fromId`, `fromName` | Incoming trade request popup |
+| S→C | `trade_result` | `ok`, `error?` | Result of trade_request/accept/decline |
+| S→C | `trade_opened` | `partnerId`, `partnerName` | Trade window should open |
+| S→C | `trade_partner_offer` | `gold`, `items[]` | Partner's updated offer |
+| S→C | `trade_offer_accepted` | `ok` | Server acknowledged your offer update |
+| S→C | `trade_confirm_update` | `confirmed`, `partnerConfirmed` | Confirmation state for both sides |
+| S→C | `trade_completed` | `inventory[]`, `gold` | Trade executed — updated inventory and gold |
+| S→C | `trade_cancelled` | `reason` | Trade ended (cancel, disconnect, death, map change) |
+
+### Trade Lifecycle
+
+| Step | Client → Server | Server Logic | Server → Client |
+|------|----------------|--------------|----------------|
+| Request | `trade_request` (targetId) | Validates: same map, distance ≤ 300px, not blocked, no existing trade | `trade_request_received` to target |
+| Accept | `trade_accept` (fromId) | Sets `_tradePartner` on both, clears pending | `trade_opened` to both |
+| Decline | `trade_decline` (fromId) | Clears pending | `trade_result` to requester |
+| Update offer | `trade_offer_update` (gold, items[]) | Stores offer, resets both confirmations | `trade_partner_offer` to partner, `trade_offer_accepted` to sender, `trade_confirm_update` to both |
+| Confirm | `trade_confirm` | Sets `_tradeConfirmed`; if both confirmed → `_executeTrade()` | `trade_confirm_update` to both; on success: `trade_completed` to both |
+| Cancel | `trade_cancel` | Clears all trade state | `trade_cancelled` to partner |
+
+### Auto-Cancel
+
+Trades auto-cancel (with `trade_cancelled` sent to the other party) when:
+- Player disconnects (`removePlayer`)
+- Player dies (PvE or PvP death)
+- Player changes map (`handleMapChange`)
+
+### Trade Execution Validation
+
+Before swapping items, `_executeTrade()` clones both inventories, removes offered items, then attempts to add received items. If either player lacks inventory space, both receive `trade_cancelled` with reason `"Not enough inventory space"`. On success, both players' inventories and gold are updated atomically and saved to the database.
 
 ---
 

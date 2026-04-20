@@ -545,6 +545,17 @@ class ServerWorld {
         const target = this.players.get(p._pendingDuelTarget);
         if (target) this._clearDuelPending(target);
       }
+      // Clean up trade state
+      this._cancelTrade(p);
+      if (p._pendingTradeTarget) {
+        const target = this.players.get(p._pendingTradeTarget);
+        if (target) { this._clearTradePending(target); this.send(target.ws, { type: "trade_cancelled" }); }
+      }
+      if (p._pendingTradeFrom) {
+        const from = this.players.get(p._pendingTradeFrom);
+        if (from) { this._clearTradePending(from); this.send(from.ws, { type: "trade_cancelled" }); }
+      }
+      this._clearTradePending(p);
     }
 
     // Clean up party membership
@@ -730,6 +741,24 @@ class ServerWorld {
       case "duel_cancel":
         this.handleDuelCancel(player);
         break;
+      case "trade_request":
+        this.handleTradeRequest(player, msg);
+        break;
+      case "trade_accept":
+        this.handleTradeAccept(player, msg);
+        break;
+      case "trade_decline":
+        this.handleTradeDecline(player, msg);
+        break;
+      case "trade_offer_update":
+        this.handleTradeOfferUpdate(player, msg);
+        break;
+      case "trade_confirm":
+        this.handleTradeConfirm(player);
+        break;
+      case "trade_cancel":
+        this.handleTradeCancel(player);
+        break;
       default:
         break;
     }
@@ -796,6 +825,10 @@ class ServerWorld {
     // Clean up duel on map change
     this._endDuel(player);
     this._clearDuelPending(player);
+
+    // Cancel trade on map change
+    this._cancelTrade(player);
+    this._clearTradePending(player);
 
     // Move player to new map
     player.mapId = targetMapId;
@@ -1078,6 +1111,10 @@ class ServerWorld {
     this._endDuel(victim);
     this._clearDuelPending(victim);
 
+    // Cancel any active trade on death
+    this._cancelTrade(victim);
+    this._clearTradePending(victim);
+
     // PVP death gold penalty (configurable, defaults to 5)
     const goldLost = Math.min(victim.gold || 0, PVP_CONFIG.deathGoldPenalty || 5);
     victim.gold = Math.max(0, (victim.gold || 0) - goldLost);
@@ -1243,6 +1280,323 @@ class ServerWorld {
       this.send(opponent.ws, { type: "duel_ended" });
     }
     this.send(player.ws, { type: "duel_ended" });
+  }
+
+  /* ── Trading ────────────────────────────────────────── */
+
+  handleTradeRequest(player, msg) {
+    if (player.dead) return;
+    const targetId = msg.targetId;
+    const target = this.players.get(targetId);
+    if (!target || target.dead || target.mapId !== player.mapId) {
+      this.send(player.ws, { type: "trade_result", error: "Player not found." });
+      return;
+    }
+    if (target.id === player.id) return;
+
+    // Block check (bidirectional)
+    const database = require("./database");
+    if (database.isBlocked(player.username, target.username) ||
+        database.isBlocked(target.username, player.username)) {
+      this.send(player.ws, { type: "trade_result", error: "Cannot trade with that player." });
+      return;
+    }
+
+    // Can't request trade while already in a trade
+    if (player._tradeWith) {
+      this.send(player.ws, { type: "trade_result", error: "You are already in a trade." });
+      return;
+    }
+    if (target._tradeWith) {
+      this.send(player.ws, { type: "trade_result", error: `${target.name} is already trading.` });
+      return;
+    }
+    // Can't send duplicate pending request
+    if (player._pendingTradeTarget === target.id) {
+      this.send(player.ws, { type: "trade_result", error: "Trade request already sent." });
+      return;
+    }
+
+    // Distance check (within 300 px)
+    if (dist(player.x, player.y, target.x, target.y) > 300) {
+      this.send(player.ws, { type: "trade_result", error: "Too far away to trade." });
+      return;
+    }
+
+    player._pendingTradeTarget = target.id;
+    target._pendingTradeFrom = player.id;
+
+    this.send(target.ws, {
+      type: "trade_request_received",
+      fromId: player.id,
+      fromName: player.name
+    });
+    this.send(player.ws, { type: "trade_result", ok: true, message: `Trade request sent to ${target.name}.` });
+  }
+
+  handleTradeAccept(player) {
+    const requesterId = player._pendingTradeFrom;
+    if (!requesterId) {
+      this.send(player.ws, { type: "trade_result", error: "No pending trade request." });
+      return;
+    }
+    const requester = this.players.get(requesterId);
+    if (!requester || requester.dead || requester.mapId !== player.mapId) {
+      this._clearTradePending(player);
+      this.send(player.ws, { type: "trade_result", error: "Requester is no longer available." });
+      return;
+    }
+
+    // Clear pending state
+    this._clearTradePending(player);
+    this._clearTradePending(requester);
+
+    // Start trade session
+    player._tradeWith = requester.id;
+    requester._tradeWith = player.id;
+    player._tradeOffer = { gold: 0, items: [] };
+    requester._tradeOffer = { gold: 0, items: [] };
+    player._tradeConfirmed = false;
+    requester._tradeConfirmed = false;
+
+    this.send(player.ws, {
+      type: "trade_opened",
+      partnerId: requester.id,
+      partnerName: requester.name
+    });
+    this.send(requester.ws, {
+      type: "trade_opened",
+      partnerId: player.id,
+      partnerName: player.name
+    });
+  }
+
+  handleTradeDecline(player) {
+    const requesterId = player._pendingTradeFrom;
+    if (!requesterId) return;
+    const requester = this.players.get(requesterId);
+
+    this._clearTradePending(player);
+    if (requester) {
+      this._clearTradePending(requester);
+      this.send(requester.ws, { type: "trade_result", error: `${player.name} declined your trade request.` });
+    }
+    this.send(player.ws, { type: "trade_result", ok: true, message: "Trade declined." });
+  }
+
+  handleTradeOfferUpdate(player, msg) {
+    if (!player._tradeWith) return;
+    const partner = this.players.get(player._tradeWith);
+    if (!partner) { this._cancelTrade(player); return; }
+
+    const gold = Math.max(0, Math.min(Math.floor(Number(msg.gold) || 0), player.gold || 0));
+    const itemIndices = Array.isArray(msg.items) ? msg.items : [];
+
+    // Validate item indices — must be valid inventory slots with items, max 10 items
+    const validItems = [];
+    const seenSlots = new Set();
+    for (const idx of itemIndices) {
+      const i = Number(idx);
+      if (!Number.isInteger(i) || i < 0 || i >= 20) continue;
+      if (seenSlots.has(i)) continue;
+      if (!player.inventory[i]) continue;
+      seenSlots.add(i);
+      if (validItems.length >= 10) break;
+      validItems.push(i);
+    }
+
+    player._tradeOffer = { gold, items: validItems };
+
+    // Reset both confirmations when offer changes
+    player._tradeConfirmed = false;
+    partner._tradeConfirmed = false;
+
+    // Build item details for partner display
+    const itemDetails = validItems.map(i => ({
+      slot: i,
+      ...player.inventory[i]
+    }));
+
+    // Notify partner of updated offer
+    this.send(partner.ws, {
+      type: "trade_partner_offer",
+      gold,
+      items: itemDetails
+    });
+
+    // Notify player their offer was accepted, and reset confirm states
+    this.send(player.ws, {
+      type: "trade_offer_accepted",
+      gold,
+      items: validItems,
+      confirmed: false,
+      partnerConfirmed: false
+    });
+    this.send(partner.ws, {
+      type: "trade_confirm_update",
+      confirmed: false,
+      partnerConfirmed: false
+    });
+  }
+
+  handleTradeConfirm(player) {
+    if (!player._tradeWith) return;
+    const partner = this.players.get(player._tradeWith);
+    if (!partner) { this._cancelTrade(player); return; }
+
+    player._tradeConfirmed = true;
+
+    // Notify both of confirm state
+    this.send(player.ws, {
+      type: "trade_confirm_update",
+      confirmed: true,
+      partnerConfirmed: partner._tradeConfirmed
+    });
+    this.send(partner.ws, {
+      type: "trade_confirm_update",
+      confirmed: partner._tradeConfirmed,
+      partnerConfirmed: true
+    });
+
+    // If both confirmed, execute the trade
+    if (player._tradeConfirmed && partner._tradeConfirmed) {
+      this._executeTrade(player, partner);
+    }
+  }
+
+  handleTradeCancel(player) {
+    this._cancelTrade(player);
+    // Also cancel pending requests
+    const pendingTarget = player._pendingTradeTarget;
+    if (pendingTarget) {
+      const target = this.players.get(pendingTarget);
+      if (target) {
+        this._clearTradePending(target);
+        this.send(target.ws, { type: "trade_cancelled" });
+      }
+      this._clearTradePending(player);
+    }
+  }
+
+  _clearTradePending(player) {
+    player._pendingTradeTarget = null;
+    player._pendingTradeFrom = null;
+  }
+
+  _cancelTrade(player) {
+    const partnerId = player._tradeWith;
+    if (!partnerId) return;
+
+    player._tradeWith = null;
+    player._tradeOffer = null;
+    player._tradeConfirmed = false;
+
+    const partner = this.players.get(partnerId);
+    if (partner && partner._tradeWith === player.id) {
+      partner._tradeWith = null;
+      partner._tradeOffer = null;
+      partner._tradeConfirmed = false;
+      this.send(partner.ws, { type: "trade_cancelled" });
+    }
+    this.send(player.ws, { type: "trade_cancelled" });
+  }
+
+  _executeTrade(p1, p2) {
+    const offer1 = p1._tradeOffer;
+    const offer2 = p2._tradeOffer;
+
+    // Re-validate gold
+    if ((offer1.gold || 0) > (p1.gold || 0) || (offer2.gold || 0) > (p2.gold || 0)) {
+      this.send(p1.ws, { type: "trade_result", error: "Trade failed: insufficient gold." });
+      this.send(p2.ws, { type: "trade_result", error: "Trade failed: insufficient gold." });
+      this._cancelTrade(p1);
+      return;
+    }
+
+    // Re-validate items still exist in inventory
+    const p1Items = [];
+    for (const idx of offer1.items) {
+      if (!p1.inventory[idx]) {
+        this.send(p1.ws, { type: "trade_result", error: "Trade failed: item no longer available." });
+        this.send(p2.ws, { type: "trade_result", error: "Trade failed: partner's item no longer available." });
+        this._cancelTrade(p1);
+        return;
+      }
+      p1Items.push({ idx, item: { ...p1.inventory[idx] } });
+    }
+    const p2Items = [];
+    for (const idx of offer2.items) {
+      if (!p2.inventory[idx]) {
+        this.send(p2.ws, { type: "trade_result", error: "Trade failed: item no longer available." });
+        this.send(p1.ws, { type: "trade_result", error: "Trade failed: partner's item no longer available." });
+        this._cancelTrade(p1);
+        return;
+      }
+      p2Items.push({ idx, item: { ...p2.inventory[idx] } });
+    }
+
+    // Check inventory space: each player needs enough room for incoming items
+    // First remove offered items to free slots, then check if incoming items fit
+    const p1SlotsCopy = [...p1.inventory];
+    for (const { idx } of p1Items) p1SlotsCopy[idx] = null;
+    const p2SlotsCopy = [...p2.inventory];
+    for (const { idx } of p2Items) p2SlotsCopy[idx] = null;
+
+    // Test if p2's items fit into p1's inventory (after removing p1's offered items)
+    const p1Test = p1SlotsCopy.map(s => s ? { ...s } : null);
+    for (const { item } of p2Items) {
+      if (this._addItemToSlots(p1Test, { ...item }) < 0) {
+        this.send(p1.ws, { type: "trade_result", error: "Trade failed: not enough inventory space." });
+        this.send(p2.ws, { type: "trade_result", error: "Trade failed: partner doesn't have enough inventory space." });
+        this._cancelTrade(p1);
+        return;
+      }
+    }
+    // Test if p1's items fit into p2's inventory
+    const p2Test = p2SlotsCopy.map(s => s ? { ...s } : null);
+    for (const { item } of p1Items) {
+      if (this._addItemToSlots(p2Test, { ...item }) < 0) {
+        this.send(p2.ws, { type: "trade_result", error: "Trade failed: not enough inventory space." });
+        this.send(p1.ws, { type: "trade_result", error: "Trade failed: partner doesn't have enough inventory space." });
+        this._cancelTrade(p1);
+        return;
+      }
+    }
+
+    // Execute: remove offered items
+    for (const { idx } of p1Items) p1.inventory[idx] = null;
+    for (const { idx } of p2Items) p2.inventory[idx] = null;
+
+    // Swap gold
+    p1.gold = (p1.gold || 0) - (offer1.gold || 0) + (offer2.gold || 0);
+    p2.gold = (p2.gold || 0) - (offer2.gold || 0) + (offer1.gold || 0);
+
+    // Add received items
+    for (const { item } of p2Items) this._addItemToSlots(p1.inventory, item);
+    for (const { item } of p1Items) this._addItemToSlots(p2.inventory, item);
+
+    // Clear trade state
+    p1._tradeWith = null;
+    p1._tradeOffer = null;
+    p1._tradeConfirmed = false;
+    p2._tradeWith = null;
+    p2._tradeOffer = null;
+    p2._tradeConfirmed = false;
+
+    // Notify both
+    this.send(p1.ws, {
+      type: "trade_completed",
+      inventory: p1.inventory,
+      gold: p1.gold
+    });
+    this.send(p2.ws, {
+      type: "trade_completed",
+      inventory: p2.inventory,
+      gold: p2.gold
+    });
+
+    this._savePlayer(p1);
+    this._savePlayer(p2);
   }
 
   handleHeal(player) {
@@ -3380,6 +3734,20 @@ class ServerWorld {
           const damage = Math.max(1, Math.round((baseDmg + randInt(-2, 4)) * dmgMult));
           pvpTarget.hp -= damage;
 
+          // Broadcast projectile for channeled skills with projectileSpeed
+          if (skillDef.projectileSpeed > 0) {
+            this.broadcastToMap(player.mapId, {
+              type: "projectile_spawn",
+              attackerId: player.id,
+              sx: player.x, sy: player.y,
+              tx: pvpTarget.x, ty: pvpTarget.y,
+              targetPlayerId: pvpTarget.id,
+              speed: skillDef.projectileSpeed,
+              skillId,
+              damageType: skillDef.damageType || "physical",
+            });
+          }
+
           this.send(player.ws, {
             type: "skill_channel_tick",
             skillId,
@@ -3399,6 +3767,7 @@ class ServerWorld {
             hitSfx: skillDef.sfx || null,
             damageType: skillDef.damageType || "physical",
             damage, targetHp: pvpTarget.hp, targetMaxHp: pvpTarget.maxHp,
+            projectileHit: skillDef.projectileSpeed > 0 ? true : undefined,
           });
           this._setPvpCombatTimer(player, "attack", now);
           this._setPvpCombatTimer(pvpTarget, "defend", now);
@@ -3437,6 +3806,20 @@ class ServerWorld {
             debuffApplied = { id: skillDef.debuff.id, stat: skillDef.debuff.stat, modifier: skillDef.debuff.modifier, duration: skillDef.debuff.duration };
           }
 
+          // Broadcast projectile for channeled skills with projectileSpeed
+          if (skillDef.projectileSpeed > 0) {
+            this.broadcastToMap(player.mapId, {
+              type: "projectile_spawn",
+              attackerId: player.id,
+              sx: player.x, sy: player.y,
+              tx: enemy.x, ty: enemy.y,
+              targetEnemyId: enemy.id,
+              speed: skillDef.projectileSpeed,
+              skillId,
+              damageType: skillDef.damageType || "physical",
+            });
+          }
+
           this.send(player.ws, {
             type: "skill_channel_tick",
             skillId,
@@ -3456,7 +3839,7 @@ class ServerWorld {
             skillId,
             hitParticle: skillDef.hitParticle || skillDef.particle || null,
             hitSfx: skillDef.sfx || null,
-            projectileSpeed: 0,
+            projectileHit: skillDef.projectileSpeed > 0 ? true : false,
             damageType: skillDef.damageType || "physical",
             damage, enemyHp: enemy.hp, enemyMaxHp: enemy.maxHp,
           }, player.id);
@@ -4809,6 +5192,10 @@ class ServerWorld {
     player.dead = true;
     player.deathUntil = now + 4200;
     player.lootingDropId = null;
+
+    // Cancel any active trade on death
+    this._cancelTrade(player);
+    this._clearTradePending(player);
 
     // M7: Death gold penalty (server-authoritative)
     const goldLost = Math.min(player.gold || 0, 10);
