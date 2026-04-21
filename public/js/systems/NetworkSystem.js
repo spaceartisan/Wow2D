@@ -41,6 +41,7 @@ export class NetworkSystem {
 
     /** Tracks casting/channeling particle intervals for remote players. */
     this._remoteCastIntervals = new Map(); // playerId → intervalId
+    this._duelCountdownInterval = null;
 
     /* ── Source-style snapshot interpolation state ──── */
 
@@ -193,7 +194,9 @@ export class NetworkSystem {
     clearTimeout(this._reconnectTimer);
     clearInterval(this.positionSendInterval);
     clearInterval(this._skillCastInterval);
+    clearInterval(this._duelCountdownInterval);
     this._skillCastInterval = null;
+    this._duelCountdownInterval = null;
     // Clean up any remote cast intervals
     for (const intervalId of this._remoteCastIntervals.values()) {
       clearInterval(intervalId);
@@ -2181,6 +2184,7 @@ export class NetworkSystem {
   onPvpAttackResult(msg) {
     // Attacker sees their hit on another player
     this.game.ui.addMessage(`[PVP] You hit ${msg.targetName} for ${msg.damage}.`, "pvp");
+    this._applyRemotePlayerHp(msg.targetId, msg.targetHp, msg.targetMaxHp);
     const rp = this.game.entities.remotePlayers.find(p => p.id === msg.targetId);
     if (rp) {
       this.game.particles.emit("player_hit", rp.x, rp.y);
@@ -2188,6 +2192,9 @@ export class NetworkSystem {
   }
 
   onPvpCombatVisual(msg) {
+    // Apply immediate HP updates for player targets so target frame reacts instantly.
+    this._applyRemotePlayerHp(msg.targetId, msg.targetHp, msg.targetMaxHp);
+
     // If a projectile is in flight, it handles hit effects — just skip
     if (msg.projectileHit) return;
 
@@ -2258,7 +2265,27 @@ export class NetworkSystem {
   onDuelStarted(msg) {
     this.game.ui._pendingDuelChallenge = null;
     this.game._duelOpponent = { id: msg.opponentId, name: msg.opponentName };
-    this.game.ui.addMessage(`[Duel] Duel started with ${msg.opponentName}!`, "pvp");
+
+    clearInterval(this._duelCountdownInterval);
+    this._duelCountdownInterval = null;
+
+    const startsAt = Number(msg.startsAt) || (Date.now() + 3000);
+    const tickCountdown = () => {
+      const msLeft = startsAt - Date.now();
+      const secLeft = Math.ceil(msLeft / 1000);
+      if (secLeft > 0) {
+        this.game.ui.addMessage(`[Duel] ${secLeft}...`, "pvp");
+      } else {
+        this.game.ui.addMessage(`[Duel] Fight!`, "pvp");
+        clearInterval(this._duelCountdownInterval);
+        this._duelCountdownInterval = null;
+      }
+    };
+
+    this.game.ui.addMessage(`[Duel] Duel with ${msg.opponentName} begins in 3 seconds.`, "pvp");
+    tickCountdown();
+    this._duelCountdownInterval = setInterval(tickCountdown, 1000);
+
     if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
       this.game.ui.renderSocialContent();
     }
@@ -2268,11 +2295,39 @@ export class NetworkSystem {
     const opponent = this.game._duelOpponent;
     this.game._duelOpponent = null;
     this.game.ui._pendingDuelChallenge = null;
-    if (opponent) {
+
+    clearInterval(this._duelCountdownInterval);
+    this._duelCountdownInterval = null;
+
+    if (msg?.result === "victorious") {
+      const name = msg.opponentName || opponent?.name || "your opponent";
+      this.game.ui.addMessage(`[Duel] Victorious! You defeated ${name}.`, "pvp");
+    } else if (msg?.result === "defeated") {
+      const name = msg.opponentName || opponent?.name || "your opponent";
+      this.game.ui.addMessage(`[Duel] Defeated. ${name} was victorious.`, "pvp");
+    } else if (opponent) {
       this.game.ui.addMessage(`[Duel] Duel with ${opponent.name} has ended.`, "pvp");
     }
+
     if (this.game.ui.socialOpen && this.game.ui._socialTab === "pvp") {
       this.game.ui.renderSocialContent();
+    }
+  }
+
+  _applyRemotePlayerHp(targetId, hp, maxHp) {
+    if (!targetId) return;
+    if (hp == null && maxHp == null) return;
+
+    const latest = this._latestPlayerMap.get(targetId);
+    if (latest) {
+      if (hp != null) latest.hp = hp;
+      if (maxHp != null) latest.maxHp = maxHp;
+    }
+
+    const rp = this.game.entities.remotePlayers.find(p => p.id === targetId);
+    if (rp) {
+      if (hp != null) rp.hp = hp;
+      if (maxHp != null) rp.maxHp = maxHp;
     }
   }
 

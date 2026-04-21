@@ -487,6 +487,7 @@ class ServerWorld {
       pvpKills: Number(charData.pvpKills) || 0,
       pvpDeaths: Number(charData.pvpDeaths) || 0,
       pvpCombatUntil: 0,  // timestamp: combat timer preventing safe zone entry
+      _duelStartAt: 0,
     };
 
     this.players.set(id, state);
@@ -823,8 +824,8 @@ class ServerWorld {
         const midY = (player.y + y) / 2;
         if (mapEntry.collision.isBlocked(midX, midY, 16, floor)) return;
       }
-      // PVP combat timer: prevent entering safe zones
-      if (player.pvpCombatUntil > Date.now() && mapEntry.collision.isSafeZone(x, y)) {
+      // PVP combat timer: prevent entering safe zones (not during active duels)
+      if (player.pvpCombatUntil > Date.now() && !player._duelTarget && mapEntry.collision.isSafeZone(x, y)) {
         this.send(player.ws, { type: "pvp_safe_zone_blocked" });
         return;
       }
@@ -1066,7 +1067,11 @@ class ServerWorld {
     // "duel" mode — only if both players have an active duel (future: duel invite system)
     // For now, duel mode blocks all PVP unless in a duel
     if (pvpMode === "duel") {
-      return (attacker._duelTarget === target.id && target._duelTarget === attacker.id);
+      if (!(attacker._duelTarget === target.id && target._duelTarget === attacker.id)) return false;
+      const now = Date.now();
+      if ((attacker._duelStartAt || 0) > now) return false;
+      if ((target._duelStartAt || 0) > now) return false;
+      return true;
     }
     return false;
   }
@@ -1144,6 +1149,14 @@ class ServerWorld {
    * Handle PVP death — different from PVE.
    */
   _onPvpDeath(victim, killer, now) {
+    // Duel defeat: restore to 10% HP, end duel, no real death
+    if (victim._duelTarget) {
+      const opponentId = victim._duelTarget;
+      victim.hp = Math.max(1, Math.floor(victim.maxHp * 0.1));
+      this._endDuelWithResult(victim, killer);
+      return;
+    }
+
     victim.dead = true;
     victim.deathUntil = now + 4200;
     victim.lootingDropId = null;
@@ -1270,12 +1283,27 @@ class ServerWorld {
     this._clearDuelPending(player);
     this._clearDuelPending(challenger);
 
-    // Start duel
+    // Start duel with a short countdown before attacks are allowed
+    const startsAt = Date.now() + 3000;
     player._duelTarget = challenger.id;
+    player._duelStartAt = startsAt;
     challenger._duelTarget = player.id;
+    challenger._duelStartAt = startsAt;
 
-    this.send(player.ws, { type: "duel_started", opponentId: challenger.id, opponentName: challenger.name });
-    this.send(challenger.ws, { type: "duel_started", opponentId: player.id, opponentName: player.name });
+    this.send(player.ws, {
+      type: "duel_started",
+      opponentId: challenger.id,
+      opponentName: challenger.name,
+      startsAt,
+      countdownMs: 3000
+    });
+    this.send(challenger.ws, {
+      type: "duel_started",
+      opponentId: player.id,
+      opponentName: player.name,
+      startsAt,
+      countdownMs: 3000
+    });
   }
 
   handleDuelDecline(player, msg) {
@@ -1315,12 +1343,48 @@ class ServerWorld {
     const opponentId = player._duelTarget;
     if (!opponentId) return;
     player._duelTarget = null;
+    player._duelStartAt = 0;
+    player.pvpCombatUntil = 0;
     const opponent = this.players.get(opponentId);
     if (opponent && opponent._duelTarget === player.id) {
       opponent._duelTarget = null;
+      opponent._duelStartAt = 0;
+      opponent.pvpCombatUntil = 0;
       this.send(opponent.ws, { type: "duel_ended" });
     }
     this.send(player.ws, { type: "duel_ended" });
+  }
+
+  _endDuelWithResult(loser, winner) {
+    const loserId = loser.id;
+    const winnerId = winner ? winner.id : null;
+    loser._duelTarget = null;
+    loser._duelStartAt = 0;
+    loser.pvpCombatUntil = 0;
+    if (winner && this.players.has(winner.id)) {
+      winner._duelTarget = null;
+      winner._duelStartAt = 0;
+      winner.pvpCombatUntil = 0;
+      this.send(winner.ws, {
+        type: "duel_ended",
+        result: "victorious",
+        opponentName: loser.name
+      });
+    }
+    this.send(loser.ws, {
+      type: "duel_ended",
+      result: "defeated",
+      hp: loser.hp,
+      maxHp: loser.maxHp,
+      opponentName: winner ? winner.name : "Unknown"
+    });
+    // Broadcast updated HP for loser to all players on the map
+    this.broadcastToMap(loser.mapId, {
+      type: "player_update",
+      playerId: loser.id,
+      hp: loser.hp,
+      maxHp: loser.maxHp
+    });
   }
 
   /* ── Trading ────────────────────────────────────────── */

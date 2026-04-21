@@ -700,7 +700,7 @@ input, textarea {
   overflow: hidden;
 }
 
-.bar span {
+.bar > span:not(.bar-text) {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -708,11 +708,11 @@ input, textarea {
   transition: width 0.2s ease;
 }
 
-.bar.hp span {
+.bar.hp > span:not(.bar-text) {
   background: linear-gradient(90deg, var(--hp-grad) 0%, var(--hp) 100%);
 }
 
-.bar.mana span {
+.bar.mana > span:not(.bar-text) {
   background: linear-gradient(90deg, var(--mana-grad) 0%, var(--mana) 100%);
 }
 
@@ -736,7 +736,7 @@ input, textarea {
   margin-top: 6px;
 }
 
-.bar.enemy span {
+.bar.enemy > span:not(.bar-text) {
   background: linear-gradient(90deg, #4f1111, var(--enemy));
 }
 
@@ -1494,7 +1494,7 @@ input, textarea {
 
 /* ── target panel: friendly bar ───────────────────────── */
 
-.bar.enemy.friendly span {
+.bar.enemy.friendly > span:not(.bar-text) {
   background: linear-gradient(90deg, #3a8a3a, #4eba4e) !important;
 }
 

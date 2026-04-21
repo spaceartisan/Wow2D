@@ -658,7 +658,7 @@ export class UISystem {
       this.el.targetName.textContent = rp.level ? `${rp.name} (Lv.${rp.level})` : rp.name;
       this.el.targetHpFill.style.width = `${ratio * 100}%`;
       this.el.targetHpText.textContent = `${Math.round(rp.hp)} / ${rp.maxHp}`;
-      if (hpBar) hpBar.classList.add("friendly");
+      if (hpBar) hpBar.classList.remove("friendly");
       this._renderBuffStrip(this.el.targetDebuffs, [], false);
       return;
     }
