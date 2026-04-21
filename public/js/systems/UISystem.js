@@ -229,7 +229,7 @@ export class UISystem {
     this.el.playerName.textContent = `${charData.name} (Lv.${charData.level || 1})`;
 
     const classDef = CLASSES[charData.charClass];
-    const portraitSrc = `/assets/sprites/portraits/${charData.portrait || "portrait_1"}.png`;
+    const portraitSrc = `/assets/sprites/portraits/player/${charData.portrait || "portrait_1"}.png`;
     this.el.playerPortrait.textContent = "";
     const img = document.createElement("img");
     img.className = "portrait-img";
@@ -654,7 +654,7 @@ export class UISystem {
       }
       const ratio = rp.maxHp > 0 ? rp.hp / rp.maxHp : 1;
       this.el.targetPanel.classList.remove("hidden");
-      this._setTargetPortrait(`/assets/sprites/portraits/${rp.portrait || 'portrait_1'}.png`);
+      this._setTargetPortrait(`/assets/sprites/portraits/player/${rp.portrait || 'portrait_1'}.png`);
       this.el.targetName.textContent = rp.level ? `${rp.name} (Lv.${rp.level})` : rp.name;
       this.el.targetHpFill.style.width = `${ratio * 100}%`;
       this.el.targetHpText.textContent = `${Math.round(rp.hp)} / ${rp.maxHp}`;
@@ -2411,7 +2411,7 @@ export class UISystem {
         portrait.className = "party-frame-portrait";
         const pImg = document.createElement("img");
         pImg.className = "party-portrait-img";
-        pImg.src = `/assets/sprites/portraits/${m.portrait || "portrait_1"}.png`;
+        pImg.src = `/assets/sprites/portraits/player/${m.portrait || "portrait_1"}.png`;
         pImg.alt = m.name || "?";
         portrait.appendChild(pImg);
 

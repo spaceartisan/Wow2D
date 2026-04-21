@@ -10,11 +10,29 @@ const crypto = require("crypto");
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const DB_PATH = path.join(DATA_DIR, "azerfall.db");
+const PLAYER_PORTRAITS_DIR = path.join(__dirname, "..", "public", "assets", "sprites", "portraits", "player");
+const LEGACY_PORTRAITS_DIR = path.join(__dirname, "..", "public", "assets", "sprites", "portraits");
 
 /* Load class definitions for validation */
 const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "data", "playerBase.json"), "utf8"));
 const VALID_CLASSES = Object.keys(PLAYER_BASE_DATA.classes || {});
-const VALID_PORTRAITS = ["portrait_1","portrait_2","portrait_3","portrait_4","portrait_5","portrait_6"];
+
+function getPlayerPortraitIds() {
+  const readPortraitPngs = (dirPath) => {
+    if (!fs.existsSync(dirPath)) return [];
+    return fs.readdirSync(dirPath)
+      .filter((name) => /\.png$/i.test(name))
+      .map((name) => path.basename(name, ".png"))
+      .filter((id) => id && id !== "enemies")
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  };
+
+  const playerPortraits = readPortraitPngs(PLAYER_PORTRAITS_DIR);
+  if (playerPortraits.length > 0) return playerPortraits;
+
+  // Backward compatibility if portraits were not moved to /portraits/player yet.
+  return readPortraitPngs(LEGACY_PORTRAITS_DIR);
+}
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -234,7 +252,9 @@ function createCharacter(token, charName, charClass, portrait) {
     return { error: "Invalid class." };
   }
 
-  const port = VALID_PORTRAITS.includes(portrait) ? portrait : "portrait_1";
+  const validPortraits = getPlayerPortraitIds();
+  const defaultPortrait = validPortraits[0] || "portrait_1";
+  const port = validPortraits.includes(portrait) ? portrait : defaultPortrait;
 
   const displayName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1).toLowerCase();
   try {
@@ -503,5 +523,6 @@ module.exports = {
   blockPlayer,
   unblockPlayer,
   isBlocked,
-  getBlockedList
+  getBlockedList,
+  getPlayerPortraitIds
 };

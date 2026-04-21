@@ -109,6 +109,16 @@ app.post("/api/characters/delete", (req, res) => {
   res.json(result);
 });
 
+app.get("/api/portraits/players", (req, res) => {
+  const ids = database.getPlayerPortraitIds();
+  res.json({
+    portraits: ids.map((id) => ({
+      id,
+      src: `/assets/sprites/portraits/player/${id}.png`
+    }))
+  });
+});
+
 const startServer = (port) => {
   const server = app.listen(port, () => {
     console.log(`${THEME.gameName || "Game"} running at http://localhost:${port}`);

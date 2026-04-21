@@ -6,6 +6,7 @@ export class ScreenManager {
   constructor() {
     this.session = { username: null, token: null, characters: [] };
     this.selectedCharIndex = -1;
+    this._playerPortraits = [];
     this.onEnterWorld = null; // callback: (charData, credentials) => void
     this.onLogout = null;     // callback: () => void  (set by main.js)
 
@@ -158,16 +159,20 @@ export class ScreenManager {
 
     const classBtns = classPicker.querySelectorAll(".class-btn");
 
+    if (this._playerPortraits.length === 0) {
+      this._playerPortraits = await this.loadPlayerPortraits();
+    }
+
     // Build portrait picker
     const portraitPicker = document.getElementById("portrait-picker");
     portraitPicker.textContent = "";
-    const portraitIds = ["portrait_1","portrait_2","portrait_3","portrait_4","portrait_5","portrait_6"];
+    const portraitIds = this._playerPortraits.map((p) => p.id);
     portraitIds.forEach((pid, i) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "portrait-btn" + (i === 0 ? " selected" : "");
       btn.dataset.portrait = pid;
-      btn.innerHTML = `<img class="portrait-btn-img" src="/assets/sprites/portraits/${pid}.png" alt="Portrait ${i + 1}">`;
+      btn.innerHTML = `<img class="portrait-btn-img" src="/assets/sprites/portraits/player/${pid}.png" alt="Portrait ${i + 1}">`;
       portraitPicker.appendChild(btn);
     });
     const portraitBtns = portraitPicker.querySelectorAll(".portrait-btn");
@@ -203,7 +208,7 @@ export class ScreenManager {
 
       const charName = document.getElementById("char-name-input").value.trim();
       const charClass = document.querySelector(".class-btn.selected")?.dataset.class || "warrior";
-      const portrait = document.querySelector(".portrait-btn.selected")?.dataset.portrait || "portrait_1";
+      const portrait = document.querySelector(".portrait-btn.selected")?.dataset.portrait || this._playerPortraits[0]?.id || "portrait_1";
 
       try {
         const data = await this.api("/api/characters/create", {
@@ -281,7 +286,7 @@ export class ScreenManager {
 
       const classDef = this._classesData[char.charClass];
       const className = classDef?.name || this.capitalize(char.charClass);
-      const portraitSrc = `/assets/sprites/portraits/${char.portrait || "portrait_1"}.png`;
+      const portraitSrc = `/assets/sprites/portraits/player/${char.portrait || this._playerPortraits[0]?.id || "portrait_1"}.png`;
 
       card.innerHTML = `
         <div class="char-avatar"><img class="char-avatar-img" src="${portraitSrc}" alt="${className}"></div>
@@ -311,6 +316,17 @@ export class ScreenManager {
 
   capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  async loadPlayerPortraits() {
+    try {
+      const res = await fetch("/api/portraits/players");
+      if (!res.ok) throw new Error("Failed to load player portraits.");
+      const data = await res.json();
+      const portraits = Array.isArray(data.portraits) ? data.portraits : [];
+      if (portraits.length > 0) return portraits;
+    } catch (_) {}
+    return [{ id: "portrait_1", src: "/assets/sprites/portraits/player/portrait_1.png" }];
   }
 
   fullLogout() {

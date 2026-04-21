@@ -67,6 +67,7 @@ DB file: `data/azerfall.db` (SQLite, WAL mode, foreign keys ON)
 | `pos_x` | REAL | `-1` | Last known X position (world pixels, -1 = use spawn) |
 | `pos_y` | REAL | `-1` | Last known Y position (world pixels, -1 = use spawn) |
 | `floor` | INTEGER | `0` | Last known floor (0 = ground, 1+ = upper floors) |
+| `portrait` | TEXT | `'portrait_1'` | Character portrait ID (e.g. `portrait_1` through `portrait_6`) |
 | `created_at` | INTEGER | epoch ms | |
 
 ### `sessions`
@@ -91,7 +92,7 @@ All functions are synchronous (better-sqlite3). The module exports these plus th
 | `logout` | `(token)` | Delete session row. |
 | `validateSession` | `(token)` | Returns `username` string or `null`. |
 | `getCharacters` | `(token)` | Returns `{ characters }` or `{ error }`. |
-| `createCharacter` | `(token, name, class)` | Max 5 per account. Returns `{ ok, characters }` or `{ error }`. |
+| `createCharacter` | `(token, name, class, portrait)` | Max 5 per account. Portrait must be one of `portrait_1`–`portrait_6` (defaults to `portrait_1`). Returns `{ ok, characters }` or `{ error }`. |
 | `deleteCharacter` | `(token, charId)` | Validates ownership. Returns `{ ok, characters }` or `{ error }`. |
 | `loadCharacter` | `(charId, username)` | Full load with JSON parsing. Returns character object or `null`. |
 | `saveCharacterProgress` | `(charId, data)` | Saves: level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor. |
@@ -104,11 +105,11 @@ Available on the `stmts` object (not exported, but accessible if you modify data
 ```js
 stmts.getAccount          // SELECT * FROM accounts WHERE username = ?
 stmts.insertAccount       // INSERT INTO accounts (username, hash, salt) VALUES (?, ?, ?)
-stmts.getCharacters       // SELECT id, name, char_class AS charClass, level, created_at ... WHERE username = ?
+stmts.getCharacters       // SELECT id, name, char_class AS charClass, level, portrait, created_at ... WHERE username = ?
 stmts.countCharacters     // SELECT COUNT(*) AS cnt FROM characters WHERE username = ?
-stmts.insertCharacter     // INSERT INTO characters (username, name, char_class) VALUES (?, ?, ?)
+stmts.insertCharacter     // INSERT INTO characters (username, name, char_class, portrait) VALUES (?, ?, ?, ?)
 stmts.deleteCharacter     // DELETE FROM characters WHERE id = ? AND username = ?
-stmts.getCharacterById    // SELECT id, name, ..., bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor ... WHERE id = ? AND username = ?
+stmts.getCharacterById    // SELECT id, name, ..., bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor, portrait ... WHERE id = ? AND username = ?
 stmts.saveCharacter       // UPDATE characters SET level=?, xp=?, ..., gathering_skills=?, map_id=?, pos_x=?, pos_y=?, floor=? WHERE id=?
 stmts.insertSession       // INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)
 stmts.getSession          // SELECT * FROM sessions WHERE token = ? AND expires_at > ?
@@ -140,7 +141,7 @@ Base URL: `http://localhost:3000` (auto-increments port if busy)
 |--------|------|------|----------|
 | POST | `/api/logout` | `{ token }` | `{ ok: true }` |
 | POST | `/api/characters` | `{ token }` | `{ characters: [...] }` |
-| POST | `/api/characters/create` | `{ token, charName, charClass }` | `{ ok, characters }` |
+| POST | `/api/characters/create` | `{ token, charName, charClass, portrait }` | `{ ok, characters }` |
 | POST | `/api/characters/delete` | `{ token, charId }` | `{ ok, characters }` |
 
 ---
@@ -218,9 +219,9 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 |------|------|------------|
 | `auth_error` | Bad token | `error` |
 | `kicked` | Duplicate login | `reason` |
-| `welcome` | Join success | `playerId, mapId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana, gatheringSkills, resourceNodes, x, y, floor` |
+| `welcome` | Join success | `playerId, mapId, tick, tickRate, enemies, players, drops, inventory, equipment, level, xp, xpToLevel, gold, quests, hearthstone, bank, hotbar, hp, maxHp, mana, maxMana, gatheringSkills, resourceNodes, x, y, floor, portrait` |
 | `state` | Every tick (60 Hz) | `tick, enemies[], players[], drops[], resourceNodes[], you: { id, hp, maxHp, mana, maxMana, dead, x, y, ackSeq, gold, level, xp, xpToLevel, damage, buffs[] }` — enemies and players include `floor` field |
-| `player_joined` | Player enters map | `player: { id, name, charClass, level, x, y, hp, maxHp, dead, floor }` |
+| `player_joined` | Player enters map | `player: { id, name, charClass, portrait, level, x, y, hp, maxHp, dead, floor }` |
 | `player_left` | Player leaves map | `playerId` |
 | `map_changed` | Portal transition | `mapId, enemies, players, drops` |
 | `attack_result` | Attack resolves | `enemyId, damage, enemyHp, enemyMaxHp` |
@@ -268,7 +269,7 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `trade_cancelled` | Trade ended | `reason` |
 | `party_result` | Party action result | `ok?, error?, message?` |
 | `party_invite_received` | Incoming invite | `fromId, from` (inviter's name) |
-| `party_update` | Party state changed | `partyId, leader, members[], pendingInvites[]` |
+| `party_update` | Party state changed | `partyId, leader, members[{ id, name, charClass, portrait, level, hp, maxHp, online, isLeader }], pendingInvites[]` |
 | `party_disbanded` | Party dissolved | — |
 | `party_invite_rescinded` | Invite cancelled | `fromId` |
 | `quest_kill_credit` | Party quest share | `enemyType` (increment kill objective progress) |
@@ -292,6 +293,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   charId: 42,                  // Database character ID (for saving)
   name: "Elara",
   charClass: "warrior",        // class ID from playerBase.json ("warrior" | "mage" | "rogue" | …)
+  portrait: "portrait_1",       // Character portrait ID (portrait_1 through portrait_6)
   mapId: "eldengrove",         // Current map ID
   x: 1200, y: 1500,           // World pixel position
   floor: 0,                    // 0 = ground, 1+ = upper floors
@@ -402,6 +404,7 @@ Stored in `world.maps` — a `Map<mapId, MapEntry>`:
   id: "e1",
   type: "wolf",           // Key into ENEMY_TYPES
   name: "Timber Wolf",
+  portrait: "wolf",        // Portrait image key (defaults to type). Sprite at portraits/enemies/{portrait}.png
   x, y,                   // Current world position
   spawnX, spawnY,          // Home position (for leashing)
   floor: 0,                // 0 = ground, 1+ = upper floors

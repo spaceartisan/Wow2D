@@ -160,6 +160,7 @@ http://localhost:3000
 
 ### Persistence
 - SQLite database for accounts, characters, and sessions
+- Character creation with class selection and portrait picker (6 portrait options)
 - Character progression saved on disconnect, auto-save (every 60s), and on key events (XP gains, quest completions, gathering, crafting)
 - Player position persistence — map, coordinates, and floor saved to DB and restored on login
 - Session tokens with 24-hour expiry and periodic cleanup
@@ -167,8 +168,8 @@ http://localhost:3000
 - Rate-limited auth endpoints
 
 ### UI
-- Fantasy-themed HUD with health/mana bars, XP bar, minimap
-- Target panel with HP bar (different style for friendly vs enemy targets)
+- Fantasy-themed HUD with player portrait, combined name + level display, health/mana bars with overlaid text values, and XP bar
+- Target panel with portrait (enemy portraits from `portraits/enemies/`, player portraits from `portraits/`), combined name + level, and HP bar (different style for friendly vs enemy targets)
 - 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear; hover tooltips for skills and items
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
 - Inventory (20 slots) with right-click context menu (Equip/Use/Dismantle/Drop), drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
@@ -246,6 +247,8 @@ public/
       entities/                Entity sprites (player, NPC, enemy, arrow)
       gathering/               Resource node sprites (48×48)
       icons/                   Item icons (32×32 pixel-art PNGs) — includes gathering tools & materials
+      portraits/               Player character portraits (54×54 pixel-art PNGs: portrait_1–portrait_6)
+        enemies/               Enemy target portraits (54×54 pixel-art PNGs, keyed by portrait field)
       skills/                  Skill ability icons (32×32 pixel-art PNGs)
       status/                  Buff/debuff status effect icons (32×32 pixel-art PNGs)
 ```

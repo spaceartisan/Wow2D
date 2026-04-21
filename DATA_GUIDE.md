@@ -27,6 +27,7 @@ Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `publi
 | `hitParticle` | string | *(optional)* Particle preset emitted when this enemy hits the player (default `"player_hit"`) |
 | `hitSfx` | string | *(optional)* SFX played when this enemy hits the player (default `"player_hit"`) |
 | `tileSize` | number | *(optional)* Enemy footprint in tiles: `1` (default, 48×48), `2` (96×96), or `3` (144×144). Radius, AoE overlap, projectile hit box, and minimap dot scale automatically. |
+| `portrait` | string | *(optional)* Portrait image filename (without extension) used in the target panel. Defaults to the enemy key. Sprite at `public/assets/sprites/portraits/enemies/{portrait}.png`. |
 | `loot` | array | Drop table (see below) |
 
 **Loot entries:**
@@ -54,6 +55,7 @@ Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `publi
   "attackCooldown": 1.35,
   "hitParticle": "bite",
   "hitSfx": "bite_hit",
+  "portrait": "wolf",
   "loot": [
     { "itemId": "wolfPelt", "chance": 0.52 },
     { "itemId": "wolfFang", "chance": 0.30 },
@@ -65,7 +67,8 @@ Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `publi
 **To add an enemy:**
 1. Add the entry to `enemies.json` with a unique key
 2. Place a sprite at `public/assets/sprites/entities/{enemyId}.png`
-3. Reference the enemy ID in map spawn configs (see map JSON `enemySpawns`)
+3. Place a portrait at `public/assets/sprites/portraits/enemies/{portrait}.png` (54×54 pixel-art)
+4. Reference the enemy ID in map spawn configs (see map JSON `enemySpawns`)
 
 ---
 

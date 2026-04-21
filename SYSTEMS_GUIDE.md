@@ -85,8 +85,8 @@ Each tick, the server sends every connected player a `state` message:
 {
   "type": "state",
   "tick": <integer>,
-  "enemies": [{ "id", "type", "x", "y", "hp", "maxHp", "dead", "floor", "activeDebuffs" }],
-  "players": [{ "id", "name", "x", "y", "level", "charClass", "dead", "floor", "activeBuffs" }],
+  "enemies": [{ "id", "type", "name", "portrait", "x", "y", "hp", "maxHp", "dead", "floor", "level", "activeDebuffs" }],
+  "players": [{ "id", "name", "x", "y", "level", "charClass", "portrait", "dead", "floor", "activeBuffs" }],
   "drops":   [{ "id", "x", "y" }],
   "you": {
     "x", "y", "hp", "maxHp", "mana", "maxMana", "gold", "level", "xp",
@@ -104,9 +104,11 @@ Each tick, the server sends every connected player a `state` message:
 
 ```js
 {
-  id, type, x, y,
+  id, type, name, portrait,
+  x, y,
   hp, maxHp,
   dead: Boolean,
+  level: Number,   // enemy level (from enemies.json)
   floor: Number,   // 0 = ground, 1+ = upper floors
   activeDebuffs: [{ id, stat, modifier, duration, expiresAt, ... }]
 }
