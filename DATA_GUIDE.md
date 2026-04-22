@@ -6,7 +6,7 @@ All game data lives in `public/data/` as JSON files. The server and client both 
 
 ## enemies.json
 
-Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `public/assets/sprites/entities/{enemyId}.png`.
+Top-level object keyed by enemy ID. Each enemy needs a matching sprite at `public/assets/sprites/entities/{enemyId}.png`. If the sprite is missing, the renderer falls back to `public/assets/sprites/entities/default_enemy.png`, so new enemy entries remain visible without immediate art.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -214,7 +214,7 @@ Materials are gathered resources (ores, logs, fish). They have no type-specific 
 
 ## npcs.json
 
-Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/sprites/entities/{npcId}.png`.
+Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/sprites/entities/{npcId}.png`. If the sprite is missing, the renderer falls back to `public/assets/sprites/entities/default_npc.png`, so new NPC entries remain visible without immediate art.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -222,6 +222,7 @@ Top-level object keyed by NPC ID. Each NPC needs a sprite at `public/assets/spri
 | `name` | string | Display name shown above head |
 | `color` | string | Hex color fallback |
 | `type` | string | `"npc"`, `"quest_giver"`, `"vendor"`, `"banker"`, `"gathering"`, or `"crafting_station"` |
+| `facing` | string | *(optional)* Static facing direction used when rendering. One of `"down"` (default), `"up"`, `"left"`, `"right"`, `"up-left"`, `"up-right"`, `"down-left"`, `"down-right"`. A map placement may override this by setting its own `facing` field on the NPC entry in the map JSON. |
 | `defaultDialog` | string | Greeting text when no quest/shop action |
 | `dialogTree` | object | *(optional)* Branching dialog tree for world lore / conversation (see below) |
 | `questIds` | string[] | Quest IDs this NPC offers (quest_giver only) |
@@ -1413,6 +1414,8 @@ When adding new content, ensure the matching sprite/icon exists:
 |-----------|-----------|------|
 | enemies.json | `public/assets/sprites/entities/{enemyId}.png` | 48×48 |
 | npcs.json | `public/assets/sprites/entities/{npcId}.png` | 48×48 |
+| — (fallbacks) | `public/assets/sprites/entities/default_enemy.png`, `default_npc.png` | 48×48 |
+| classes.json | `public/assets/sprites/entities/player_{classId}.png` (+ shared `player_local.png` / `player_dead.png`) | 48×48 |
 | items.json | `public/assets/sprites/icons/{itemId}.png` | 32×32 |
 | skills.json | `public/assets/sprites/skills/{icon}.png` | 32×32 |
 | statusEffects.json | `public/assets/sprites/status/{name}.png` | 32×32 |

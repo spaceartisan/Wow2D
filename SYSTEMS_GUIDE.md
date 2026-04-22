@@ -378,6 +378,23 @@ Skills may carry an optional `races: ["<raceId>"]` array (analogous to `classes`
 | Dwarf | Stoneform | Mana-shield buff absorbing incoming damage |
 | Orc | Blood Rage | +25% damage for 12 s |
 
+### Direction-aware sprite rendering
+
+**File:** `public/js/systems/EntitySystem.js` (render loop) · `public/js/utils.js` (`facingAngleFromVector`, `facingAngleFromString`)
+
+Entity sprites are authored facing **down** (+Y) and rotated at draw time so the on-screen orientation matches movement / attack direction:
+
+| Entity | Facing source |
+|--------|---------------|
+| Local player | `player.facing` — updated in `updatePlayerMovement()` from WASD input, in `nudgePlayerToward()` during attack auto-approach, and in `CombatSystem.tryPlayerAttack()` right before an attack fires (so stationary attacks still rotate to face the target). Reset to 0 while dead. |
+| Remote players & enemies | Derived from frame-to-frame position deltas via `_resolveFacing(id, x, y)`. A small dead zone (>0.5 px² squared delta) avoids jitter from interpolation sub-pixel wobble. |
+| NPCs | Static `facing` string from `npcs.json` (or a per-placement override on the map entry), converted to radians via `facingAngleFromString()`. Accepts `"down"` / `"up"` / `"left"` / `"right"` / 4 diagonals. |
+| Statues, drops, resource nodes | Always drawn upright (no rotation). |
+
+All rotated draws route through `EntitySystem._drawRotatedSprite(ctx, img, cx, cy, angle)`, which short-circuits to a plain `drawImage` when angle is 0 to avoid unnecessary `save/translate/rotate/restore` work on idle entities.
+
+The math convention: angle 0 leaves the sprite upright (facing down). `facingAngleFromVector(dx, dy)` returns `atan2(-dx, dy)` so that moving in direction `(dx, dy)` rotates the down-facing sprite to point that way.
+
 ---
 
 ## 7. Combat — Ranged (Server-Authoritative Projectiles)

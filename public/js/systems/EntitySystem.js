@@ -1,5 +1,5 @@
 import { PLAYER_BASE, classStats, CLASSES, applyRaceMods, DEFAULT_RACE, RACES } from "../config.js";
-import { clamp, distance, normalize } from "../utils.js";
+import { clamp, distance, normalize, facingAngleFromVector, facingAngleFromString } from "../utils.js";
 
 export class EntitySystem {
   constructor(game) {
@@ -11,6 +11,9 @@ export class EntitySystem {
     this.remotePlayers = [];
     this.drops = [];
     this.resourceNodes = [];
+    // Tracks facing for interpolated remote entities (enemies + remote players).
+    // Map<id, { lastX, lastY, facing }>. Local player + NPCs store facing on their entity object.
+    this._facingTracker = new Map();
   }
 
   createPlayer() {
@@ -37,6 +40,7 @@ export class EntitySystem {
       attackRange: cs.attackRange,
       attackCooldown: cs.attackCooldown,
       defense: 0,
+      facing: 0,
       _baseHitParticle: cs.hitParticle || "hit_spark",
       _baseHitSfx: cs.hitSfx || "sword_hit",
       _baseSwingSfx: cs.swingSfx || "sword_swing",
@@ -90,6 +94,7 @@ export class EntitySystem {
         type: def.type || "npc",
         shop: def.shop || null,
         craftingSkill: def.craftingSkill || null,
+        facing: facingAngleFromString(placement.facing || def.facing),
         floor: placement.floor ?? 0
       });
     }
@@ -167,6 +172,7 @@ export class EntitySystem {
     }
 
     const dir = normalize(moveX, moveY);
+    player.facing = facingAngleFromVector(dir.x, dir.y);
     let speedMult = 1;
     if (player.activeBuffs) {
       for (const b of player.activeBuffs) {
@@ -198,6 +204,47 @@ export class EntitySystem {
     }
   }
 
+  /**
+   * Track and return a facing angle (radians) for an interpolated entity,
+   * derived from frame-to-frame position deltas. The sprite's "down" axis is
+   * the reference — facing 0 means the sprite points straight down. If the
+   * entity hasn't moved enough to update facing, the previous value is kept.
+   */
+  _resolveFacing(id, x, y, fallback = 0) {
+    let rec = this._facingTracker.get(id);
+    if (!rec) {
+      rec = { lastX: x, lastY: y, facing: fallback };
+      this._facingTracker.set(id, rec);
+      return rec.facing;
+    }
+    const dx = x - rec.lastX;
+    const dy = y - rec.lastY;
+    // Only update when the entity has meaningfully moved — avoids jitter when
+    // a unit is idle but position wiggles a sub-pixel via interpolation.
+    if ((dx * dx + dy * dy) > 0.25) {
+      rec.facing = facingAngleFromVector(dx, dy);
+      rec.lastX = x;
+      rec.lastY = y;
+    }
+    return rec.facing;
+  }
+
+  /**
+   * Draw a sprite rotated to face an angle (radians). The sprite is rendered
+   * centered on (cx, cy). Angle 0 leaves the sprite upright (facing down).
+   */
+  _drawRotatedSprite(ctx, img, cx, cy, angle) {
+    if (!angle) {
+      ctx.drawImage(img, cx - img.width / 2, cy - img.height / 2);
+      return;
+    }
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.restore();
+  }
+
   nudgePlayerToward(targetX, targetY, dt, speedFactor = 0.86) {
     const player = this.player;
     if (player.dead) {
@@ -205,6 +252,7 @@ export class EntitySystem {
     }
 
     const dir = normalize(targetX - player.x, targetY - player.y);
+    player.facing = facingAngleFromVector(dir.x, dir.y);
     this.moveEntityWithCollision(
       player,
       dir.x * player.moveSpeed * speedFactor,
@@ -472,9 +520,10 @@ export class EntitySystem {
       const x = npc.x - camera.x;
       const y = npc.y - camera.y;
 
-      const img = sprites && sprites.get(`entities/${npc.id}`);
+      const img = (sprites && sprites.get(`entities/${npc.id}`))
+        || (sprites && sprites.get("entities/default_npc"));
       if (img) {
-        ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
+        this._drawRotatedSprite(ctx, img, x, y, npc.facing || 0);
       } else {
         ctx.fillStyle = npc.color;
         ctx.beginPath();
@@ -547,9 +596,11 @@ export class EntitySystem {
       const y = Math.round(enemy.y - camera.y);
       const r = enemy.radius || 24;
 
-      const img = sprites && sprites.get(`entities/${enemy.type}`);
+      const img = (sprites && sprites.get(`entities/${enemy.type}`))
+        || (sprites && sprites.get("entities/default_enemy"));
       if (img) {
-        ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
+        const angle = this._resolveFacing(`e_${enemy.id}`, enemy.x, enemy.y);
+        this._drawRotatedSprite(ctx, img, x, y, angle);
       } else {
         ctx.fillStyle = enemy.color;
         ctx.beginPath();
@@ -575,7 +626,8 @@ export class EntitySystem {
 
       const img = sprites && sprites.get(`entities/player_${rp.charClass}`);
       if (img) {
-        ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
+        const angle = this._resolveFacing(`p_${rp.id}`, rp.x, rp.y);
+        this._drawRotatedSprite(ctx, img, x, y, angle);
       } else {
         ctx.fillStyle = (CLASSES[rp.charClass] && CLASSES[rp.charClass].color) || "#b0b0b0";
         ctx.beginPath();
@@ -606,10 +658,17 @@ export class EntitySystem {
 
     // draw local player
     const player = this.player;
-    const playerKey = player.dead ? "entities/player_dead" : "entities/player_local";
-    const playerImg = sprites && sprites.get(playerKey);
+    let playerImg = null;
+    if (sprites) {
+      if (player.dead) {
+        playerImg = sprites.get("entities/player_dead");
+      } else {
+        playerImg = sprites.get(`entities/player_${player.charClass}`) || sprites.get("entities/player_local");
+      }
+    }
     if (playerImg) {
-      ctx.drawImage(playerImg, player.x - camera.x - playerImg.width / 2, player.y - camera.y - playerImg.height / 2);
+      const angle = player.dead ? 0 : (player.facing || 0);
+      this._drawRotatedSprite(ctx, playerImg, player.x - camera.x, player.y - camera.y, angle);
     } else {
       ctx.fillStyle = player.dead ? "#5d4b67" : "#7db1d5";
       ctx.beginPath();

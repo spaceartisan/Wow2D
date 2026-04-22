@@ -35,8 +35,8 @@ export class SpriteManager {
       promises.push(this._loadOne(`entities/${id}`));
     }
 
-    // Players (class variants + local + dead)
-    for (const key of ["player_warrior", "player_mage", "player_rogue", "player_local", "player_dead"]) {
+    // Players (class variants + local + dead) and generic fallbacks
+    for (const key of ["player_warrior", "player_mage", "player_rogue", "player_local", "player_dead", "default_enemy", "default_npc"]) {
       promises.push(this._loadOne(`entities/${key}`));
     }
 

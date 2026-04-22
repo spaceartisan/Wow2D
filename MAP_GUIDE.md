@@ -193,6 +193,7 @@ NPC placements reference definitions in `public/data/npcs.json`.
 - `npcId` — Must match a key in `npcs.json`
 - `tx`, `ty` — Tile position (NPC spawns centered on the tile)
 - `floor` — Which floor the NPC is on (`0` = ground, `1` = 2nd floor, etc.). NPCs are only visible and interactable when the player is on the same floor. Defaults to `0` if omitted.
+- `facing` *(optional)* — Overrides the NPC's default `facing` from `npcs.json`. One of `"down"`, `"up"`, `"left"`, `"right"`, `"up-left"`, `"up-right"`, `"down-left"`, `"down-right"`. Useful when the same NPC definition is placed in multiple spots (e.g. a vendor behind a counter vs. standing in a doorway).
 
 NPC types include `quest_giver`, `vendor`, and `crafting_station`. Crafting station NPCs (e.g. `smelter_hilda`, `sawyer_brom`, `cook_marta`) have a `craftingSkill` field in `npcs.json` that determines which recipes the player can craft at that station. The NPC's dialogue, quest assignments, shop inventory, crafting skill, and appearance are all defined in `npcs.json`, not in the map file.
 

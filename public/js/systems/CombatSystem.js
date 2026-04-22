@@ -1,4 +1,4 @@
-import { distance } from "../utils.js";
+import { distance, facingAngleFromVector } from "../utils.js";
 import { PLAYER_BASE } from "../config.js";
 
 export class CombatSystem {
@@ -275,6 +275,7 @@ export class CombatSystem {
       if (!forceAttack && now - this.lastPlayerAttackAt < cooldownMs) return;
 
       this.lastPlayerAttackAt = now;
+      player.facing = facingAngleFromVector(targetPlayer.x - player.x, targetPlayer.y - player.y);
       this.game.network.sendPvpAttack(this.targetPlayerId);
 
       const weapon = player.equipment?.mainHand;
@@ -322,6 +323,7 @@ export class CombatSystem {
     }
 
     this.lastPlayerAttackAt = now;
+    player.facing = facingAngleFromVector(enemy.x - player.x, enemy.y - player.y);
     // send attack request to server instead of applying damage locally
     this.game.network.sendAttack(enemy.id);
 

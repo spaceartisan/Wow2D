@@ -4,6 +4,7 @@
     "name": "Elder Rowan",
     "color": "#d4b17c",
     "type": "quest_giver",
+    "facing": "down",
     "defaultDialog": "The forest road must stay open for trade.",
     "questIds": ["wolf_cull", "boar_menace"],
     "dialogTree": {
@@ -85,6 +86,7 @@
   "captain_brenn": {
     "id": "captain_brenn",
     "name": "Captain Brenn",
+    "facing": "down",
     "color": "#7a9ecf",
     "type": "quest_giver",
     "defaultDialog": "Bandits watch these woods. Keep your steel close.",
@@ -157,6 +159,7 @@
   "innkeeper_lora": {
     "id": "innkeeper_lora",
     "name": "Innkeeper Lora",
+    "facing": "down",
     "color": "#c9a3c7",
     "type": "vendor",
     "defaultDialog": "Rest a while. Need supplies? I keep a stock of potions and remedies.",
@@ -210,6 +213,7 @@
   "blacksmith_kael": {
     "id": "blacksmith_kael",
     "name": "Blacksmith Kael",
+    "facing": "down",
     "color": "#cf8a5e",
     "type": "vendor",
     "defaultDialog": "Need something forged? I've got good steel.",
@@ -219,6 +223,7 @@
   "banker_tomas": {
     "id": "banker_tomas",
     "name": "Banker Tomas",
+    "facing": "down",
     "color": "#8cb87a",
     "type": "banker",
     "defaultDialog": "Your valuables are safe with me. Need to make a deposit?",
@@ -264,6 +269,7 @@
   "miner_gruff": {
     "id": "miner_gruff",
     "name": "Miner Gruff",
+    "facing": "down",
     "color": "#b08040",
     "type": "vendor",
     "defaultDialog": "The earth holds riches for those bold enough to dig. Need a pickaxe?",
@@ -273,6 +279,7 @@
   "logger_thorne": {
     "id": "logger_thorne",
     "name": "Logger Thorne",
+    "facing": "down",
     "color": "#6b8e23",
     "type": "vendor",
     "defaultDialog": "Good timber doesn't fell itself. I've got the tools you need.",
@@ -282,6 +289,7 @@
   "fisherman_wade": {
     "id": "fisherman_wade",
     "name": "Fisherman Wade",
+    "facing": "down",
     "color": "#4682b4",
     "type": "vendor",
     "defaultDialog": "Nothing beats a day by the water. Looking for a rod?",
@@ -291,6 +299,7 @@
   "smelter_hilda": {
     "id": "smelter_hilda",
     "name": "Smelter Hilda",
+    "facing": "down",
     "color": "#e07030",
     "type": "crafting_station",
     "craftingSkill": "smelting",
@@ -300,6 +309,7 @@
   "sawyer_brom": {
     "id": "sawyer_brom",
     "name": "Sawyer Brom",
+    "facing": "down",
     "color": "#a08040",
     "type": "crafting_station",
     "craftingSkill": "milling",
@@ -309,6 +319,7 @@
   "cook_marta": {
     "id": "cook_marta",
     "name": "Cook Marta",
+    "facing": "down",
     "color": "#c86040",
     "type": "crafting_station",
     "craftingSkill": "cooking",

@@ -173,6 +173,9 @@ http://localhost:3000
 - SQLite database for accounts, characters, and sessions
 - Character creation with class selection and portrait picker — portrait options are discovered dynamically from `public/assets/sprites/portraits/player/` (drop new `portrait_N.png` files in and they appear automatically)
 - Player races with multiplicative stat bonuses and race-gated signature skills (defined in `public/data/races.json`; ships with Human, Elf, Dwarf, Orc — each with its own racial skill: Perseverance, Moonshot, Stoneform, Blood Rage)
+- Class-specific player sprites — each class renders its own art (`player_warrior.png`, `player_mage.png`, `player_rogue.png`), with a shared `player_local.png` fallback when a class sprite is missing
+- Direction-aware sprites — the local player, remote players, and enemies rotate to face the direction they are moving or attacking. NPCs carry a per-entry `facing` field (`down` / `up` / `left` / `right` / 4 diagonals) in `npcs.json` so shopkeepers stay oriented toward counters, guards face out of doorways, etc.
+- Enemy and NPC rendering falls back to shared `default_enemy.png` / `default_npc.png` sprites when a per-type asset is missing, so new enemy or NPC entries remain visible without immediate art.
 - Character progression saved on disconnect, auto-save (every 60s), and on key events (XP gains, quest completions, gathering, crafting)
 - Player position persistence — map, coordinates, and floor saved to DB and restored on login
 - Session tokens with 24-hour expiry and periodic cleanup
@@ -256,7 +259,7 @@ public/
     icons/                     Item icon images
     sfx/                       Sound effect files
     sprites/
-      entities/                Entity sprites (player, NPC, enemy, arrow)
+      entities/                Entity sprites (player, NPC, enemy, arrow) — includes class sprites `player_{classId}.png`, a shared `player_local.png` / `player_dead.png`, and `default_enemy.png` / `default_npc.png` fallbacks
       gathering/               Resource node sprites (48×48)
       icons/                   Item icons (32×32 pixel-art PNGs) — includes gathering tools & materials
       portraits/
