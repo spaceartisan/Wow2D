@@ -172,6 +172,7 @@ http://localhost:3000
 ### Persistence
 - SQLite database for accounts, characters, and sessions
 - Character creation with class selection and portrait picker — portrait options are discovered dynamically from `public/assets/sprites/portraits/player/` (drop new `portrait_N.png` files in and they appear automatically)
+- Player races with multiplicative stat bonuses and race-gated signature skills (defined in `public/data/races.json`; ships with Human, Elf, Dwarf, Orc — each with its own racial skill: Perseverance, Moonshot, Stoneform, Blood Rage)
 - Character progression saved on disconnect, auto-save (every 60s), and on key events (XP gains, quest completions, gathering, crafting)
 - Player position persistence — map, coordinates, and floor saved to DB and restored on login
 - Session tokens with 24-hour expiry and periodic cleanup

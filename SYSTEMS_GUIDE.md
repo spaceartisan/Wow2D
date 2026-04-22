@@ -354,6 +354,30 @@ Base values are **class-specific** — loaded from `playerBase.json` via `classS
 | `attackCooldown` | **0.82 s** | |
 | `baseDamage` | **class.damage** + `(level - 1) × class.damagePerLevel` | e.g. Warrior: 18 + (lvl-1)×5 |
 
+### Race stat modifiers
+
+Player races (defined in `public/data/races.json`) apply **multiplicative** modifiers on top of class-based, level-scaled stats. Mods stack on top of the class base; then equipment and buffs apply as usual.
+
+Computation order (server `_recalcStats` and client mirror):
+
+1. `cs = classStats(charClass)` — class defaults merged with per-class overrides
+2. `cs = applyRaceMods(cs, race)` — multiply `maxHp` / `maxMana` / `damage` / `moveSpeed` / `attackRange` by the race's `statMods` (defaults 1.0)
+3. Level scaling: `maxHp = cs.maxHp + (level-1)*cs.hpPerLevel`, etc.
+4. Equipment bonuses add on top
+
+Race is persisted in the `characters.race` column, chosen at character creation, and broadcast in `playerPublic()` snapshots.
+
+### Race-gated skills
+
+Skills may carry an optional `races: ["<raceId>"]` array (analogous to `classes`). When present, both the server (`ServerWorld.useSkill`) and client (`CombatSystem.useSkill`) refuse the cast unless the player's race is in the list. Each shipped race has one signature skill granted at level 1:
+
+| Race | Skill | Effect |
+|------|-------|--------|
+| Human | Perseverance | Self HoT (6 ticks of ~8 HP, 1.5 s interval) |
+| Elf | Moonshot | Arcane projectile (no weapon required) |
+| Dwarf | Stoneform | Mana-shield buff absorbing incoming damage |
+| Orc | Blood Rage | +25% damage for 12 s |
+
 ---
 
 ## 7. Combat — Ranged (Server-Authoritative Projectiles)

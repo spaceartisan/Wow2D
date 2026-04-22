@@ -1,4 +1,4 @@
-import { PLAYER_BASE, classStats, CLASSES } from "../config.js";
+import { PLAYER_BASE, classStats, CLASSES, applyRaceMods, DEFAULT_RACE, RACES } from "../config.js";
 import { clamp, distance, normalize } from "../utils.js";
 
 export class EntitySystem {
@@ -16,10 +16,12 @@ export class EntitySystem {
   createPlayer() {
     const spawn = this.game.world.spawnPoint;
     const charData = this.game.charData;
-    const cs = classStats(charData.charClass);
+    const race = RACES[charData.race] ? charData.race : DEFAULT_RACE;
+    const cs = applyRaceMods(classStats(charData.charClass), race);
     return {
       name: charData.name || "Adventurer",
       charClass: charData.charClass || "warrior",
+      race,
       x: spawn.x,
       y: spawn.y,
       radius: 16,

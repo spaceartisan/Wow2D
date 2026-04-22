@@ -1,0 +1,60 @@
+{
+  "_comment": "Player races. statMods are multiplicative modifiers applied on top of the class's level-scaled base stats. 1.0 = no change, 1.1 = +10%, 0.95 = -5%. Each race may list a 'raceSkill' that is granted automatically at level 1 and usable only by that race (enforced server-side via skill.races).",
+  "defaults": {
+    "statMods": {
+      "maxHp": 1.0,
+      "maxMana": 1.0,
+      "damage": 1.0,
+      "moveSpeed": 1.0,
+      "attackRange": 1.0
+    }
+  },
+  "races": {
+    "human": {
+      "name": "Human",
+      "icon": "race_human.png",
+      "color": "#d8c29a",
+      "description": "Versatile and resilient. Balanced bonuses to vitality, mana and strength.",
+      "statMods": {
+        "maxHp": 1.05,
+        "maxMana": 1.05,
+        "damage": 1.05
+      },
+      "raceSkill": "perseverance"
+    },
+    "elf": {
+      "name": "Elf",
+      "icon": "race_elf.png",
+      "color": "#b6e3c3",
+      "description": "Graceful and attuned to arcane energy. Greater mana reserves and nimble footing.",
+      "statMods": {
+        "maxMana": 1.15,
+        "moveSpeed": 1.05,
+        "maxHp": 0.95
+      },
+      "raceSkill": "moonshot"
+    },
+    "dwarf": {
+      "name": "Dwarf",
+      "icon": "race_dwarf.png",
+      "color": "#d6956a",
+      "description": "Hardy mountain folk with thick hides. Massive vitality at the cost of a sliver of speed.",
+      "statMods": {
+        "maxHp": 1.20,
+        "moveSpeed": 0.95
+      },
+      "raceSkill": "stoneform"
+    },
+    "orc": {
+      "name": "Orc",
+      "icon": "race_orc.png",
+      "color": "#8fc27a",
+      "description": "Fierce warriors whose raw might cleaves through armor.",
+      "statMods": {
+        "damage": 1.15,
+        "maxMana": 0.90
+      },
+      "raceSkill": "bloodrage"
+    }
+  }
+}

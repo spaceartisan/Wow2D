@@ -618,6 +618,39 @@ damage  = class.damage   + (level-1) × class.damagePerLevel + sum(equipped stat
 
 ---
 
+## races.json
+
+Defines player races. Each race has an icon, description, and a `statMods` object of **multiplicative** stat modifiers that stack on top of the class's level-scaled base stats (1.0 = no change, 1.10 = +10%, 0.95 = −5%). Optionally, each race may list a `raceSkill` — a signature ability whose `races` field gates its use to that race only.
+
+```json
+{
+  "defaults": {
+    "statMods": { "maxHp": 1.0, "maxMana": 1.0, "damage": 1.0, "moveSpeed": 1.0, "attackRange": 1.0 }
+  },
+  "races": {
+    "human": {
+      "name": "Human",
+      "icon": "race_human.png",
+      "color": "#d8c29a",
+      "description": "Versatile and resilient. Balanced bonuses.",
+      "statMods": { "maxHp": 1.05, "maxMana": 1.05, "damage": 1.05 },
+      "raceSkill": "perseverance"
+    }
+  }
+}
+```
+
+**Supported `statMods` keys:** `maxHp`, `maxMana`, `damage`, `moveSpeed`, `attackRange`. Any omitted key defaults to 1.0. Race mods are applied both server-side (`game/ServerWorld.js`) and client-side (`public/js/config.js`) via `applyRaceMods()` whenever stats are recalculated (spawn, level-up, gear changes).
+
+**To add a new race (no code changes needed):**
+1. Add an entry to `races` with a unique key, display metadata, and stat modifiers
+2. Place a 32×32 race icon at `public/assets/sprites/ui/race_{raceId}.png`
+3. (Optional) Add a signature skill to `skills.json` with `"races": ["{raceId}"]` — it will be usable only by that race
+
+Race selection is presented in the character-creation UI alongside class and portrait. The chosen race is stored in the `race` column of the `characters` table.
+
+---
+
 ## skills.json
 
 Top-level object keyed by skill ID. Defines all abilities players can learn and use. Skills are class-restricted and level-gated. The client loads this at startup and renders available skills in the Skills panel.
@@ -645,6 +678,7 @@ Top-level object keyed by skill ID. Defines all abilities players can learn and 
 | `sfx` | string\|null | SFX played on effect (hit/heal) |
 | `castSfx` | string\|null | *(optional)* SFX played on cast start |
 | `classes` | array | List of class strings that can use this skill (e.g. `["warrior", "mage"]`) |
+| `races` | array | *(optional)* List of race IDs that can use this skill (e.g. `["human"]`). When present, the skill is gated to those races only. |
 | `levelReq` | number | Minimum player level required |
 | `requiresWeapon` | boolean | *(optional)* `true` = requires any weapon equipped |
 | `requiresWeaponType` | string[] | *(optional)* Requires a specific weapon type (e.g. `["staff"]`) |

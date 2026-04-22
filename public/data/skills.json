@@ -707,5 +707,91 @@
     "levelReq": 10,
     "requiresWeapon": true,
     "icon": "garrote"
+  },
+
+  "perseverance": {
+    "id": "perseverance",
+    "name": "Perseverance",
+    "description": "Your human resolve steels your body, restoring health over time.",
+    "type": "heal",
+    "targeting": "self",
+    "range": 0,
+    "cooldown": 45.0,
+    "manaCost": 15,
+    "healAmount": 8,
+    "healPerLevel": 2,
+    "healTicks": 6,
+    "healInterval": 1.5,
+    "particle": "heal",
+    "sfx": "heal",
+    "races": ["human"],
+    "levelReq": 1,
+    "icon": "heal"
+  },
+
+  "moonshot": {
+    "id": "moonshot",
+    "name": "Moonshot",
+    "description": "Channel elven moonlight into a piercing arcane bolt. Does not require a weapon.",
+    "type": "attack",
+    "targeting": "enemy",
+    "range": 260,
+    "cooldown": 6.0,
+    "manaCost": 18,
+    "damage": 22,
+    "damagePerLevel": 4,
+    "damageType": "arcane",
+    "projectileSpeed": 360,
+    "particle": "arcane_hit",
+    "hitParticle": "arcane_hit",
+    "sfx": "magic_hit",
+    "races": ["elf"],
+    "levelReq": 1,
+    "icon": "arcaneMissiles"
+  },
+
+  "stoneform": {
+    "id": "stoneform",
+    "name": "Stoneform",
+    "description": "Your dwarven skin hardens to stone, absorbing incoming damage with mana.",
+    "type": "support",
+    "targeting": "self",
+    "range": 0,
+    "cooldown": 60.0,
+    "manaCost": 20,
+    "buff": {
+      "id": "stoneform",
+      "stat": "manaShield",
+      "absorbAmount": 80,
+      "absorbPerLevel": 12,
+      "duration": 15.0
+    },
+    "particle": "hit_spark",
+    "sfx": "sword_swing",
+    "races": ["dwarf"],
+    "levelReq": 1,
+    "icon": "manaShield"
+  },
+
+  "bloodrage": {
+    "id": "bloodrage",
+    "name": "Blood Rage",
+    "description": "Your orcish fury erupts, empowering every strike for a short time.",
+    "type": "support",
+    "targeting": "self",
+    "range": 0,
+    "cooldown": 45.0,
+    "manaCost": 12,
+    "buff": {
+      "id": "bloodrage",
+      "stat": "damage",
+      "modifier": 0.25,
+      "duration": 12.0
+    },
+    "particle": "hit_spark",
+    "sfx": "sword_swing",
+    "races": ["orc"],
+    "levelReq": 1,
+    "icon": "heroicStrike"
   }
 }

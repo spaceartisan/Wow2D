@@ -73,6 +73,25 @@
     "icon": "assets/sprites/status/evasion.png"
   },
 
+  "hot_perseverance": {
+    "name": "Perseverance",
+    "description": "Human resolve: restoring health over time.",
+    "type": "buff",
+    "icon": "assets/sprites/status/perseverance.png"
+  },
+  "stoneform": {
+    "name": "Stoneform",
+    "description": "Dwarven stone skin absorbing incoming damage.",
+    "type": "buff",
+    "icon": "assets/sprites/status/stoneform.png"
+  },
+  "bloodrage": {
+    "name": "Blood Rage",
+    "description": "Orcish fury: damage increased by 25%.",
+    "type": "buff",
+    "icon": "assets/sprites/status/bloodrage.png"
+  },
+
   "zoneSlow": {
     "name": "Bogged Down",
     "description": "Move speed reduced by treacherous terrain.",

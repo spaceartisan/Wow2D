@@ -25,6 +25,45 @@ export function classStats(classId) {
 // Backward compat: PLAYER_BASE points to defaults
 export const PLAYER_BASE = _pb.defaults;
 
+/* ── Races — loaded from public/data/races.json ─────────── */
+let _races;
+try {
+  _races = await fetch("/data/races.json").then(r => {
+    if (!r.ok) throw new Error(`races.json HTTP ${r.status}`);
+    return r.json();
+  });
+} catch (e) {
+  console.error("Failed to load races.json:", e);
+  _races = { defaults: { statMods: {} }, races: {} };
+}
+export const RACES_DATA = _races;
+export const RACES = _races.races || {};
+export const DEFAULT_RACE = Object.keys(RACES)[0] || "human";
+const _raceDefaultMods = (_races.defaults && _races.defaults.statMods) || {};
+
+/** Return the statMods object for a race (falling back to defaults). */
+export function raceStatMods(raceId) {
+  const race = RACES[raceId] || {};
+  return { ..._raceDefaultMods, ...(race.statMods || {}) };
+}
+
+/** Apply a race's multiplicative stat modifiers on top of raw class stats. */
+export function applyRaceMods(raw, raceId) {
+  const mods = raceStatMods(raceId);
+  const out = { ...raw };
+  if (mods.maxHp)       out.maxHp       = Math.round(out.maxHp       * mods.maxHp);
+  if (mods.maxMana)     out.maxMana     = Math.round(out.maxMana     * mods.maxMana);
+  if (mods.damage)      out.damage      = Math.round(out.damage      * mods.damage);
+  if (mods.moveSpeed)   out.moveSpeed   = Math.round(out.moveSpeed   * mods.moveSpeed);
+  if (mods.attackRange) out.attackRange = Math.round(out.attackRange * mods.attackRange);
+  return out;
+}
+
+/** Class + race combined stats. Use this instead of classStats() wherever the player's race matters. */
+export function classRaceStats(classId, raceId) {
+  return applyRaceMods(classStats(classId), raceId);
+}
+
 /* ── Theme / branding — loaded from public/data/theme.json ── */
 let _theme;
 try {

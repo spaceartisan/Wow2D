@@ -51,6 +51,7 @@ DB file: `data/azerfall.db` (SQLite, WAL mode, foreign keys ON)
 | `username` | TEXT | — | FK → accounts, CASCADE DELETE |
 | `name` | TEXT | — | Display name (2–16 chars) |
 | `char_class` | TEXT | — | `warrior`, `mage`, or `rogue` |
+| `race` | TEXT | `'human'` | Player race. Validated against keys in `public/data/races.json`. Bonuses applied via `applyRaceMods()`. |
 | `level` | INTEGER | 1 | |
 | `xp` | INTEGER | 0 | |
 | `gold` | INTEGER | 12 | |
@@ -92,7 +93,7 @@ All functions are synchronous (better-sqlite3). The module exports these plus th
 | `logout` | `(token)` | Delete session row. |
 | `validateSession` | `(token)` | Returns `username` string or `null`. |
 | `getCharacters` | `(token)` | Returns `{ characters }` or `{ error }`. |
-| `createCharacter` | `(token, name, class, portrait)` | Max 5 per account. `portrait` must be one of the IDs returned by `getPlayerPortraitIds()` (defaults to the first available). Returns `{ ok, characters }` or `{ error }`. |
+| `createCharacter` | `(token, name, class, portrait, race)` | Max 5 per account. `class` validated against `playerBase.json`; `race` validated against `races.json` (defaults to first race, typically `'human'`); `portrait` must be one of the IDs returned by `getPlayerPortraitIds()`. Returns `{ ok, characters }` or `{ error }`. |
 | `deleteCharacter` | `(token, charId)` | Validates ownership. Returns `{ ok, characters }` or `{ error }`. |
 | `loadCharacter` | `(charId, username)` | Full load with JSON parsing. Returns character object or `null`. |
 | `saveCharacterProgress` | `(charId, data)` | Saves: level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor. |
@@ -106,9 +107,9 @@ Available on the `stmts` object (not exported, but accessible if you modify data
 ```js
 stmts.getAccount          // SELECT * FROM accounts WHERE username = ?
 stmts.insertAccount       // INSERT INTO accounts (username, hash, salt) VALUES (?, ?, ?)
-stmts.getCharacters       // SELECT id, name, char_class AS charClass, level, portrait, created_at ... WHERE username = ?
+stmts.getCharacters       // SELECT id, name, char_class AS charClass, race, level, portrait, created_at ... WHERE username = ?
 stmts.countCharacters     // SELECT COUNT(*) AS cnt FROM characters WHERE username = ?
-stmts.insertCharacter     // INSERT INTO characters (username, name, char_class, portrait) VALUES (?, ?, ?, ?)
+stmts.insertCharacter     // INSERT INTO characters (username, name, char_class, race, portrait) VALUES (?, ?, ?, ?, ?)
 stmts.deleteCharacter     // DELETE FROM characters WHERE id = ? AND username = ?
 stmts.getCharacterById    // SELECT id, name, ..., bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor, portrait ... WHERE id = ? AND username = ?
 stmts.saveCharacter       // UPDATE characters SET level=?, xp=?, ..., gathering_skills=?, map_id=?, pos_x=?, pos_y=?, floor=? WHERE id=?
@@ -317,6 +318,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   charId: 42,                  // Database character ID (for saving)
   name: "Elara",
   charClass: "warrior",        // class ID from playerBase.json ("warrior" | "mage" | "rogue" | …)
+  race: "human",               // race ID from races.json ("human" | "elf" | "dwarf" | "orc" | …). Stat bonuses applied in _recalcStats via applyRaceMods().
   portrait: "portrait_1",       // Character portrait ID (any PNG basename under public/assets/sprites/portraits/player/)
   mapId: "eldengrove",         // Current map ID
   x: 1200, y: 1500,           // World pixel position

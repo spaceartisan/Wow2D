@@ -40,6 +40,31 @@ const PLAYER_BASE_DATA = loadDataFile("playerBase.json");
 const PLAYER_BASE = PLAYER_BASE_DATA.defaults;
 const CLASSES = PLAYER_BASE_DATA.classes || {};
 
+/* Race definitions — stat multipliers + race-gated skills */
+const RACES_DATA = (() => {
+  try { return loadDataFile("races.json"); }
+  catch (_) { return { defaults: { statMods: {} }, races: {} }; }
+})();
+const RACES = RACES_DATA.races || {};
+const DEFAULT_RACE = Object.keys(RACES)[0] || "human";
+const RACE_DEFAULT_STAT_MODS = (RACES_DATA.defaults && RACES_DATA.defaults.statMods) || {};
+
+function raceStatMods(raceId) {
+  const race = RACES[raceId] || {};
+  return { ...RACE_DEFAULT_STAT_MODS, ...(race.statMods || {}) };
+}
+
+function applyRaceMods(raw, raceId) {
+  const mods = raceStatMods(raceId);
+  const out = { ...raw };
+  if (mods.maxHp)       out.maxHp       = Math.round(out.maxHp       * mods.maxHp);
+  if (mods.maxMana)     out.maxMana     = Math.round(out.maxMana     * mods.maxMana);
+  if (mods.damage)      out.damage      = Math.round(out.damage      * mods.damage);
+  if (mods.moveSpeed)   out.moveSpeed   = Math.round(out.moveSpeed   * mods.moveSpeed);
+  if (mods.attackRange) out.attackRange = Math.round(out.attackRange * mods.attackRange);
+  return out;
+}
+
 function classStats(classId) {
   const cls = CLASSES[classId] || {};
   return { ...PLAYER_BASE, ...cls };
@@ -372,7 +397,8 @@ class ServerWorld {
     const gold = Math.max(0, Number(charData.gold) || 12);
 
     const charClass = CLASSES[charData.charClass] ? charData.charClass : "warrior";
-    const cs = classStats(charClass);
+    const race = RACES[charData.race] ? charData.race : DEFAULT_RACE;
+    const cs = applyRaceMods(classStats(charClass), race);
 
     // Scale stats by level using class-specific scaling
     const maxHp = cs.maxHp + (level - 1) * cs.hpPerLevel;
@@ -388,6 +414,7 @@ class ServerWorld {
       charId: charData.id || null,
       name: String(charData.name || "Unknown").slice(0, 16),
       charClass,
+      race,
       portrait: charData.portrait || "portrait_1",
       level,
       xp,
@@ -537,7 +564,9 @@ class ServerWorld {
       pvpMode: mapEntry.data.pvpMode || "none",
       pvpKills: state.pvpKills || 0,
       pvpDeaths: state.pvpDeaths || 0,
-      portrait: state.portrait
+      portrait: state.portrait,
+      race: state.race,
+      charClass: state.charClass
     });
 
     // tell everyone else on the same map a player joined
@@ -1760,6 +1789,9 @@ class ServerWorld {
 
     // Class check
     if (skillDef.classes && !skillDef.classes.includes(player.charClass)) return;
+
+    // Race check (race-gated skills)
+    if (skillDef.races && !skillDef.races.includes(player.race)) return;
 
     // Level check
     if (player.level < (skillDef.levelReq || 1)) return;
@@ -4038,7 +4070,7 @@ class ServerWorld {
   _recalcStats(player) {
     const eq = player.equipment;
     const allSlots = ["mainHand", "offHand", "armor", "helmet", "pants", "boots", "ring1", "ring2", "amulet"];
-    const cs = classStats(player.charClass);
+    const cs = applyRaceMods(classStats(player.charClass), player.race);
 
     // Sum all stat bonuses from every equipped item (any slot can boost any stat)
     let hpBonus = 0;
@@ -4094,7 +4126,7 @@ class ServerWorld {
     while (player.xp >= xpToLevel && player.level < 100) {
       player.xp -= xpToLevel;
       player.level += 1;
-      const cs = classStats(player.charClass);
+      const cs = applyRaceMods(classStats(player.charClass), player.race);
       player.baseDamage = cs.damage + (player.level - 1) * cs.damagePerLevel;
       this._recalcStats(player);
       // Fully heal on level-up
@@ -5717,6 +5749,7 @@ class ServerWorld {
       id: p.id,
       name: p.name,
       charClass: p.charClass,
+      race: p.race,
       portrait: p.portrait,
       level: p.level,
       x: p.x,

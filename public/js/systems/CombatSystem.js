@@ -122,6 +122,12 @@ export class CombatSystem {
       return;
     }
 
+    // Race restriction check
+    if (skillDef.races && !skillDef.races.includes(player.race)) {
+      this.game.ui.addMessage("Your race cannot use that skill.");
+      return;
+    }
+
     // Cooldown check
     const now = performance.now();
     const cooldownMs = (skillDef.cooldown || 0) * 1000;

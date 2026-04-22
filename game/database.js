@@ -17,6 +17,17 @@ const LEGACY_PORTRAITS_DIR = path.join(__dirname, "..", "public", "assets", "spr
 const PLAYER_BASE_DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "data", "playerBase.json"), "utf8"));
 const VALID_CLASSES = Object.keys(PLAYER_BASE_DATA.classes || {});
 
+/* Load race definitions for validation */
+const RACES_DATA = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "data", "races.json"), "utf8"));
+  } catch (_) {
+    return { races: {} };
+  }
+})();
+const VALID_RACES = Object.keys(RACES_DATA.races || {});
+const DEFAULT_RACE = VALID_RACES[0] || "human";
+
 function getPlayerPortraitIds() {
   const readPortraitPngs = (dirPath) => {
     if (!fs.existsSync(dirPath)) return [];
@@ -111,6 +122,7 @@ db.exec(`
     alter("pvp_kills", "INTEGER NOT NULL DEFAULT 0");
     alter("pvp_deaths", "INTEGER NOT NULL DEFAULT 0");
     alter("portrait", "TEXT NOT NULL DEFAULT 'portrait_1'");
+    alter("race", `TEXT NOT NULL DEFAULT '${DEFAULT_RACE}'`);
   });
   runMigrations();
 }
@@ -131,11 +143,11 @@ const stmts = {
   getAccount:     db.prepare("SELECT * FROM accounts WHERE username = ?"),
   insertAccount:  db.prepare("INSERT INTO accounts (username, hash, salt) VALUES (?, ?, ?)"),
 
-  getCharacters:  db.prepare("SELECT id, name, char_class AS charClass, level, portrait, created_at AS createdAt FROM characters WHERE username = ? ORDER BY id"),
+  getCharacters:  db.prepare("SELECT id, name, char_class AS charClass, race, level, portrait, created_at AS createdAt FROM characters WHERE username = ? ORDER BY id"),
   countCharacters: db.prepare("SELECT COUNT(*) AS cnt FROM characters WHERE username = ?"),
-  insertCharacter: db.prepare("INSERT INTO characters (username, name, char_class, portrait) VALUES (?, ?, ?, ?)"),
+  insertCharacter: db.prepare("INSERT INTO characters (username, name, char_class, race, portrait) VALUES (?, ?, ?, ?, ?)"),
   deleteCharacter: db.prepare("DELETE FROM characters WHERE id = ? AND username = ?"),
-  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, map_id AS mapId, pos_x AS posX, pos_y AS posY, floor, pvp_kills AS pvpKills, pvp_deaths AS pvpDeaths, portrait, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
+  getCharacterById: db.prepare("SELECT id, name, char_class AS charClass, race, level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills AS gatheringSkills, map_id AS mapId, pos_x AS posX, pos_y AS posY, floor, pvp_kills AS pvpKills, pvp_deaths AS pvpDeaths, portrait, created_at AS createdAt FROM characters WHERE id = ? AND username = ?"),
 
   saveCharacter: db.prepare("UPDATE characters SET level = ?, xp = ?, gold = ?, hp = ?, mana = ?, inventory = ?, equipment = ?, quests = ?, hearthstone = ?, bank = ?, hotbar = ?, gathering_skills = ?, map_id = ?, pos_x = ?, pos_y = ?, floor = ?, pvp_kills = ?, pvp_deaths = ? WHERE id = ?"),
 
@@ -229,7 +241,7 @@ function getCharacters(token) {
   return { characters };
 }
 
-function createCharacter(token, charName, charClass, portrait) {
+function createCharacter(token, charName, charClass, portrait, race) {
   const username = validateSession(token);
   if (!username) return { error: "Auth failed." };
 
@@ -252,13 +264,16 @@ function createCharacter(token, charName, charClass, portrait) {
     return { error: "Invalid class." };
   }
 
+  const raceId = (race || DEFAULT_RACE).toLowerCase();
+  const rc = VALID_RACES.includes(raceId) ? raceId : DEFAULT_RACE;
+
   const validPortraits = getPlayerPortraitIds();
   const defaultPortrait = validPortraits[0] || "portrait_1";
   const port = validPortraits.includes(portrait) ? portrait : defaultPortrait;
 
   const displayName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1).toLowerCase();
   try {
-    stmts.insertCharacter.run(username, displayName, cls, port);
+    stmts.insertCharacter.run(username, displayName, cls, rc, port);
   } catch (err) {
     if (err.message && err.message.includes("UNIQUE constraint failed")) {
       return { error: "Character name is already taken." };
@@ -309,6 +324,10 @@ function loadCharacter(charId, username) {
   // Validate mapId has a value; fall back to default if empty/null
   if (!char.mapId || typeof char.mapId !== "string") {
     char.mapId = "eldengrove";
+  }
+  // Validate race
+  if (!char.race || !VALID_RACES.includes(char.race)) {
+    char.race = DEFAULT_RACE;
   }
   return char;
 }

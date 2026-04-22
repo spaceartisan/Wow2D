@@ -144,6 +144,13 @@ export class ScreenManager {
       const pb = await fetch("/data/playerBase.json").then(r => r.json());
       this._classesData = pb.classes || {};
     }
+    // Load race definitions and build race picker dynamically
+    if (!this._racesData) {
+      try {
+        const rd = await fetch("/data/races.json").then(r => r.json());
+        this._racesData = rd.races || {};
+      } catch (_) { this._racesData = {}; }
+    }
     const classPicker = document.querySelector(".class-picker");
     classPicker.textContent = "";
     let first = true;
@@ -158,6 +165,30 @@ export class ScreenManager {
     }
 
     const classBtns = classPicker.querySelectorAll(".class-btn");
+
+    // Build race picker
+    const racePicker = document.querySelector(".race-picker");
+    if (racePicker) {
+      racePicker.textContent = "";
+      let firstRace = true;
+      for (const [raceId, raceDef] of Object.entries(this._racesData)) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "race-btn" + (firstRace ? " selected" : "");
+        btn.dataset.race = raceId;
+        btn.title = raceDef.description || raceDef.name;
+        btn.innerHTML = `<img class="race-icon" src="/assets/sprites/ui/${raceDef.icon}" alt="${raceDef.name}"><span class="race-label">${raceDef.name}</span>`;
+        racePicker.appendChild(btn);
+        firstRace = false;
+      }
+      const raceBtns = racePicker.querySelectorAll(".race-btn");
+      raceBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          raceBtns.forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+        });
+      });
+    }
 
     if (this._playerPortraits.length === 0) {
       this._playerPortraits = await this.loadPlayerPortraits();
@@ -208,6 +239,7 @@ export class ScreenManager {
 
       const charName = document.getElementById("char-name-input").value.trim();
       const charClass = document.querySelector(".class-btn.selected")?.dataset.class || "warrior";
+      const race = document.querySelector(".race-btn.selected")?.dataset.race || Object.keys(this._racesData)[0] || "human";
       const portrait = document.querySelector(".portrait-btn.selected")?.dataset.portrait || this._playerPortraits[0]?.id || "portrait_1";
 
       try {
@@ -215,6 +247,7 @@ export class ScreenManager {
           token: this.session.token,
           charName,
           charClass,
+          race,
           portrait
         });
         this.session.characters = data.characters;
@@ -286,13 +319,15 @@ export class ScreenManager {
 
       const classDef = this._classesData[char.charClass];
       const className = classDef?.name || this.capitalize(char.charClass);
+      const raceDef = this._racesData?.[char.race];
+      const raceName = raceDef?.name || (char.race ? this.capitalize(char.race) : "");
       const portraitSrc = `/assets/sprites/portraits/player/${char.portrait || this._playerPortraits[0]?.id || "portrait_1"}.png`;
 
       card.innerHTML = `
         <div class="char-avatar"><img class="char-avatar-img" src="${portraitSrc}" alt="${className}"></div>
         <div class="char-info">
           <div class="char-info-name">${this.escapeHtml(char.name)}</div>
-          <div class="char-info-detail">Level ${char.level} ${className}</div>
+          <div class="char-info-detail">Level ${char.level} ${raceName ? this.escapeHtml(raceName) + " " : ""}${className}</div>
         </div>
       `;
 

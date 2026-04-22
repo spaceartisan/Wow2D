@@ -1,5 +1,5 @@
 import { DragManager } from "./DragManager.js";
-import { CLASSES } from "../config.js";
+import { CLASSES, RACES } from "../config.js";
 
 export class UISystem {
   constructor(game) {
@@ -24,6 +24,7 @@ export class UISystem {
       targetPanel: document.getElementById("target-panel"),
       targetPortrait: document.getElementById("target-portrait"),
       targetName: document.getElementById("target-name"),
+      targetSubtitle: document.getElementById("target-subtitle"),
       targetHpFill: document.getElementById("target-hp-fill"),
       targetHpText: document.getElementById("target-hp-text"),
       partyFrames: document.getElementById("party-frames"),
@@ -636,6 +637,7 @@ export class UISystem {
       this.el.targetPanel.classList.remove("hidden");
       this._setTargetPortrait(`/assets/sprites/portraits/enemies/${target.portrait || target.type || 'wolf'}.png`);
       this.el.targetName.textContent = target.level ? `${target.name} (Lv.${target.level})` : target.name;
+      if (this.el.targetSubtitle) this.el.targetSubtitle.textContent = "";
       this.el.targetHpFill.style.width = `${ratio * 100}%`;
       this.el.targetHpText.textContent = `${Math.round(target.hp)} / ${target.maxHp}`;
       if (hpBar) hpBar.classList.remove("friendly");
@@ -656,6 +658,11 @@ export class UISystem {
       this.el.targetPanel.classList.remove("hidden");
       this._setTargetPortrait(`/assets/sprites/portraits/player/${rp.portrait || 'portrait_1'}.png`);
       this.el.targetName.textContent = rp.level ? `${rp.name} (Lv.${rp.level})` : rp.name;
+      if (this.el.targetSubtitle) {
+        const raceName = RACES[rp.race]?.name || "";
+        const className = CLASSES[rp.charClass]?.name || (rp.charClass ? rp.charClass.charAt(0).toUpperCase() + rp.charClass.slice(1) : "");
+        this.el.targetSubtitle.textContent = [raceName, className].filter(Boolean).join(" ");
+      }
       this.el.targetHpFill.style.width = `${ratio * 100}%`;
       this.el.targetHpText.textContent = `${Math.round(rp.hp)} / ${rp.maxHp}`;
       if (hpBar) hpBar.classList.remove("friendly");
@@ -2520,9 +2527,12 @@ export class UISystem {
 
     const classNames = {};
     for (const [id, cls] of Object.entries(CLASSES)) classNames[id] = cls.name;
+    const raceNames = {};
+    for (const [id, r] of Object.entries(RACES)) raceNames[id] = r.name;
 
     const stats = [
       ["Name", p.name],
+      ["Race", raceNames[p.race] || (p.race ? p.race.charAt(0).toUpperCase() + p.race.slice(1) : "—")],
       ["Class", classNames[p.charClass] || p.charClass],
       ["Level", p.level],
       ["XP", `${p.xp} / ${p.xpToLevel}`],
@@ -2600,9 +2610,11 @@ export class UISystem {
 
     const allSkills = this.game.data.skills || {};
 
-    // Filter skills available to this class and level
+    // Filter skills available to this class, race, and level
     const skills = Object.values(allSkills).filter(s =>
-      (!s.classes || s.classes.includes(p.charClass)) && p.level >= (s.levelReq || 1)
+      (!s.classes || s.classes.includes(p.charClass)) &&
+      (!s.races || s.races.includes(p.race)) &&
+      p.level >= (s.levelReq || 1)
     );
 
     for (const skill of skills) {
