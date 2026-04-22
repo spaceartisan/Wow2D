@@ -54,7 +54,7 @@ http://localhost:3000
 | Left-click enemy | Select target (does not attack) |
 | Left-click player | Select target (friendly) |
 | Right-click enemy | Select target and engage auto-attack |
-| Right-click other player | Context menu: Whisper, Invite to Party, Add Friend, Block, Trade |
+| Right-click other player | Context menu: Whisper, Invite to Party, Add Friend, Block, Trade, Challenge to Duel (on PVP maps) |
 | Right-click inventory item | Context menu: Equip, Use, Dismantle, or Drop |
 | Click equipment slot | Unequip item back to inventory |
 | `1` – `9`, `0` | Activate hotbar slots 1–10 (customizable: skills or items) |
@@ -147,6 +147,17 @@ http://localhost:3000
 - Social window (O key) with Friends, Party, and Blocked tabs
   - Friends list with online/offline status, whisper buttons, add/remove/block
   - Right-click context menu on other players: Whisper, Invite to Party, Add Friend, Block, Trade
+- PVP & Duel system
+  - Per-map `pvpMode`: `none` (safe), `ffa` (free-for-all), or `duel` (mutual opt-in only)
+  - Optional safe zone protection on FFA maps (`pvpSafeZoneProtection`)
+  - Right-click another player and select **Challenge to Duel** to send a duel request (works on any map with `pvpMode !== "none"`)
+  - Accepting opens a **3-second countdown** (`3… 2… 1… Fight!`) during which attacks are blocked on both sides
+  - Losing a duel does **not** kill you — HP is pacified to 10% of your max HP and the duel ends with a `Victorious` / `Defeated` message for both players
+  - Duel participants can enter safe zones during and after a duel (normal PVP combat timer is bypassed)
+  - General PVP (FFA) applies a combat timer after attacking or killing another player (configurable via `pvp.json`) that prevents safe zone entry and shows a `⚔ PVP Combat: Ns` HUD indicator
+  - Party members are immune to each other's PVP attacks by default (`friendlyFireParty`)
+  - Block list prevents blocked players from initiating trades or duels
+  - PVP kill/death counters tracked per player and shown in the Social → PVP tab
 - Player-to-player trading system
   - Right-click another player and select "Trade" to send a trade request (must be within 300 px)
   - Target receives an accept/decline popup with 30-second auto-decline timer
@@ -160,7 +171,7 @@ http://localhost:3000
 
 ### Persistence
 - SQLite database for accounts, characters, and sessions
-- Character creation with class selection and portrait picker (6 portrait options)
+- Character creation with class selection and portrait picker — portrait options are discovered dynamically from `public/assets/sprites/portraits/player/` (drop new `portrait_N.png` files in and they appear automatically)
 - Character progression saved on disconnect, auto-save (every 60s), and on key events (XP gains, quest completions, gathering, crafting)
 - Player position persistence — map, coordinates, and floor saved to DB and restored on login
 - Session tokens with 24-hour expiry and periodic cleanup
@@ -169,7 +180,7 @@ http://localhost:3000
 
 ### UI
 - Fantasy-themed HUD with player portrait, combined name + level display, health/mana bars with overlaid text values, and XP bar
-- Target panel with portrait (enemy portraits from `portraits/enemies/`, player portraits from `portraits/`), combined name + level, and HP bar (different style for friendly vs enemy targets)
+- Target panel with portrait (enemy portraits from `portraits/enemies/`, player portraits from `portraits/player/`), combined name + level, and HP bar. Player target HP updates live during combat (immediate override on PVP attack results) and is color-matched to the target (no forced friendly/enemy tint for players)
 - 10-slot hotbar (keys 1–9, 0) — drag skills or items from their panels to assign, reorder by dragging between slots, right-click to clear; hover tooltips for skills and items
 - Hotbar lock options in game menu: lock slot assignments and/or lock hotbar position
 - Inventory (20 slots) with right-click context menu (Equip/Use/Dismantle/Drop), drag-and-drop (via DragManager), and item stacking (configurable per-item `stackSize`)
@@ -247,8 +258,9 @@ public/
       entities/                Entity sprites (player, NPC, enemy, arrow)
       gathering/               Resource node sprites (48×48)
       icons/                   Item icons (32×32 pixel-art PNGs) — includes gathering tools & materials
-      portraits/               Player character portraits (54×54 pixel-art PNGs: portrait_1–portrait_6)
-        enemies/               Enemy target portraits (54×54 pixel-art PNGs, keyed by portrait field)
+      portraits/
+        player/                Player character portraits (54×54 pixel-art PNGs; folder is scanned dynamically by `/api/portraits/players`)
+        enemies/               Enemy target portraits (54×54 pixel-art PNGs, keyed by the enemy's `portrait` field)
       skills/                  Skill ability icons (32×32 pixel-art PNGs)
       status/                  Buff/debuff status effect icons (32×32 pixel-art PNGs)
 ```

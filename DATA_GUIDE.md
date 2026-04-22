@@ -1347,7 +1347,27 @@ Global PVP configuration. The server reads this at startup.
 | Field | Type | Description |
 |-------|------|-------------|
 | `pvpMode` | string | `"none"` (safe), `"ffa"` (free-for-all), or `"duel"` (mutual opt-in) |
-| `pvpSafeZoneProtection` | boolean | *(optional)* If `true`, players in safe zones cannot be attacked (FFA maps only) |
+| `pvpSafeZoneProtection` | boolean | *(optional)* If `true`, tiles flagged `safe: true` in the tile palette block PVP damage even on FFA maps |
+
+### Duel System
+
+Duels are a mutual-opt-in PVP flow available on any map with `pvpMode !== "none"`:
+
+- Right-click another player → **Challenge to Duel** (only visible when `game.pvpMode !== "none"`).
+- The target receives a confirmation prompt; on accept, both players enter a **3-second countdown** (`duel_started { startsAt, countdownMs: 3000 }`) during which PVP damage is blocked.
+- After the countdown, only the two duelists can damage each other; all other PVP rules (party immunity, block list, safe zones) still apply.
+- **Duel defeat is not a real death.** When a duelist is reduced to 0 HP the server restores them to `max(1, floor(maxHp * 0.1))` HP and emits `duel_ended { result: "victorious" | "defeated", opponentName }` to both sides.
+- `_endDuel()` resets `_duelTarget`, `_duelStartAt`, and `pvpCombatUntil` on both players so the loser can immediately re-enter a safe zone.
+- `pvpKills` / `pvpDeaths` counters are tracked in-memory per player (FFA kills only) and surfaced via the `pvp_stats` message and the Social window's **PVP** tab. They are **not** persisted across sessions.
+
+### Player Portraits (Dynamic)
+
+Player character portraits are no longer hardcoded. The server scans `public/assets/sprites/portraits/player/*.png` at startup (`database.getPlayerPortraitIds()`) and exposes the list through `GET /api/portraits/players`. To add a new portrait:
+
+1. Drop a new `portrait_N.png` (54×54 recommended) into `public/assets/sprites/portraits/player/`.
+2. Restart the server — character creation and the target-panel/party-frame portrait lookups pick it up automatically.
+
+The `characters.portrait` DB column is validated against the current folder list on character creation; invalid values fall back to the first available portrait.
 
 ---
 

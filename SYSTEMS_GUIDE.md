@@ -38,6 +38,7 @@ All values are sourced directly from the codebase. If something below disagrees 
 29. [Party System](#29-party-system)
 30. [Social / Friends System](#30-social--friends-system)
 31. [Trading System](#31-trading-system)
+31b. [PvP & Dueling System](#31b-pvp--dueling-system)
 32. [End-to-End Flow Examples](#32-end-to-end-flow-examples)
 33. [Glossary](#33-glossary)
 
@@ -1213,7 +1214,7 @@ A clear breakdown of what runs where and who has the final say.
 
 Every WebSocket message exchanged between client and server. Messages are JSON with a `type` field.
 
-### Client → Server (32 types)
+### Client → Server (37 types)
 
 | `type` | Payload | Handler |
 |--------|---------|---------|
@@ -1249,6 +1250,11 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `trade_offer_update` | `gold`, `items[]` | `handleTradeOfferUpdate()` |
 | `trade_confirm` | *(none)* | `handleTradeConfirm()` |
 | `trade_cancel` | *(none)* | `handleTradeCancel()` |
+| `pvp_attack` | `targetPlayerId` | `handlePvpAttack()` |
+| `duel_challenge` | `targetId` | `handleDuelChallenge()` |
+| `duel_accept` | *(none)* | `handleDuelAccept()` |
+| `duel_decline` | *(none)* | `handleDuelDecline()` |
+| `duel_cancel` | *(none)* | `handleDuelCancel()` |
 
 ### Server → Client — Unicast (41 types)
 
@@ -1295,6 +1301,16 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `trade_confirm_update` | `confirmed`, `partnerConfirmed` | `handleTradeConfirm/OfferUpdate()` |
 | `trade_completed` | `inventory[]`, `gold` | `_executeTrade()` |
 | `trade_cancelled` | `reason` | `_cancelTrade()` |
+| `pvp_attack_result` | `targetId`, `targetName`, `damage`, `targetHp`, `targetMaxHp` | `_applyPvpDamage()` |
+| `pvp_combat_timer` | `until`, `duration` | `_setPvpCombatTimer()` |
+| `pvp_safe_zone_blocked` | `remaining` | `handleMove()` safe zone guard |
+| `pvp_kill` | `victimName`, `pvpKills`, `pvpDeaths` | `_onPvpDeath()` |
+| `pvp_stats` | `pvpKills`, `pvpDeaths` | `_onPvpDeath()` |
+| `duel_result` | `ok`, `message?`, `error?` | `handleDuelChallenge/Accept/Decline/Cancel()` |
+| `duel_challenge_received` | `fromId`, `fromName` | `handleDuelChallenge()` |
+| `duel_challenge_cancelled` | *(none)* | `handleDuelDecline/Cancel()` |
+| `duel_started` | `opponentId`, `opponentName`, `startsAt`, `countdownMs` | `handleDuelAccept()` |
+| `duel_ended` | `result?` (`"victorious"` / `"defeated"`), `opponentName?`, `hp?`, `maxHp?` | `_endDuel()` / `_endDuelWithResult()` |
 
 ### Server → Broadcast (all players on map)
 
@@ -1307,6 +1323,8 @@ Every WebSocket message exchanged between client and server. Messages are JSON w
 | `combat_visual` | *(varies — see below)* | Multiple sources |
 | `projectile_spawn` | `attackerId`, `sx`, `sy`, `targetEnemyId`, `speed`, `weaponId?`, `skillId?`, `damageType?` | `handleAttack()`, `handleUseSkill()` |
 | `chat` (world) | `channel:"world"`, `from`, `playerId`, `text` | `handleChat()` — all maps |
+| `pvp_combat_visual` | `attackerId`, `ax`, `ay`, `targetId`, `tx`, `ty`, `weaponId`, `hitParticle`, `hitSfx`, `damage`, `targetHp`, `targetMaxHp` | `_applyPvpDamage()` |
+| `player_update` | `playerId`, `hp`, `maxHp` | `_endDuelWithResult()` — broadcasts loser's restored HP |
 
 ### `combat_visual` variants
 
@@ -1589,6 +1607,74 @@ Active trades are tracked in-memory on each player object:
 | `_tradePartner` | `playerId \| null` | Active trade partner |
 | `_tradeOffer` | `{ gold, items[] }` | This player's current offer |
 | `_tradeConfirmed` | `boolean` | Whether this player has confirmed |
+
+---
+
+## 31b. PvP & Dueling System
+
+Player-vs-player combat is fully server-authoritative and gated by per-map `pvpMode`. Two flows coexist: **open PVP** (FFA maps) and **duels** (mutual opt-in on any PVP-enabled map).
+
+### Map PVP Modes
+
+Each map JSON (`public/data/maps/*.json`) may set:
+- `pvpMode`: `"none"` (default, no PVP), `"ffa"` (open PVP), or `"duel"` (duels only).
+- `pvpSafeZoneProtection`: when `true`, tiles flagged `safe: true` in the tile palette block PVP damage even on FFA maps.
+
+The client reads these fields from the `welcome` / `map_changed` snapshot and exposes them as `game.pvpMode` / `game.pvpSafeZoneProtection`. `UISystem.buildPlayerContextMenu()` only renders the **Challenge to Duel** option when `pvpMode !== "none"`.
+
+### PVP Combat Timer
+
+`pvp.json` configures two timers:
+- `combatTimerSec` (default 30) — applied on every successful PVP hit; refreshed on subsequent hits.
+- `killTimerSec` (default 300) — applied when you kill another player.
+
+`_setPvpCombatTimer(player, kind)` sets `player.pvpCombatUntil = Date.now() + durationMs` and sends `pvp_combat_timer { until, duration }` to that player. The client uses this to render the `⚔ PVP Combat: Ns` HUD indicator (`UISystem.updatePvpTimer()`).
+
+While `pvpCombatUntil > Date.now()` **and** the player is **not** in a duel (`_duelTarget === null`), `handleMove()` rejects any move that would place the player on a safe-zone tile and responds with `pvp_safe_zone_blocked { remaining }`. Duel participants bypass this block so defeated players can walk into town after losing.
+
+### Duel Lifecycle
+
+| Step | C→S | Server-side effect | S→C |
+|------|-----|--------------------|-----|
+| Challenge | `duel_challenge { targetId }` | Validates same map, `pvpMode !== "none"`, both alive, not blocked, not already in duel. Sets `challenger._pendingDuelTarget = targetId`, `target._pendingDuelFrom = challengerId`. | `duel_result { ok:true, message:"Duel challenge sent..." }` to challenger; `duel_challenge_received { fromId, fromName }` to target. |
+| Accept | `duel_accept` | Clears both pending fields. Sets `_duelTarget` on both, `_duelStartAt = Date.now() + 3000`. | `duel_started { opponentId, opponentName, startsAt, countdownMs: 3000 }` to both. Client shows `3… 2… 1… Fight!` countdown. |
+| Decline | `duel_decline` | Clears both pending fields. | `duel_challenge_cancelled` to original challenger; `duel_result { ok:true }` to decliner. |
+| Cancel | `duel_cancel` | Cancels outgoing challenge **or** ends an active duel without a winner. | `duel_challenge_cancelled` and/or `duel_ended` to both. |
+| Fatal hit | *(server)* | `_applyPvpDamage()` brings victim to 0 HP → `_onPvpDeath()` detects duel path → `victim.hp = max(1, floor(maxHp * 0.1))` → `_endDuelWithResult(loser, winner)`. Resets `_duelTarget`, `_duelStartAt`, and `pvpCombatUntil` on both. | `duel_ended { result:"victorious", opponentName }` to winner; `duel_ended { result:"defeated", opponentName, hp, maxHp }` to loser; broadcast `player_update { playerId, hp, maxHp }` so other clients see the loser's new HP. |
+
+During the 3-second countdown (`Date.now() < _duelStartAt`) `_canPvpAttack()` blocks all PVP damage. This prevents one side from hitting before the other's UI finishes loading the countdown.
+
+### PVP Damage vs Duel Damage
+
+`_canPvpAttack(attacker, victim)` applies these checks in order:
+1. Same map, both alive.
+2. `map.pvpMode !== "none"`.
+3. Not same party (unless `PVP_CONFIG.friendlyFireParty === true`).
+4. Target not inside a protected safe zone tile.
+5. If `pvpMode === "duel"`: both players must have `_duelTarget` pointing at each other, **and** both must satisfy `Date.now() >= _duelStartAt`.
+
+If validated, `_applyPvpDamage()` rolls damage (attacker `damage` minus victim mitigation), updates `victim.hp`, sends `pvp_attack_result` to attacker and `player_damaged { isPvp:true }` to victim, broadcasts `pvp_combat_visual` to the map (so spectators see the hit), and calls `_setPvpCombatTimer(..., "attack")`.
+
+### Client Integration
+
+- `NetworkSystem.sendPvpAttack(targetPlayerId)` sends `pvp_attack`. `CombatSystem` routes auto-attack clicks on hostile players through this path instead of the PvE `attack` message.
+- `NetworkSystem._applyRemotePlayerHp(targetId, hp, maxHp)` immediately patches the local `remotePlayers` entry and the latest snapshot cache, so the target panel HP bar updates the same frame as the server response (no wait for the next state snapshot).
+- `NetworkSystem.onDuelStarted()` starts a 1s interval that renders `3… 2… 1… Fight!` in the action log, keyed off `msg.startsAt` for perfect sync.
+- `NetworkSystem.onDuelEnded()` prints `[Duel] Victorious! You defeated {name}.` or `[Duel] Defeated. {name} was victorious.` based on `msg.result`, and clears the countdown interval.
+- `UISystem` Social window has a **PVP** tab showing lifetime `pvpKills` / `pvpDeaths` (from `pvp_stats` updates).
+
+### Death Differences
+
+| Scenario | Behavior |
+|----------|----------|
+| PvE death | Normal — respawn timer, gold penalty, resurrect at last waystone. |
+| FFA PVP death | `you_died { pvp:true, killerName, goldLost }` to victim (loses `PVP_CONFIG.deathGoldPenalty`, default 5); `pvp_kill { victimName, pvpKills, pvpDeaths }` to killer. Normal respawn follows. |
+| Duel death | **Not a real death.** HP pacified to 10% of max, `duel_ended` messages, participants can re-enter safe zones. |
+
+### Friendly Fire & Blocklist
+
+- `PVP_CONFIG.friendlyFireParty` (default `false`) prevents PVP damage between party members.
+- `database.isBlocked(a, b)` blocks both trade requests and duel challenges in either direction.
 
 ---
 

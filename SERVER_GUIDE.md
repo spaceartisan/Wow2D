@@ -67,7 +67,7 @@ DB file: `data/azerfall.db` (SQLite, WAL mode, foreign keys ON)
 | `pos_x` | REAL | `-1` | Last known X position (world pixels, -1 = use spawn) |
 | `pos_y` | REAL | `-1` | Last known Y position (world pixels, -1 = use spawn) |
 | `floor` | INTEGER | `0` | Last known floor (0 = ground, 1+ = upper floors) |
-| `portrait` | TEXT | `'portrait_1'` | Character portrait ID (e.g. `portrait_1` through `portrait_6`) |
+| `portrait` | TEXT | `'portrait_1'` | Character portrait ID. Validated against the set of PNGs discovered in `public/assets/sprites/portraits/player/` by `database.getPlayerPortraitIds()`. |
 | `created_at` | INTEGER | epoch ms | |
 
 ### `sessions`
@@ -92,11 +92,12 @@ All functions are synchronous (better-sqlite3). The module exports these plus th
 | `logout` | `(token)` | Delete session row. |
 | `validateSession` | `(token)` | Returns `username` string or `null`. |
 | `getCharacters` | `(token)` | Returns `{ characters }` or `{ error }`. |
-| `createCharacter` | `(token, name, class, portrait)` | Max 5 per account. Portrait must be one of `portrait_1`–`portrait_6` (defaults to `portrait_1`). Returns `{ ok, characters }` or `{ error }`. |
+| `createCharacter` | `(token, name, class, portrait)` | Max 5 per account. `portrait` must be one of the IDs returned by `getPlayerPortraitIds()` (defaults to the first available). Returns `{ ok, characters }` or `{ error }`. |
 | `deleteCharacter` | `(token, charId)` | Validates ownership. Returns `{ ok, characters }` or `{ error }`. |
 | `loadCharacter` | `(charId, username)` | Full load with JSON parsing. Returns character object or `null`. |
 | `saveCharacterProgress` | `(charId, data)` | Saves: level, xp, gold, hp, mana, inventory, equipment, quests, hearthstone, bank, hotbar, gathering_skills, map_id, pos_x, pos_y, floor. |
 | `cleanExpiredSessions` | `()` | Deletes expired session rows. |
+| `getPlayerPortraitIds` | `()` | Scans `public/assets/sprites/portraits/player/` for `*.png` files and returns a sorted array of portrait IDs (filename without extension). Falls back to the legacy `portraits/` directory for backwards compatibility. |
 
 ### Raw Prepared Statements
 
@@ -143,6 +144,12 @@ Base URL: `http://localhost:3000` (auto-increments port if busy)
 | POST | `/api/characters` | `{ token }` | `{ characters: [...] }` |
 | POST | `/api/characters/create` | `{ token, charName, charClass, portrait }` | `{ ok, characters }` |
 | POST | `/api/characters/delete` | `{ token, charId }` | `{ ok, characters }` |
+
+### Public Asset Endpoints
+
+| Method | Path | Response |
+|--------|------|----------|
+| GET | `/api/portraits/players` | `{ portraits: [{ id, src }] }` — lists all PNG portraits found in `public/assets/sprites/portraits/player/`. The client calls this at login to render the character-creation portrait picker. |
 
 ---
 
@@ -212,6 +219,11 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `trade_offer_update` | `gold, items[]` | Update your trade offer (gold amount + up to 10 item indices) |
 | `trade_confirm` | — | Confirm your side of the trade |
 | `trade_cancel` | — | Cancel the active trade |
+| `pvp_attack` | `targetPlayerId` | Attack another player (validated against map `pvpMode` and duel state) |
+| `duel_challenge` | `targetId` | Send a duel challenge to another player on the same map |
+| `duel_accept` | — | Accept the most recent pending duel challenge |
+| `duel_decline` | — | Decline the pending duel challenge |
+| `duel_cancel` | — | Cancel an outgoing challenge or end an active duel early |
 
 ### Server → Client Messages
 
@@ -267,6 +279,18 @@ Server responds with `welcome` (success) or `auth_error` (failure).
 | `trade_confirm_update` | Confirm state | `confirmed, partnerConfirmed` |
 | `trade_completed` | Trade executed | `inventory[], gold` |
 | `trade_cancelled` | Trade ended | `reason` |
+| `pvp_attack_result` | PVP attack landed on target | `targetId, targetName, damage, targetHp, targetMaxHp` |
+| `pvp_combat_visual` | PVP combat effect (broadcast on map) | `attackerId, ax, ay, targetId, tx, ty, weaponId, hitParticle, hitSfx, damage, targetHp, targetMaxHp` |
+| `pvp_combat_timer` | PVP combat timer set/refreshed | `until, duration` |
+| `pvp_safe_zone_blocked` | Movement into safe zone blocked by PVP combat | `remaining` |
+| `pvp_kill` | You killed another player | `victimName, pvpKills, pvpDeaths` |
+| `pvp_stats` | PVP stat update | `pvpKills, pvpDeaths` |
+| `player_update` | Broadcast authoritative HP patch (used after duel end) | `playerId, hp, maxHp` |
+| `duel_result` | Duel action feedback | `ok, message?, error?` |
+| `duel_challenge_received` | Incoming duel challenge | `fromId, fromName` |
+| `duel_challenge_cancelled` | Outgoing challenge cancelled | — |
+| `duel_started` | Duel begins with 3s countdown | `opponentId, opponentName, startsAt, countdownMs` |
+| `duel_ended` | Duel concluded | `result?` (`"victorious"` / `"defeated"`)`, opponentName?, hp?, maxHp?` |
 | `party_result` | Party action result | `ok?, error?, message?` |
 | `party_invite_received` | Incoming invite | `fromId, from` (inviter's name) |
 | `party_update` | Party state changed | `partyId, leader, members[{ id, name, charClass, portrait, level, hp, maxHp, online, isLeader }], pendingInvites[]` |
@@ -293,7 +317,7 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   charId: 42,                  // Database character ID (for saving)
   name: "Elara",
   charClass: "warrior",        // class ID from playerBase.json ("warrior" | "mage" | "rogue" | …)
-  portrait: "portrait_1",       // Character portrait ID (portrait_1 through portrait_6)
+  portrait: "portrait_1",       // Character portrait ID (any PNG basename under public/assets/sprites/portraits/player/)
   mapId: "eldengrove",         // Current map ID
   x: 1200, y: 1500,           // World pixel position
   floor: 0,                    // 0 = ground, 1+ = upper floors
@@ -365,7 +389,16 @@ All online players are in `world.players` — a `Map<playerId, PlayerState>`.
   _tradePendingTo: null,         // Outgoing trade request target ID
   _tradePartner: null,           // Active trade partner ID
   _tradeOffer: null,             // { gold, items[] } — this player's current offer
-  _tradeConfirmed: false         // Whether this player has confirmed their offer
+  _tradeConfirmed: false,        // Whether this player has confirmed their offer
+
+  /* PVP & Duel state */
+  pvpCombatUntil: 0,             // epoch ms; while > Date.now() safe zone entry is blocked (unless in a duel)
+  pvpKills: 0,                   // Lifetime PVP kill count (in-memory; not persisted)
+  pvpDeaths: 0,                  // Lifetime PVP death count (in-memory; not persisted)
+  _duelTarget: null,             // Opponent player ID during an active duel
+  _duelStartAt: 0,               // epoch ms; PVP damage blocked until Date.now() >= _duelStartAt (3s countdown)
+  _pendingDuelTarget: null,      // Outgoing duel challenge target ID
+  _pendingDuelFrom: null         // Incoming duel challenge sender ID
 }
 ```
 
@@ -637,6 +670,56 @@ Trades auto-cancel (with `trade_cancelled` sent to the other party) when:
 ### Trade Execution Validation
 
 Before swapping items, `_executeTrade()` clones both inventories, removes offered items, then attempts to add received items. If either player lacks inventory space, both receive `trade_cancelled` with reason `"Not enough inventory space"`. On success, both players' inventories and gold are updated atomically and saved to the database.
+
+---
+
+## PVP & Dueling System
+
+The server authoritatively resolves player-vs-player combat and gates it behind per-map PVP modes plus an opt-in dueling flow.
+
+### Map PVP Modes
+
+Each map JSON may set `pvpMode`:
+- `"none"` (default) – PVP is fully disabled on this map.
+- `"ffa"` – Free-for-all; any two players can damage each other (party members are immune by default).
+- `"duel"` – PVP damage is only allowed between two players who have accepted a mutual duel.
+
+Maps with `pvpSafeZoneProtection: true` treat tiles flagged as `safe: true` as PVP-immune even on FFA maps.
+
+### PVP Combat Timer
+
+After a successful PVP hit or kill, the server sets `player.pvpCombatUntil = Date.now() + durationMs` and emits `pvp_combat_timer { until, duration }`. Durations are sourced from `public/data/pvp.json`:
+- `combatTimerSec` (default 30) – refreshed on each PVP hit.
+- `killTimerSec` (default 300) – applied when you kill another player.
+
+While `pvpCombatUntil > Date.now()` and the player is **not** currently in a duel (`_duelTarget` is null), the server rejects movement into safe zones and emits `pvp_safe_zone_blocked { remaining }`. The client renders a `⚔ PVP Combat: Ns` HUD indicator.
+
+### PVP Damage Flow (FFA)
+
+1. Client sends `pvp_attack { targetPlayerId }`.
+2. `_canPvpAttack(attacker, victim)` validates: same map, both alive, map `pvpMode !== "none"`, not in the same party, target not inside a protected safe zone tile, and (for duel mode) mutual `_duelTarget` + `Date.now() >= _duelStartAt` on both sides.
+3. `_applyPvpDamage()` rolls damage, updates `victim.hp`, sends `pvp_attack_result` to attacker and `player_damaged { isPvp: true }` to victim, and broadcasts `pvp_combat_visual` to the map.
+4. If the hit is fatal, `_onPvpDeath()` is invoked.
+
+### Duel Lifecycle
+
+| Step | Client → Server | Server action | Server → Client |
+|------|----------------|---------------|-----------------|
+| Challenge | `duel_challenge { targetId }` | Sets `_pendingDuelTarget` on challenger, `_pendingDuelFrom` on target | `duel_result` to challenger; `duel_challenge_received { fromId, fromName }` to target |
+| Accept | `duel_accept` | Clears pending fields; sets `_duelTarget` on both; `_duelStartAt = Date.now() + 3000` | `duel_started { opponentId, opponentName, startsAt, countdownMs: 3000 }` to both |
+| Decline | `duel_decline` | Clears pending fields | `duel_challenge_cancelled` to original challenger |
+| Cancel | `duel_cancel` | Cancels outgoing challenge or ends active duel | `duel_challenge_cancelled` and/or `duel_ended` |
+| Fatal hit | (server) | `_onPvpDeath()` detects duel → sets `victim.hp = max(1, floor(maxHp * 0.1))`; calls `_endDuelWithResult(loser, winner)` | `duel_ended { result: "victorious"/"defeated", opponentName, hp?, maxHp? }` to both; broadcasts `player_update { playerId, hp, maxHp }` so other clients see the loser's new HP |
+
+During the 3-second countdown (`Date.now() < _duelStartAt`) all PVP damage is blocked on both sides. `_endDuel()` always resets `_duelTarget`, `_duelStartAt`, and `pvpCombatUntil` on both players so duel losers are never stuck behind a combat timer.
+
+### Key Differences vs PvE Death
+
+In a duel, the loser is **not killed** — HP is pacified to 10% of max and the duel simply ends with a `Victorious` / `Defeated` message. In FFA mode, a PVP kill follows the normal death path: the victim receives `you_died { pvp: true, killerName, goldLost }`, loses `PVP_CONFIG.deathGoldPenalty` (default 5) gold, and the killer receives `pvp_kill { victimName, pvpKills, pvpDeaths }`.
+
+### Friendly Fire Rules
+
+`PVP_CONFIG.friendlyFireParty` (default `false`) prevents PVP damage between players in the same party. The block list (`database.isBlocked(a, b)`) additionally prevents duel challenges and trade requests between blocked players.
 
 ---
 

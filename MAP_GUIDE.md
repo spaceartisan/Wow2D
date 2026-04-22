@@ -67,6 +67,8 @@ Maps are JSON files in `public/data/maps/`. Both the client and server load them
 | `portals` | `array` | Transitions to other maps. |
 | `tileModifiers` | `array` | Invisible tile zones that apply buffs, debuffs, DoTs, or HoTs to players standing on them. |
 | `resourceNodes` | `array` | Gatherable resource node placements (references `resourceNodes.json`). |
+| `pvpMode` | `string` | *(optional)* `"none"` (default — no PVP), `"ffa"` (free-for-all), or `"duel"` (mutual opt-in only). Controls whether `pvp_attack` and `duel_challenge` are accepted on this map. |
+| `pvpSafeZoneProtection` | `boolean` | *(optional)* When `true`, safe-zone tiles block PVP damage even on FFA maps. |
 
 ## Tile Palette
 
@@ -294,6 +296,8 @@ Areas where players cannot deal or receive PvP damage.
 ```
 
 All coordinates are in tiles. The zone spans from (x1, y1) to (x2, y2) inclusive.
+
+On maps with `pvpMode !== "none"`, a player with an active PVP combat timer (`pvpCombatUntil > now`) is prevented from walking into a safe zone until the timer expires — the server responds with `pvp_safe_zone_blocked { remaining }`. Duel participants bypass this rule so the loser of a duel (restored to 10% HP) can immediately re-enter town.
 
 ## Prop Palette (`props.json`)
 
